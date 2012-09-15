@@ -1,0 +1,8 @@
+
+- libc   : BSD licence, origin: SLOF, written by IBM
+- libfdt : BSD licence, origin: dtc, written in large part by IBM
+- make_offsets : origin of sed regexp unknown, I had that in picovisor,
+                 it might be from older kernels, is that even copyrightable ?
+                 check with ossc (it's just one big regexp)
+- asm-helper macros : more/less "inspired" from Linux variants
+

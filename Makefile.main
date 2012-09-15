@@ -1,0 +1,110 @@
+# -*-Makefile-*-
+#
+# This is the main Makefile
+
+# Target tools
+CC=$(CROSS)gcc$(POSTFIX)
+LD=$(CROSS)ld$(POSTFIX)
+AS=$(CROSS)as
+AR=$(CROSS)ar
+NM=$(CROSS)nm
+OBJCOPY=$(CROSS)objcopy
+OBJDUMP=$(CROSS)objdump
+SIZE=$(CROSS)size
+LDRFLAGS=-melf64ppc
+LD_TEXT=0x0
+NM += --synthetic
+
+# Base warnings
+CWARNS := -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs \
+	  -Werror-implicit-function-declaration -Wdeclaration-after-statement \
+	  -Wno-pointer-sign -Wextra -Wno-sign-compare
+
+# Host tools and options
+HOSTCC=gcc
+HOSTCFLAGS=-O1 $(CWARNS)
+
+# Target options
+
+OPTS=-Os
+DBG=-g
+
+CPPFLAGS := -I$(SRC)/include -MMD -include $(SRC)/include/config.h
+CPPFLAGS += -I$(SRC)/libfdt -I$(SRC)/libc/include
+CPPFLAGS += -D__SKIBOOT__ -nostdinc
+CPPFLAGS += -isystem $(shell $(CC) -print-file-name=include)
+CPPFLAGS += -DBITS_PER_LONG=64
+
+CFLAGS := -m64 -fno-strict-aliasing -fno-stack-protector
+CFLAGS += $(CWARNS) $(OPTS) $(DBG)
+
+LDFLAGS := -m64 -static -nostdlib -Wl,--gc-sections
+LDFLAGS += -Wl,-Ttext-segment,$(LD_TEXT) -Wl,-N -Wl,--build-id=none
+# Debug stuff
+#LDFLAGS += -Wl,-v -Wl,-Map,foomap 
+
+AFLAGS := -D__ASSEMBLY__ 
+
+# Special tool flags:
+# Do not use the floating point unit
+CFLAGS += -msoft-float
+# Do not use string instructions
+CFLAGS += -mno-string
+# do not use load/store multiple word instrcutions
+CFLAGS += -mno-multiple
+# Do not use load/store update. You REALLY do not want to use this!
+# The async safety of the ABI stack depends on the atomicity
+# of update on store.
+#CFLAGS += -mno-update
+
+.SECONDARY:
+
+vpath %.c $(SRC)
+vpath %.S $(SRC)
+
+default: all
+
+include/asm-offsets.h: asm/asm-offsets.s
+	$(call Q,GN, ./make_offsets $< >$@, $@)
+
+TARGET = skiboot
+
+include $(SRC)/asm/Makefile.inc
+include $(SRC)/core/Makefile.inc
+include $(SRC)/libfdt/Makefile.inc
+include $(SRC)/libc/Makefile.inc
+
+all: $(SUBDIRS) $(TARGET).lid $(TARGET).map
+
+OBJS := $(ASM) $(CORE) $(LIBFDT) $(LIBC)
+
+$(TARGET).lid: $(TARGET).elf
+	$(OBJCOPY) -O binary -S $^ $@
+
+$(TARGET).elf: $(OBJS) $(TARGET).lds
+	$(call Q,LD, $(CC) $(LDFLAGS) -T $(TARGET).lds $(OBJS) -o $@, $@)
+
+$(TARGET).map: $(TARGET).elf
+	$(call Q,NM, $(NM) -n $< | grep -v '\( [aNUw] \)\|\(__crc_\)\|\( \$[adt]\)' > $@, $@)
+
+$(SUBDIRS):
+	$(call Q,MKDIR,mkdir $@, $@)
+
+-include $(wildcard *.d)
+-include $(wildcard $(SUBDIRS:%=%/*.d))
+
+# Set V=1 if you want to see everything.
+include $(SRC)/Makefile.rules
+
+
+tags:
+	find . -name '*.c' -o -name '*.h' | xargs ctags
+
+clean:
+	$(RM) *.[odsa] $(SUBDIRS:%=%/*.[odsa])
+	$(RM) $(UTILS) $(TARGET).elf $(TARGET).lid $(TARGET).map $(TARGET).lds
+	$(RM) include/asm-offsets.h
+
+distclean: clean
+	$(RM) *~ $(SUBDIRS:%=%/*~) include/*~
+
