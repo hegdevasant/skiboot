@@ -52,6 +52,7 @@ __entry:
 
 	/* Secondary CPUs wait here . r31 is PIR */
 secondary_wait:	
+	smt_very_low
 	b	.
 
 	/* NACA */

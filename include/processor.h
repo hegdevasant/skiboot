@@ -25,6 +25,15 @@
 /* SPR register definitions */
 #define SPRN_PIR		1023
 
+/* Thread priority control opcodes */
+#define smt_low		or 1,1,1
+#define smt_medium	or 2,2,2
+#define smt_high	or 3,3,3
+#define smt_medium_high	or 5,5,5
+#define smt_medium_low	or 6,6,6
+#define smt_extra_high	or 7,7,7
+#define smt_very_low	or 31,31,31
+
 #ifndef __ASSEMBLY__
 
 /* SPR access functions */
