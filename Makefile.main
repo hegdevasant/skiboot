@@ -33,9 +33,9 @@ CPPFLAGS := -I$(SRC)/include -MMD -include $(SRC)/include/config.h
 CPPFLAGS += -I$(SRC)/libfdt -I$(SRC)/libc/include
 CPPFLAGS += -D__SKIBOOT__ -nostdinc
 CPPFLAGS += -isystem $(shell $(CC) -print-file-name=include)
-CPPFLAGS += -DBITS_PER_LONG=64
+CPPFLAGS += -DBITS_PER_LONG=64 -m64
 
-CFLAGS := -m64 -fno-strict-aliasing -fno-stack-protector
+CFLAGS := -fno-strict-aliasing -fno-stack-protector
 CFLAGS += $(CWARNS) $(OPTS) $(DBG)
 
 LDFLAGS := -m64 -static -nostdlib -Wl,--gc-sections
