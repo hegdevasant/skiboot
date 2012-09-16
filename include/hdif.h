@@ -1,11 +1,8 @@
 #ifndef __HDIF_H
 #define __HDIF_H
 
+#include <skiboot.h>
 #include <stdint.h>
-
-#define __packed		__attribute__((packed))
-#define __align(x)		__attribute__((__aligned__(x)))
-#define offsetof(type,m)	__builtin_offsetof(type,m)
 
 struct HDIF_common_hdr {
 	uint16_t	format_id;	/* 0xd1f0 */

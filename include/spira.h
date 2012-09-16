@@ -3,10 +3,6 @@
 
 #include <hdif.h>
 
-/* Tell FSP to put the data at 64M, allocate 4M */
-#define SPIRA_HEAP_BASE	0x04000000
-#define SPIRA_HEAP_SIZE	0x00400000
-
 /* The SPIRA structure */
 
 #define SPIRA_VERSION		0x20	/* Like 730 ? */

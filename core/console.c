@@ -6,6 +6,7 @@
 #include <skiboot.h>
 #include <unistd.h>
 
+
 #ifdef MAMBO_CONSOLE
 static void mambo_write(const char *buf, size_t count)
 {
@@ -21,14 +22,29 @@ static void mambo_write(const char *buf, size_t count)
 static void mambo_write(const char *buf, size_t count) { }
 #endif /* MAMBO_CONSOLE */
 
-ssize_t write(int fd, const void *buf, size_t count)
+#ifdef INMEM_CONSOLE
+static char *inmem_con_buf = (char *)INMEM_CON_START;
+static unsigned int inmem_con_pos;
+
+static void inmem_write(const char *buf, size_t count)
+{
+	while(count--) {
+		inmem_con_buf[inmem_con_pos++] = *(buf++);
+		if (inmem_con_pos > INMEM_CON_LEN)
+			inmem_con_pos = 0;
+	}
+}
+#endif /* INMEM_CONSOLE */
+
+ssize_t write(int fd __unused, const void *buf, size_t count)
 {
 	mambo_write(buf, count);
+	inmem_write(buf, count);
 
 	return count;
 }
 
-ssize_t read(int fd, void *buf, size_t count)
+ssize_t read(int fd __unused, void *buf __unused, size_t count __unused)
 {
 	return 0;
 }

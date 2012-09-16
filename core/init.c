@@ -8,7 +8,7 @@
  *
  * Forced into data section as it will be used before BSS is initialized
  */
-unsigned int boot_cpu_count __attribute__((__section__(".force.data"))) = 0;
+unsigned int boot_cpu_count __force_data = 0;
 
 void main_cpu_entry(void)
 {
