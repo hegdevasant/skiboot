@@ -19,7 +19,7 @@ static void mambo_write(const char *buf, size_t count)
 		      "r"(a3));
 }
 #else
-static void mambo_write(const char *buf, size_t count) { }
+static void mambo_write(const char *buf __unused, size_t count __unused) { }
 #endif /* MAMBO_CONSOLE */
 
 #ifdef INMEM_CONSOLE
