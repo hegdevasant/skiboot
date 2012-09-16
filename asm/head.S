@@ -1,5 +1,6 @@
 #include <asm-utils.h>
 #include <asm-offsets.h>
+#include <processor.h>
 
 	.section ".head","ax"
 	/* Keep that gap empty */
@@ -18,16 +19,19 @@ __entry:
 	/* Get ourselves a TOC */
 	LOAD_IMM32(%r2,__toc_start + 0x8000)
 
-	/* XXX Check our PIR, avoid threads ! */
+	/* Check our PIR, avoid threads */
+	mfspr	%r31,SPRN_PIR
+	andi.	%r0,%r31,3
+	bne	secondary_wait
 
 	/* Pick a boot CPU, cpu index in r31 */
 	LOAD_ADDR_FROM_TOC(%r3, boot_cpu_count)
-1:	lwarx	%r31,0,%r3
-	addi	%r0,%r31,1
+1:	lwarx	%r4,0,%r3
+	addi	%r0,%r4,1
 	stwcx.	%r0,0,%r3
 	bne	1b
 	isync
-	cmpwi	cr0,%r31,0
+	cmpwi	cr0,%r4,0
 	bne	secondary_wait
 
 	/* We got a primary, get ready for C code: get a stack */
@@ -46,7 +50,7 @@ __entry:
 	bl	main_cpu_entry
 	b	.
 
-	/* Secondary CPUs wait here */
+	/* Secondary CPUs wait here . r31 is PIR */
 secondary_wait:	
 	b	.
 
