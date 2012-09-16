@@ -49,7 +49,6 @@ __entry:
 	/* Secondary CPUs wait here */
 secondary_wait:	
 	b	.
-	
 
 	/* NACA */
 	. = 0x4000
@@ -64,7 +63,25 @@ naca:
 	.llong	spira			/* 0x0030 : SP Interface Root */
 	.llong	0			/* 0x0038 : LID load table */
 	.llong	0			/* 0x0040 : Reserved */
-	
+	.space	68
+	.long	0			/* 0x008c : Reserved */
+	.space	16
+	.long	0x320 /*Calculate!*/	/* 0x00a0 : Actual size of SPIRA */
+	.space	28
+	.llong	0			/* 0x00c0 : resident module loadmap */
+	.space	136
+	.llong	0			/* 0x0150 : reserved */
+	.space	40
+	.llong	0			/* 0x0180 : reserved */
+	.space	36
+	.long	0			/* 0x01ac : control flags */
+	.byte	0			/* 0x01b0 : reserved */
+	.space	4
+	.byte	0			/* 0x01b5 : default state for SW attn */
+	.space	1
+	.byte	0x01			/* 0x01b7 : PCIA format */
+	.space	0xe48
+
 hv_release_data:
 	.space	58
 	.llong	0x666			/* VRM ? */
