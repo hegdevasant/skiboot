@@ -1,8 +1,6 @@
 #ifndef __PROCESSOR_H
 #define __PROCESSOR_H
 
-#include <compiler.h>
-
 /* P7 MSR bits */
 #define MSR_SF		0x8000000000000000UL	/*  0 : 64-bit mode */
 #define MSR_HV		0x1000000000000000UL	/*  3 : Hypervisor mode */
@@ -36,7 +34,13 @@
 
 #ifndef __ASSEMBLY__
 
-/* SPR access functions */
+#include <compiler.h>
+#include <stdint.h>
+
+/*
+ * SPR access functions
+ */
+
 static inline unsigned long mfmsr(void)
 {
 	unsigned long val;
@@ -65,9 +69,55 @@ static inline unsigned long mfspr(unsigned int spr)
 
 static inline void mtspr(unsigned int spr, unsigned long val)
 {
-	asm volatile("mtspr %0,%1" : : "i"(l), "r"(val) : "memory");
+	asm volatile("mtspr %0,%1" : : "i"(spr), "r"(val) : "memory");
 }
 
+/*
+ * Barriers
+ */
+
+static inline void eieio(void)
+{
+	asm volatile("eieio" : : : "memory");
+}
+
+static inline void sync(void)
+{
+	asm volatile("sync" : : : "memory");
+}
+
+static inline void lwsync(void)
+{
+	asm volatile("lwsync" : : : "memory");
+}
+
+/*
+ * Byteswap load/stores
+ */
+
+static inline uint16_t ld_le16(const uint16_t *addr)
+{
+	uint16_t val;
+	asm volatile("lhbrx %0,0,%1" : "=r"(val) : "r"(addr), "m"(*addr));
+	return val;
+}
+
+static inline uint32_t ld_le32(const uint32_t *addr)
+{
+	uint32_t val;
+	asm volatile("lwbrx %0,0,%1" : "=r"(val) : "r"(addr), "m"(*addr));
+	return val;
+}
+
+static inline void st_le16(uint16_t *addr, uint16_t val)
+{
+	asm volatile("sthbrx %0,0,%1" : : "r"(val), "r"(addr), "m"(*addr));
+}
+
+static inline void st_le32(uint32_t *addr, uint32_t val)
+{
+	asm volatile("stwbrx %0,0,%1" : : "r"(val), "r"(addr), "m"(*addr));
+}
 
 #endif /* __ASSEMBLY__ */
 
