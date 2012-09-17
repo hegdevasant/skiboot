@@ -1,7 +1,5 @@
 #include <skiboot.h>
-#include <stdlib.h>
-#include <string.h>
-#include <stdio.h>
+#include <fsp.h>
 
 /*
  * Boot semaphore, incremented by each CPU calling in
@@ -12,5 +10,8 @@ unsigned int boot_cpu_count __force_data = 0;
 
 void main_cpu_entry(void)
 {
-	printf("Hello World ! Skiboot reached C code !\n");
+	printf("SkiBoot starting...\n");
+
+	/* Early initializations of the FSP interface */
+	fsp_preinit();
 }

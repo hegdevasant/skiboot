@@ -18,7 +18,7 @@ struct HDIF_common_hdr {
 struct HDIF_idata_ptr {
 	uint32_t	offset;
 	uint32_t	size;
-} __packed __align(0x10);
+} __packed __align(0x8);
 
 struct HDIF_array_hdr {
 	uint32_t	offset;

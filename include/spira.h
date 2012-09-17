@@ -15,7 +15,7 @@
 #define SPIRA_VERSION		0x20	/* Like 730 ? */
 
 struct spira_ntuple {
-	uint64_t	addr;
+	void		*addr;
 	uint16_t	alloc_cnt;
 	uint16_t	act_cnt;
 	uint32_t	alloc_len;
@@ -56,9 +56,12 @@ struct spira_ntuples {
 struct spira {
 	struct HDIF_common_hdr	hdr;
 	struct HDIF_idata_ptr	ntuples_ptr;
+	uint64_t		pad;
 	struct spira_ntuples	ntuples;
 	uint8_t			reserved[0x4e0];
 } __packed __align(0x100);
+
+extern struct spira spira;
 
 struct proc_init_data {
 	struct HDIF_common_hdr	hdr;
@@ -68,6 +71,43 @@ struct proc_init_data {
 		uint64_t	msr;
 	} regs;
 } __packed __align(0x10);
+
+/*
+ * Service Processor Subsystem Structure
+ *
+ * This structure contains several internal data blocks
+ * describing the service processor(s) in the system
+ *
+ * Key: "SPINFO"
+ */
+
+/* Idata index 0 : FRU ID Data */
+#define SPSS_IDATA_FRU_ID	0
+
+/* Idata index 1 : Keyword VPD for the FSP instance */
+#define SPSS_IDATA_KEYWORD_VPD	1
+
+/* Idata index 2 : SP Implementation */
+#define SPSS_IDATA_SP_IMPL	2
+
+struct spss_sp_impl {
+	uint16_t	hw_version;
+	uint16_t	sw_version;
+	uint16_t	func_flags;
+#define SPSS_SP_IMPL_FLAGS_INSTALLED	0x8000
+#define SPSS_SP_IMPL_FLAGS_FUNCTIONAL	0x4000
+#define SPSS_SP_IMPL_FLAGS_PRIMARY	0x2000
+	uint8_t		chip_version;
+	uint8_t		reserved;
+};
+
+/* Idata index 3 is deprecated */
+
+/* Idata index 4 : SP Memory Locator */
+#define SPSS_IDATA_SP_MEMLOC	4
+
+/* Idata index 5 : SP I/O path array */
+#define SPSS_IDATA_SP_IOPATH	5
 
 
 #endif /* __SPIRA_H */

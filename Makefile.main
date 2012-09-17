@@ -71,12 +71,13 @@ TARGET = skiboot
 
 include $(SRC)/asm/Makefile.inc
 include $(SRC)/core/Makefile.inc
+include $(SRC)/hw/Makefile.inc
 include $(SRC)/libfdt/Makefile.inc
 include $(SRC)/libc/Makefile.inc
 
 all: $(SUBDIRS) $(TARGET).lid $(TARGET).map
 
-OBJS := $(ASM) $(CORE) $(LIBFDT) $(LIBC)
+OBJS := $(ASM) $(CORE) $(HW) $(LIBFDT) $(LIBC)
 
 $(TARGET).lid: $(TARGET).elf
 	$(OBJCOPY) -O binary -S $^ $@

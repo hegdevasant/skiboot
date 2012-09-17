@@ -34,12 +34,12 @@ struct spira spira = {
 		},
 		/* We only populate some n-tuples */
 		.proc_init = {
-			.addr  		= (uint64_t)&proc_init_data,
+			.addr  		= &proc_init_data,
 			.alloc_cnt	= 1,
 			.alloc_len	= sizeof(struct proc_init_data),
 		},
 		.heap = {
-			.addr		= SPIRA_HEAP_BASE,
+			.addr		= (void *)SPIRA_HEAP_BASE,
 			.alloc_cnt	= 1,
 			.alloc_len	= SPIRA_HEAP_SIZE,
 		},
