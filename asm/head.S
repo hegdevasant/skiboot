@@ -66,7 +66,7 @@ naca:
 	.llong	0			/* 0x0020 : Reserved */
 	.llong	0			/* 0x0028 : Reserved */
 	.llong	spira			/* 0x0030 : SP Interface Root */
-	.llong	0			/* 0x0038 : LID load table */
+	.llong	hv_lid_load_table	/* 0x0038 : LID load table */
 	.llong	0			/* 0x0040 : Reserved */
 	.space	68
 	.long	0			/* 0x008c : Reserved */
@@ -91,3 +91,8 @@ hv_release_data:
 	.space	58
 	.llong	0x666			/* VRM ? */
 
+hv_lid_load_table:
+	.long	0x10
+	.long	0x10
+	.long	0
+	.long	0

@@ -15,7 +15,8 @@ static struct proc_init_data proc_init_data = {
 
 /* SP Interface Root Array, aka SPIRA */
 struct spira spira = {
-	.hdr = HDIF_SIMPLE_HDR('S','P','I','R','A',' ', 1, struct spira),
+	.hdr = HDIF_SIMPLE_HDR('S','P','I','R','A',' ', SPIRA_VERSION,
+			       struct spira),
 	.ntuples_ptr = {
 		.idata_off	= offsetof(struct spira, ntuples),
 		.idata_size	= sizeof(struct spira_ntuples),
@@ -24,8 +25,8 @@ struct spira spira = {
 		.array_hdr = {
 			.offset		= HDIF_ARRAY_OFFSET,
 			.ecnt		= SPIRA_NTUPLES_COUNT,
-			.esize		= 0x18,
-			.eactsz		= sizeof(struct spira_ntuple),
+			.esize		= sizeof(struct spira_ntuple),
+			.eactsz		= 0x18,
 		},
 		/* We only populate some n-tuples */
 		.proc_init = {
