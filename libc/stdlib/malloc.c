@@ -13,6 +13,7 @@
 
 #include "stddef.h"
 #include "stdlib.h"
+#include "string.h"
 #include "unistd.h"
 #include "malloc_defs.h"
 
@@ -154,4 +155,13 @@ clean(void)
 	}
 
 	return check;
+}
+
+void *zalloc(size_t size)
+{
+	void *ret = malloc(size);
+
+	if (ret)
+		memset(ret, 0, size);
+	return ret;
 }
