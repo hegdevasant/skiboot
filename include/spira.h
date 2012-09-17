@@ -109,5 +109,32 @@ struct spss_sp_impl {
 /* Idata index 5 : SP I/O path array */
 #define SPSS_IDATA_SP_IOPATH	5
 
+/* An HDIF array of IO path */
+struct spss_iopath {
+	uint16_t	iopath_type;
+#define SPSS_IOPATH_TYPE_IOHUB_PHB	0x0001
+#define SPSS_IOPATH_TYPE_PSI		0x0002
+	union {
+		struct {
+			uint16_t	iohub_chip_inst;
+			uint16_t	iohub_chip_port;
+			uint16_t	phb_id;
+		} __packed iohub_phb;
+
+		struct {
+			uint16_t	link_status;
+#define SPSS_IO_PATH_PSI_LINK_BAD_FRU	0x0001
+#define SPSS_IO_PATH_PSI_LINK_CURRENT	0x0002
+#define SPSS_IO_PATH_PSI_LINK_BACKUP	0x0003
+			uint8_t		ml2_version;
+			uint8_t		reserved;
+			uint16_t	slca_count;
+			uint8_t		slca_idx[16];
+			uint32_t	proc_chip_id;
+			uint32_t	reserved2;
+			uint64_t	gxhb_base;
+		} __packed psi;
+	};
+} __packed;
 
 #endif /* __SPIRA_H */

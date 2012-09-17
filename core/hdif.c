@@ -53,3 +53,22 @@ const void *HDIF_get_iarray_item(const void *hdif, unsigned int di,
 	return arr + ahdr->offset + ai * ahdr->esize;
 }
 
+int HDIF_get_iarray_size(const void *hdif, unsigned int di)
+{
+	const struct HDIF_array_hdr *ahdr;
+	unsigned int asize;
+	const void *arr;
+
+	arr = HDIF_get_idata(hdif, di, &asize);
+	if (!arr)
+		return -1;
+
+	if (asize < sizeof(struct HDIF_array_hdr)) {
+		prerror("HDIF: idata block too small for array !\n");
+		return -1;
+	}
+
+	ahdr = arr;
+	return ahdr->ecnt;
+}
+

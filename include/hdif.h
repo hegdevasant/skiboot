@@ -82,4 +82,13 @@ extern const void *HDIF_get_idata(const void *hdif, unsigned int di,
 extern const void *HDIF_get_iarray_item(const void *hdif, unsigned int di,
 					unsigned int ai, unsigned int *size);
 
+/* HDIF_get_iarray_size - Get the number of elements of an internal data array
+ *
+ * @hdif  : HDIF structure pointer
+ * @di    : Index of the idata pointer
+ *
+ * A negative result means an error
+ */
+extern int HDIF_get_iarray_size(const void *hdif, unsigned int di);
+
 #endif /* __HDIF_H */

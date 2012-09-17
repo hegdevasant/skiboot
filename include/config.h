@@ -8,7 +8,7 @@
 #define STACK_SIZE	0x100000
 
 /* Enable this for mambo console */
-#define MAMBO_CONSOLE	1
+//#define MAMBO_CONSOLE	1
 
 /* Enable this for in-memory console */
 #define INMEM_CONSOLE	1
@@ -18,7 +18,6 @@
 /* Tell FSP to put the data at 64M, allocate 4M */
 #define SPIRA_HEAP_BASE	0x04000000UL
 #define SPIRA_HEAP_SIZE	0x00400000
-
 
 #endif /* __CONFIG_H */
 
