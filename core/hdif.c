@@ -6,7 +6,7 @@ const void *HDIF_get_idata(const void *hdif, unsigned int di,
 	const struct HDIF_common_hdr *hdr = hdif;
 	const struct HDIF_idata_ptr *iptr;
 
-	if (hdr->id >> 48 != HDIF_FORMAT_ID) {
+	if (hdr->d1f0 != 0xd1f0) {
 		prerror("HDIF: Bad header format !\n");
 		return NULL;
 	}

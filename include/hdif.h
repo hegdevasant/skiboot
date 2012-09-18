@@ -4,7 +4,8 @@
 #include <skiboot.h>
 
 struct HDIF_common_hdr {
-	uint64_t	id;		/* 0xd1f0xxxxxxxxxx with eye catcher */
+	uint16_t	d1f0;		/* 0xd1f0 */
+	char		id[6];		/* eye catcher string */
 	uint16_t	instnum;	/* instance number */
 	uint16_t	version;	/* version */
 	uint32_t	total_len;	/* total structure length */
@@ -27,23 +28,14 @@ struct HDIF_array_hdr {
 	uint32_t	eactsz;
 } __packed __align(0x10);
 
-#define HDIF_FORMAT_ID		0xd1f0
 #define HDIF_HDR_LEN		(sizeof(struct HDIF_common_hdr))
 #define HDIF_ARRAY_OFFSET	(sizeof(struct HDIF_array_hdr))
 
-#define HDIF_MKID(N1,N2,N3,N4,N5,N6)		\
-	((uint64_t)HDIF_FORMAT_ID << 48 |	\
-	 (uint64_t)(N1) << 40 |			\
-	 (uint64_t)(N2) << 32 |			\
-	 (uint64_t)(N3) << 24 |			\
-	 (uint64_t)(N4) << 16 |			\
-	 (uint64_t)(N5) <<  8 |			\
-	 (uint64_t)(N6))
+#define HDIF_ID(_id)		.d1f0 = 0xd1f0, .id = _id
 
-
-#define HDIF_SIMPLE_HDR(N1,N2,N3,N4,N5,N6, vers, type)		\
+#define HDIF_SIMPLE_HDR(id, vers, type)				\
 {								\
-	.id		= HDIF_MKID(N1,N2,N3,N4,N5,N6),		\
+	HDIF_ID(id),						\
 	.instnum	= 0,					\
 	.version	= vers,					\
 	.total_len	= sizeof(type),				\
@@ -54,14 +46,12 @@ struct HDIF_array_hdr {
 	.child_off	= 0,					\
 }
 
-static inline bool __HDIF_check(const void *hdif, uint64_t id)
+static inline bool HDIF_check(const void *hdif, const char id[])
 {
 	const struct HDIF_common_hdr *hdr = hdif;
 
-	return hdr->id == id;
+	return hdr->d1f0 == 0xd1f0 && memcmp(hdr->id, id, sizeof(hdr->id)) == 0;
 }
-#define HDIF_check(hdif, N1,N2,N3,N4,N5,N6)	\
-	__HDIF_check(hdif, HDIF_MKID(N1,N2,N3,N4,N5,N6))
 
 /* HDIF_get_idata - Get a pointer to internal data block
  *

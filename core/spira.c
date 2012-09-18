@@ -5,8 +5,7 @@
  * point
  */
 static struct proc_init_data proc_init_data = {
-	.hdr = HDIF_SIMPLE_HDR('P','R','O','C','I','N',
-			       1, struct proc_init_data),
+	.hdr = HDIF_SIMPLE_HDR("PROCIN", 1, struct proc_init_data),
 	.regs_ptr = {
 		.offset	= offsetof(struct proc_init_data, regs),
 		.size	= 0x10,
@@ -19,8 +18,7 @@ static struct proc_init_data proc_init_data = {
 
 /* SP Interface Root Array, aka SPIRA */
 struct spira spira = {
-	.hdr = HDIF_SIMPLE_HDR('S','P','I','R','A',' ', SPIRA_VERSION,
-			       struct spira),
+	.hdr = HDIF_SIMPLE_HDR("SPIRA ", SPIRA_VERSION, struct spira),
 	.ntuples_ptr = {
 		.offset			= offsetof(struct spira, ntuples),
 		.size			= sizeof(struct spira_ntuples),

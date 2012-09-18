@@ -223,7 +223,7 @@ void fsp_preinit(void)
 		spss = base_spss + i * spira.ntuples.sp_subsys.alloc_len;
 
 
-		if (!HDIF_check(spss, 'S','P','I','N','F','O')) {
+		if (!HDIF_check(spss, "SPINFO")) {
 			prerror("FSP #%d: SPSS signature mismatch !\n", i);
 			continue;
 		}
