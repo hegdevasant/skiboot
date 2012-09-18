@@ -71,7 +71,7 @@ naca:
 	.space	68
 	.long	0			/* 0x008c : Reserved */
 	.space	16
-	.long	0x320 /*Calculate!*/	/* 0x00a0 : Actual size of SPIRA */
+	.long	SPIRA_ACTUAL_SIZE	/* 0x00a0 : Actual size of SPIRA */
 	.space	28
 	.llong	0			/* 0x00c0 : resident module loadmap */
 	.space	136
