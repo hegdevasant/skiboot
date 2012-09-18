@@ -10,19 +10,20 @@
  *     IBM Corporation - initial implementation
  *****************************************************************************/
 
-#include <stdlib.h>
-#include <stdio.h>
+#ifndef _ASSERT_H
+#define _ASSERT_H
 
-void abort(void)
-{
-	fputs(stderr, "Aborting!\n");
-	for (;;);
-}
+#define assert(cond)						\
+	do { if (!(cond))					\
+		     assert_fail(__FILE__			\
+				 ":" stringify(__LINE__)	\
+				 ":" stringify(cond));		\
+	} while(0)
 
-void assert_fail(const char *msg)
-{
-	fputs(stderr, "Assert fail:");
-	fputs(stderr, msg);
-	fputs(stderr, "\n");
-	abort();
-}
+void __attribute__((noreturn)) assert_fail(const char *msg);
+
+#define stringify(expr)		stringify_1(expr)
+/* Double-indirection required to stringify expansions */
+#define stringify_1(expr)	#expr
+
+#endif
