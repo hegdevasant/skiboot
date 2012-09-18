@@ -26,7 +26,7 @@ HOSTCFLAGS=-O1 $(CWARNS)
 
 # Target options
 
-OPTS=-Os
+OPTS=-Os -ffunction-sections
 DBG=-g
 
 CPPFLAGS := -I$(SRC)/include -MMD -include $(SRC)/include/config.h
