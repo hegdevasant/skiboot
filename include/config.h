@@ -19,5 +19,7 @@
 #define SPIRA_HEAP_BASE	0x04000000UL
 #define SPIRA_HEAP_SIZE	0x00400000
 
+#define HAVE_TYPEOF 1
+
 #endif /* __CONFIG_H */
 

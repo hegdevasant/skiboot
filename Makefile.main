@@ -30,7 +30,7 @@ OPTS=-Os -ffunction-sections
 DBG=-g
 
 CPPFLAGS := -I$(SRC)/include -MMD -include $(SRC)/include/config.h
-CPPFLAGS += -I$(SRC)/libfdt -I$(SRC)/libc/include
+CPPFLAGS += -I$(SRC)/libfdt -I$(SRC)/libc/include -I$(SRC)
 CPPFLAGS += -D__SKIBOOT__ -nostdinc
 CPPFLAGS += -isystem $(shell $(CC) -print-file-name=include)
 CPPFLAGS += -DBITS_PER_LONG=64 -m64
@@ -74,10 +74,11 @@ include $(SRC)/core/Makefile.inc
 include $(SRC)/hw/Makefile.inc
 include $(SRC)/libfdt/Makefile.inc
 include $(SRC)/libc/Makefile.inc
+include $(SRC)/ccan/Makefile.inc
 
 all: $(SUBDIRS) $(TARGET).lid $(TARGET).map
 
-OBJS := $(ASM) $(CORE) $(HW) $(LIBFDT) $(LIBC)
+OBJS := $(ASM) $(CORE) $(HW) $(LIBFDT) $(LIBC) $(CCAN)
 
 $(TARGET).lid: $(TARGET).elf
 	$(OBJCOPY) -O binary -S $^ $@
