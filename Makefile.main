@@ -101,6 +101,9 @@ include $(SRC)/Makefile.rules
 tags:
 	find . -name '*.c' -o -name '*.h' | xargs ctags
 
+TAGS:
+	find . -name '*.c' -o -name '*.h' | xargs etags
+
 clean:
 	$(RM) *.[odsa] $(SUBDIRS:%=%/*.[odsa])
 	$(RM) $(UTILS) $(TARGET).elf $(TARGET).lid $(TARGET).map $(TARGET).lds
