@@ -30,6 +30,30 @@ struct fsp {
 static struct fsp *first_fsp;
 static struct fsp *active_fsp;
 
+static void fsp_wreg(struct fsp *fsp, uint32_t reg, uint32_t val)
+{
+	struct fsp_iopath *iop;
+
+	if (fsp->active_iopath < 0)
+		return;
+	iop = &fsp->iopath[fsp->active_iopath];
+	if (iop->link_status == SPSS_IO_PATH_PSI_LINK_BAD_FRU)
+		return;
+	out_be32(iop->fsp_regs + reg, val);
+}
+
+static uint32_t fsp_rreg(struct fsp *fsp, uint32_t reg)
+{
+	struct fsp_iopath *iop;
+
+	if (fsp->active_iopath < 0)
+		return 0xffffffff;
+	iop = &fsp->iopath[fsp->active_iopath];
+	if (iop->link_status == SPSS_IO_PATH_PSI_LINK_BAD_FRU)
+		return 0xffffffff;
+	return in_be32(iop->fsp_regs + reg);
+}
+
 static bool fsp_check_impl(const void *spss, int i)
 {
 	const struct spss_sp_impl *sp_impl;
@@ -52,6 +76,30 @@ static bool fsp_check_impl(const void *spss, int i)
 	}
 
 	return true;
+}
+
+static void fsp_reg_dump(struct fsp *fsp)
+{
+#define FSP_DUMP_ONE(x)	\
+	DBG("  %20s: %x\n", #x, fsp_rreg(fsp, x));
+
+	DBG("FSP #%d: Register dump...\n", fsp->index);
+	FSP_DUMP_ONE(FSP_DRCR_REG);
+	FSP_DUMP_ONE(FSP_DISR_REG);
+	FSP_DUMP_ONE(FSP_MBX1_HCTL_REG);
+	FSP_DUMP_ONE(FSP_MBX1_FCTL_REG);
+	FSP_DUMP_ONE(FSP_MBX2_HCTL_REG);
+	FSP_DUMP_ONE(FSP_MBX2_FCTL_REG);
+	FSP_DUMP_ONE(FSP_SDES_REG);
+	FSP_DUMP_ONE(FSP_HDES_REG);
+	FSP_DUMP_ONE(FSP_HDIR_REG);
+	FSP_DUMP_ONE(FSP_HDIM_SET_REG);
+	FSP_DUMP_ONE(FSP_PDIR_REG);
+	FSP_DUMP_ONE(FSP_PDIM_SET_REG);
+	FSP_DUMP_ONE(FSP_SCRATCH0_REG);
+	FSP_DUMP_ONE(FSP_SCRATCH1_REG);
+	FSP_DUMP_ONE(FSP_SCRATCH2_REG);
+	FSP_DUMP_ONE(FSP_SCRATCH3_REG);
 }
 
 static void fsp_create_fsp(const void *spss, int index)
@@ -88,6 +136,7 @@ static void fsp_create_fsp(const void *spss, int index)
 		unsigned int iopath_sz;
 		const char *ststr;
 		bool active;
+		uint64_t reg;
 
 		iopath = HDIF_get_iarray_item(spss, SPSS_IDATA_SP_IOPATH,
 					      i, &iopath_sz);
@@ -105,7 +154,7 @@ static void fsp_create_fsp(const void *spss, int index)
 		fiop->link_status = iopath->psi.link_status;
 		fiop->gxhb_regs = (void *)iopath->psi.gxhb_base;
 		active = false;
-		switch(iopath->psi.link_status) {
+		switch(fiop->link_status) {
 		case SPSS_IO_PATH_PSI_LINK_BAD_FRU:
 			ststr = "Broken";
 			break;
@@ -140,11 +189,15 @@ static void fsp_create_fsp(const void *spss, int index)
 		DBG("  PSIHB_XIVR   : %llx\n",
 		    in_be64(fiop->gxhb_regs + PSIHB_XIVR));
 
-		/* XXX Get the FSP register window */
-
+		/* Get the FSP register window */
+		reg = in_be64(fiop->gxhb_regs + PSIHB_FSPBAR);
+		fiop->fsp_regs =
+			(void *)(reg | (1ULL << 63) | FSP1_REG_OFFSET);
 	}
-	if (fsp->active_iopath > 0 && !active_fsp)
+	if (fsp->active_iopath > 0 && !active_fsp) {
+		fsp_reg_dump(fsp);
 		active_fsp = fsp;
+	}
 
 	fsp->link = first_fsp;
 	first_fsp = fsp;

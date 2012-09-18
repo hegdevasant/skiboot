@@ -123,9 +123,9 @@ struct spss_iopath {
 
 		struct {
 			uint16_t	link_status;
-#define SPSS_IO_PATH_PSI_LINK_BAD_FRU	0x0001
-#define SPSS_IO_PATH_PSI_LINK_CURRENT	0x0002
-#define SPSS_IO_PATH_PSI_LINK_BACKUP	0x0003
+#define SPSS_IO_PATH_PSI_LINK_BAD_FRU	0x0000
+#define SPSS_IO_PATH_PSI_LINK_CURRENT	0x0001
+#define SPSS_IO_PATH_PSI_LINK_BACKUP	0x0002
 			uint8_t		ml2_version;
 			uint8_t		reserved;
 			uint16_t	slca_count;
