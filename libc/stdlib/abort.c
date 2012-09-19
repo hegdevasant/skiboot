@@ -1,5 +1,5 @@
 /******************************************************************************
- * Copyright (c) 2004, 2008 IBM Corporation
+ * Copyright (c) 2004, 2008, 2012 IBM Corporation
  * All rights reserved.
  * This program and the accompanying materials
  * are made available under the terms of the BSD License
@@ -10,19 +10,19 @@
  *     IBM Corporation - initial implementation
  *****************************************************************************/
 
+#include <stdlib.h>
+#include <stdio.h>
 
-#include "stdio.h"
-#include "string.h"
-#include "unistd.h"
-
-
-int fputs(FILE *stream, const char *str)
+void abort(void)
 {
-	int ret;
-
-	ret = write(stream->fd, str, strlen(str));
-	write(stream->fd, "\r\n", 2);
-
-	return ret;
+	fputs(stderr, "Aborting!\n");
+	for (;;);
 }
 
+void assert_fail(const char *msg)
+{
+	fputs(stderr, "Assert fail:");
+	fputs(stderr, msg);
+	fputs(stderr, "\n");
+	abort();
+}

@@ -1,5 +1,5 @@
 /******************************************************************************
- * Copyright (c) 2004, 2008 IBM Corporation
+ * Copyright (c) 2004, 2008, 2012 IBM Corporation
  * All rights reserved.
  * This program and the accompanying materials
  * are made available under the terms of the BSD License
@@ -10,19 +10,20 @@
  *     IBM Corporation - initial implementation
  *****************************************************************************/
 
+#ifndef _ASSERT_H
+#define _ASSERT_H
 
-#include "stdio.h"
-#include "string.h"
-#include "unistd.h"
+#define assert(cond)						\
+	do { if (!(cond))					\
+		     assert_fail(__FILE__			\
+				 ":" stringify(__LINE__)	\
+				 ":" stringify(cond));		\
+	} while(0)
 
+void __attribute__((noreturn)) assert_fail(const char *msg);
 
-int fputs(FILE *stream, const char *str)
-{
-	int ret;
+#define stringify(expr)		stringify_1(expr)
+/* Double-indirection required to stringify expansions */
+#define stringify_1(expr)	#expr
 
-	ret = write(stream->fd, str, strlen(str));
-	write(stream->fd, "\r\n", 2);
-
-	return ret;
-}
-
+#endif
