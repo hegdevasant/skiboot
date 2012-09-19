@@ -18,10 +18,21 @@ static bool state_control_msg(uint32_t cmd_sub_mod, struct fsp_msg *msg)
 {
 	switch(cmd_sub_mod) {
 	case FSP_CMD_CONTINUE_IPL:
+		/* We get a CONTINUE_IPL as a response to OPL */
 		printf("INIT: Got CONTINUE_IPL !\n");
 		ipl_state = ipl_got_continue;
 		free(msg);
 		return true;
+
+	case FSP_CMD_HV_STATE_CHG:
+		printf("INIT: Got HV state change request to %d\n",
+		       msg->data.bytes[0]);
+
+		/* Send response synchronously for now, we might want to
+		 * deal with that sort of stuff asynchronously if/when
+		 * we add support for auto-freeing of messages
+		 */
+		fsp_sync_msg(fsp_mkmsg(FSP_RSP_HV_STATE_CHG, 0), true);
 	}
 	return false;
 }
@@ -32,8 +43,6 @@ static struct fsp_client state_control = {
 
 static void start_fsp_state_control(void)
 {
-	struct fsp_msg *msg;
-
 	/* Register for IPL/SERVICE messages */
 	fsp_register_client(&state_control, FSP_MCLASS_IPL);
 
