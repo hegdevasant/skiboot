@@ -7,6 +7,10 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <assert.h>
+
+#include <ccan/container_of/container_of.h>
+#include <ccan/list/list.h>
 
 /* Special ELF sections */
 #define __force_data		__section(".force.data")

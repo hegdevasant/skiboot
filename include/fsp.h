@@ -7,6 +7,8 @@
 #ifndef __FSP_H
 #define __FSP_H
 
+#include <skiboot.h>
+
 /* Current max number of FSPs
  * one primary and one secondary is all we support
  */
@@ -117,7 +119,7 @@
  * - PAR: SP RAM partity error
  */
 #define FSP_DBERRSTAT_ILLEGAL1		(1 << 27)
-#define FSP_DBERRSTAT_WFULL1		(1 << 26
+#define FSP_DBERRSTAT_WFULL1		(1 << 26)
 #define FSP_DBERRSTAT_REMPTY1		(1 << 25)
 #define FSP_DBERRSTAT_PAR1		(1 << 24)
 #define FSP_DBERRSTAT_CLR1		(1 << 16)
@@ -247,6 +249,36 @@
 #define FSP_MCLASS_VIRTUAL_NVRAM	0xeb
 #define FSP_MCLASS_LAST			0xeb
 
+/*
+ * Commands are provided in rxxyyzz form where:
+ *
+ *   -  r is 0: no response or 1: response expected
+ *   - xx is class
+ *   - yy is subcommand
+ *   - zz is mod
+ *
+ * WARNING: We only set the r bit for HV->FSP commands
+ *          long run, we want to remove use of that bit
+ *          and instead have a table of all commands in
+ *          the FSP driver indicating which ones take a
+ *          response...
+ */
+
+/*
+ * Class 0xCF
+ */
+#define FSP_CMD_OPL	    	0x0cf7100 /* HV->FSP: Operational Load Compl. */
+#define FSP_CMD_HV_STATE_CHG	0x0cf0200 /* FSP->HV: Request HV state change */
+#define FSP_RSP_HV_STATE_CHG	0x0cf8200
+#define FSP_CMD_SP_NEW_ROLE	0x0cf0700
+
+/*
+ * Class 0xCE
+ */
+#define FSP_CMD_CONTINUE_IPL	0x0ce7000 /* FSP->HV: HV has control */
+#define FSP_CMD_CONTINUE_ACK	0x0ce5700 /* HV->FSP: HV acks CONTINUE IPL */
+#define FSP_CMD_HV_FUNCTNAL	0x1ce5707 /* HV->FSP: Set HV functional state */
+
 
 /*
  * Functions exposed to the rest of skiboot
@@ -261,11 +293,15 @@ enum fsp_msg_state {
 	fsp_msg_wresp,
 	fsp_msg_done,
 	fsp_msg_timeout,
+	fsp_msg_incoming,
 };
 
 /* Offset of fields in the message */
 struct fsp_msg {
-	/* Provided */
+	/*
+	 * User fields. Don't populate word0.seq (upper 16 bits), this
+	 * will be done by fsp_queue_msg()
+	 */
 	uint8_t			dlen;	/* not including word0/word1 */
 	uint32_t		word0;	/* seq << 16 | cmd */
 	uint32_t		word1;	/* mod << 8 | sub */
@@ -276,20 +312,46 @@ struct fsp_msg {
 
 	/* Set if you are waiting for a response */
 	bool			response;
+
+	/*
+	 * Driver updated fields
+	 */
+
+	/* Response will be filed by driver when response received */
 	struct fsp_msg		*resp;
 
-	/* Internal use */
-	uint16_t		seq;
+	/* Current msg state */
 	enum fsp_msg_state	state;
+
+	/* Internal queuing */
+	struct list_node	link;
 };
 
 extern void fsp_preinit(void);
 
-extern struct fsp_msg *fsp_mkmsg(uint8_t cmd, uint8_t sub, uint8_t mod,
-				 bool response, uint8_t add_len, ...);
+extern struct fsp_msg *fsp_mkmsg(uint32_t cmd_sub_mod, uint8_t add_len, ...);
 
 extern int fsp_queue_msg(struct fsp_msg *msg);
 extern void fsp_poll(void);
 extern int fsp_wait_complete(struct fsp_msg *msg);
+
+/* Synchronously send a command. If there's a response, the status is
+ * returned as a positive number. A negative result means an error
+ * sending the message.
+ */
+extern int fsp_sync_msg(struct fsp_msg *msg, bool free_it);
+
+/* An FSP client is interested in messages for a given class */
+struct fsp_client {
+	/* Return true to "own" the message (you can free it) */
+	bool	(*message)(uint32_t cmd_sub_mod, struct fsp_msg *msg);
+	struct list_node	link;
+};
+
+/* WARNING: command class FSP_MCLASS_IPL is aliased to FSP_MCLASS_SERVICE,
+ * thus a client of one will get both types of messages
+ */
+extern void fsp_register_client(struct fsp_client *client, uint8_t msgclass);
+extern void fsp_unregister_client(struct fsp_client *client, uint8_t msgclass);
 
 #endif /* __FSP_H */
