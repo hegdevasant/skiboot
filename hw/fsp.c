@@ -7,6 +7,7 @@
 #include <spira.h>
 #include <io.h>
 #include <fsp.h>
+#include <stdarg.h>
 
 #define DBG(fmt...)	printf(fmt)
 
@@ -29,6 +30,60 @@ struct fsp {
 
 static struct fsp *first_fsp;
 static struct fsp *active_fsp;
+static struct fsp_msg *fsp_msgq;
+static uint16_t fsp_curseq = 0x8000
+struct fsp_cmdclass {
+	int timeout;
+	struct fsp_msg *pending;	
+};
+
+static struct fsp_cmdclass fsp_cmdclass[FSP_MCLASS_LAST - FSP_MCLASS_FIRST + 1]
+= {
+#define DEF_CLASS(_cl, _to) [_cl - FSP_MCLASS_FIRST] = { .timeout = _to }
+	DEF_CLASS(FSP_MCLASS_SERVICE,		16),
+	DEF_CLASS(FSP_MCLASS_IPL,		16),
+	DEF_CLASS(FSP_MCLASS_PCTRL_MSG,		16),
+	DEF_CLASS(FSP_MCLASS_PCTRL_ABORTS,	16),
+	DEF_CLASS(FSP_MCLASS_ERR_LOG,		16),
+	DEF_CLASS(FSP_MCLASS_CODE_UPDATE,	40),
+	DEF_CLASS(FSP_MCLASS_FETCH_SPDATA,	16),
+	DEF_CLASS(FSP_MCLASS_FETCH_HVDATA,	16),
+	DEF_CLASS(FSP_MCLASS_NVRAM,		16),
+	DEF_CLASS(FSP_MCLASS_MBOX_SURV,		 2),
+	DEF_CLASS(FSP_MCLASS_RTC,		16),
+	DEF_CLASS(FSP_MCLASS_SMART_CHIP,	20),
+	DEF_CLASS(FSP_MCLASS_INDICATOR,	       180),
+	DEF_CLASS(FSP_MCLASS_HMC_INTFMSG,	16),
+	DEF_CLASS(FSP_MCLASS_HMC_VT,		16),
+	DEF_CLASS(FSP_MCLASS_HMC_BUFFERS,	16),
+	DEF_CLASS(FSP_MCLASS_SHARK,		16),
+	DEF_CLASS(FSP_MCLASS_MEMORY_ERR,	16),
+	DEF_CLASS(FSP_MCLASS_CUOD_EVENT,	16),
+	DEF_CLASS(FSP_MCLASS_HW_MAINT,		16),
+	DEF_CLASS(FSP_MCLASS_VIO,		16),
+	DEF_CLASS(FSP_MCLASS_SRC_MSG,		16),
+	DEF_CLASS(FSP_MCLASS_DATA_COPY,		16),
+	DEF_CLASS(FSP_MCLASS_TONE,		16),
+	DEF_CLASS(FSP_MCLASS_VIRTUAL_NVRAM,	16)
+};
+
+static struct fsp_cmdclass *fsp_get_cmdclass(struct fsp_msg *msg)
+{
+	struct fsp_cmdclass *ret;
+	uint8_t c = msg->word0 & 0xff;
+
+	/* Alias classes CE and CF as the FSP has a single queue */
+	if (c == 0xcf)
+		c == 0xce;
+
+	ret = &fsp_cmdclass[c - FSP_MCLASS_FIRST];
+
+	/* Unknown class */
+	if (ret->timeout == 0)
+		return NULL;
+
+	return ret;
+}
 
 static void fsp_wreg(struct fsp *fsp, uint32_t reg, uint32_t val)
 {
@@ -194,13 +249,72 @@ static void fsp_create_fsp(const void *spss, int index)
 		fiop->fsp_regs =
 			(void *)(reg | (1ULL << 63) | FSP1_REG_OFFSET);
 	}
-	if (fsp->active_iopath > 0 && !active_fsp) {
+	if (fsp->active_iopath >= 0 && !active_fsp) {
 		fsp_reg_dump(fsp);
 		active_fsp = fsp;
 	}
 
 	fsp->link = first_fsp;
 	first_fsp = fsp;
+}
+
+struct fsp_msg *fsp_mkmsg(uint8_t cmd, uint8_t sub, uint8_t mod,
+			  bool response, uint8_t add_len, ...)
+{
+	struct fsp_msg *msg = zalloc(sizeof(struct fsp_msg));
+	va_list list;
+	int i;
+
+	if (!msg) {
+		prerror("FSP: Failed to allocate struct fsp_msg\n");
+		return NULL;
+	}
+	msg->word0 = cmd;
+	msg->word1 = mod << 8 | sub;
+	msg->dlen = add_len;
+	msg->response = response;
+
+	va_start(list, add_len);
+	for (i = 0; i < add_len; i++)
+		msg->data.bytes[i] = va_arg(list, int);
+	va_end(list);
+
+	return msg;
+}
+
+int fsp_queue_msg(struct fsp_msg *msg)
+{
+	struct fsp_cmdclass *cmdclass;
+	uint16_t seq;
+
+	/* Grab a new sequence number */
+	seq = fsp_curseq;
+	fsp_curseq = fsp_curseq + 1;
+	if (fsp_curseq == 0)
+		fsp_curseq = 0x8000;
+	msg->word0 |= seq << 16;
+
+	/* Queue the message in the appropriate queue */
+	cmdclass = fsp_get_cmdclass(msg);
+	if (!cmdclass) {
+		prerror("FSP: Invalid message class\n");
+		return -1;
+	}
+
+	/* XXX ENQUEUE XXX */
+	msg->state = fsp_msg_queued;
+
+}
+
+void fsp_poll(void)
+{
+}
+
+int fsp_wait_complete(struct fsp_msg *msg)
+{
+	/* XXX HANDLE TIMEOUTS */
+	while(msg->state != fsp_msg_done)
+		fsp_poll();
 }
 
 /* fsp_preinit -- Early initialization of the FSP stack

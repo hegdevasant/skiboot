@@ -216,10 +216,80 @@
 /* seen in the FSP1 spec */
 #define FSP1_REG_OFFSET			0xb0016000ULL
 
+/*
+ * Message classes
+ */
+#define FSP_MCLASS_FIRST		0xce
+#define FSP_MCLASS_SERVICE		0xce
+#define FSP_MCLASS_IPL			0xcf
+#define FSP_MCLASS_PCTRL_MSG		0xd0
+#define FSP_MCLASS_PCTRL_ABORTS		0xd1
+#define FSP_MCLASS_ERR_LOG		0xd2
+#define FSP_MCLASS_CODE_UPDATE		0xd3
+#define FSP_MCLASS_FETCH_SPDATA		0xd4
+#define FSP_MCLASS_FETCH_HVDATA		0xd5
+#define FSP_MCLASS_NVRAM		0xd6
+#define FSP_MCLASS_MBOX_SURV		0xd7
+#define FSP_MCLASS_RTC			0xd8
+#define FSP_MCLASS_SMART_CHIP		0xd9
+#define FSP_MCLASS_INDICATOR		0xda
+#define FSP_MCLASS_HMC_INTFMSG		0xe0
+#define FSP_MCLASS_HMC_VT		0xe1
+#define FSP_MCLASS_HMC_BUFFERS		0xe2
+#define FSP_MCLASS_SHARK		0xe3
+#define FSP_MCLASS_MEMORY_ERR		0xe4
+#define FSP_MCLASS_CUOD_EVENT		0xe5
+#define FSP_MCLASS_HW_MAINT		0xe6
+#define FSP_MCLASS_VIO			0xe7
+#define FSP_MCLASS_SRC_MSG		0xe8
+#define FSP_MCLASS_DATA_COPY		0xe9
+#define FSP_MCLASS_TONE			0xea
+#define FSP_MCLASS_VIRTUAL_NVRAM	0xeb
+#define FSP_MCLASS_LAST			0xeb
+
 
 /*
  * Functions exposed to the rest of skiboot
  */
+
+/* An FSP message */
+
+enum fsp_msg_state {
+	fsp_msg_unused,
+	fsp_msg_queued,
+	fsp_msg_sent,
+	fsp_msg_wresp,
+	fsp_msg_done,
+	fsp_msg_timeout,
+};
+
+/* Offset of fields in the message */
+struct fsp_msg {
+	/* Provided */
+	uint8_t			dlen;	/* not including word0/word1 */
+	uint32_t		word0;	/* seq << 16 | cmd */
+	uint32_t		word1;	/* mod << 8 | sub */
+	union {
+		uint32_t	words[14];
+		uint8_t		bytes[56];
+	} data;
+
+	/* Set if you are waiting for a response */
+	bool			response;
+	struct fsp_msg		*resp;
+
+	/* Internal use */
+	uint16_t		seq;
+	enum fsp_msg_state	state;
+};
+
 extern void fsp_preinit(void);
+
+extern struct fsp_msg *fsp_mkmsg(uint8_t cmd, uint8_t sub, uint8_t mod,
+				 bool response, uint8_t add_len, ...);
+
+extern int fsp_queue_msg(struct fsp_msg *msg);
+extern void fsp_poll(void);
+extern int fsp_wait_complete(struct fsp_msg *msg);
 
 #endif /* __FSP_H */
