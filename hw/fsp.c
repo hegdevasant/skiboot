@@ -9,7 +9,9 @@
 #include <fsp.h>
 #include <stdarg.h>
 
-#define DBG(fmt...)	printf(fmt)
+//#define DBG(fmt...)	printf(fmt)
+#define DBG(fmt...)	do { } while(0)
+#define FSP_TRACE
 
 #define FSP_MAX_IOPATH	4
 
@@ -39,6 +41,8 @@ struct fsp {
 static struct fsp *first_fsp;
 static struct fsp *active_fsp;
 static uint16_t fsp_curseq = 0x8000;
+static uint64_t *fsp_tce_table;
+static uint32_t fsp_inbound_off;
 
 struct fsp_cmdclass {
 	int timeout;
@@ -75,6 +79,24 @@ static struct fsp_cmdclass fsp_cmdclass[FSP_MCLASS_LAST - FSP_MCLASS_FIRST + 1]
 	DEF_CLASS(FSP_MCLASS_TONE,		16),
 	DEF_CLASS(FSP_MCLASS_VIRTUAL_NVRAM,	16)
 };
+
+static void fsp_trace_msg(struct fsp_msg *msg __unused,
+			  const char *act __unused)
+{
+#ifdef FSP_TRACE
+	uint32_t csm;
+	int i;
+
+	csm =  (msg->word0 & 0xff) << 16;
+	csm |= (msg->word1 & 0xff) << 8;
+	csm |= (msg->word1 >> 8) & 0xff;
+
+	printf("FSP: %s msg %06x %d bytes", act, csm, msg->dlen);
+	for (i = 0; i < msg->dlen; i++)
+		printf(" %02x", msg->data.bytes[i]);
+	printf("\n");
+#endif
+}
 
 struct fsp *fsp_get_active(void)
 {
@@ -180,9 +202,11 @@ static bool fsp_post_msg(struct fsp *fsp, struct fsp_msg *msg)
 	if (fsp_check_err(fsp))
 		return false;
 
+	fsp_trace_msg(msg, "snd");
+
 	/* Sanity: XUP and SPPEND should both be clear */
 	ctl = fsp_rreg(fsp, FSP_MBX1_HCTL_REG);
-	DBG("    old ctl: %x\n", ctl);
+	DBG("    old ctl: %08x\n", ctl);
 	assert(!(ctl & (FSP_MBX_CTL_SPPEND | FSP_MBX_CTL_XUP)));
 
 	/* Set ourselves as busy */
@@ -208,7 +232,7 @@ static bool fsp_post_msg(struct fsp *fsp, struct fsp_msg *msg)
 	ctl |= 4 << FSP_MBX_CTL_HCHOST_SHIFT;
 	ctl |= (msg->dlen + 8) << FSP_MBX_CTL_DCHOST_SHIFT;
 	ctl |= FSP_MBX_CTL_PTS | FSP_MBX_CTL_SPPEND;
-	DBG("    new ctl: %x\n", ctl);
+	DBG("    new ctl: %08x\n", ctl);
 	fsp_wreg(fsp, FSP_MBX1_HCTL_REG, ctl);
 
 	return true;
@@ -219,11 +243,11 @@ static void fsp_poke_queue(struct fsp_cmdclass *cmdclass)
 	struct fsp *fsp = fsp_get_active();
 	struct fsp_msg *msg;
 
-	if (!cmdclass->busy && list_empty(&cmdclass->msgq))
-		return;
 	if (!fsp)
 		return;
 	if (fsp->state != fsp_mbx_idle)
+		return;
+	if (cmdclass->busy || list_empty(&cmdclass->msgq))
 		return;
 
 	msg = list_top(&cmdclass->msgq, struct fsp_msg, link);
@@ -264,6 +288,33 @@ struct fsp_msg *fsp_mkmsg(uint32_t cmd_sub_mod, uint8_t add_len, ...)
 	return msg;
 }
 
+struct fsp_msg *fsp_mkmsgw(uint32_t cmd_sub_mod, uint8_t add_len, ...)
+{
+	struct fsp_msg *msg = zalloc(sizeof(struct fsp_msg));
+	va_list list;
+	bool response = !!(cmd_sub_mod & 0x1000000);
+	uint8_t cmd = (cmd_sub_mod >> 16) & 0xff;
+	uint8_t sub = (cmd_sub_mod >>  8) & 0xff;
+	uint8_t mod =  cmd_sub_mod & 0xff;
+	int i;
+
+	if (!msg) {
+		prerror("FSP: Failed to allocate struct fsp_msg\n");
+		return NULL;
+	}
+	msg->word0 = cmd & 0xff;
+	msg->word1 = mod << 8 | sub;
+	msg->dlen = add_len * 4;
+	msg->response = response;
+
+	va_start(list, add_len);
+	for (i = 0; i < add_len; i++)
+		msg->data.words[i] = va_arg(list, unsigned int);
+	va_end(list);
+
+	return msg;
+}
+
 int fsp_queue_msg(struct fsp_msg *msg)
 {
 	struct fsp_cmdclass *cmdclass;
@@ -297,7 +348,7 @@ static void fsp_complete_msg(struct fsp_msg *msg)
 	struct fsp_cmdclass *cmdclass = fsp_get_cmdclass(msg);
 	assert(cmdclass);
 
-	DBG("  completing msg, word0: 0x%08x\n", msg->word0);
+	DBG("  completing msg,  word0: 0x%08x\n", msg->word0);
 
 	list_del_from(&cmdclass->msgq, &msg->link);
 	cmdclass->busy = false;
@@ -311,13 +362,41 @@ static void fsp_complete_send(struct fsp *fsp)
 	assert(msg);
 	fsp->pending = NULL;
 
-	DBG("  completing msg send, word0: 0x%08x, resp: %d\n",
+	DBG("  completing send, word0: 0x%08x, resp: %d\n",
 	    msg->word0, msg->response);
 
 	if (msg->response)
 		msg->state = fsp_msg_wresp;
 	else
 		fsp_complete_msg(msg);
+}
+
+static void  fsp_alloc_inbound(struct fsp_msg *msg)
+{
+	uint16_t func_id = msg->data.words[0] & 0xffff;
+	uint32_t len = msg->data.words[1];
+	uint32_t tce_token = 0, act_len = 0;
+	uint8_t rc = 0;
+	void *buf;
+
+	printf("FSP: Allocate inbound buffer func: %04x len: %d\n",
+	       func_id, len);
+
+	if ((fsp_inbound_off + len) > FSP_INBOUND_SIZE) {
+		prerror("FSP: Out of space in buffer area !\n");
+		rc = 0xeb;
+		goto reply;
+	}
+	buf = (void *)FSP_INBOUND_BUFS + fsp_inbound_off;
+	tce_token = PSI_DMA_INBOUND_BUF + fsp_inbound_off;
+	len = (len + 0xfff) & ~0xfff;
+	fsp_inbound_off += len;
+	fsp_tce_map(tce_token, buf, len);
+	act_len = len;
+
+ reply:
+	fsp_sync_msg(fsp_mkmsgw(FSP_RSP_ALLOC_INBOUND | rc,
+				2, tce_token, act_len), true);
 }
 
 static void fsp_handle_command(struct fsp_msg *msg)
@@ -336,10 +415,19 @@ static void fsp_handle_command(struct fsp_msg *msg)
 	cmd_sub_mod |= (msg->word1 & 0xff) << 8;
 	cmd_sub_mod |= (msg->word1 >> 8) & 0xff;
 	
+	/* Some commands are handled locally */
+	switch(cmd_sub_mod) {
+	case FSP_CMD_ALLOC_INBOUND:
+		fsp_alloc_inbound(msg);
+		goto free;
+	}
+
 	list_for_each_safe(&cmdclass->clientq, client, next, link) {
 		if (client->message(cmd_sub_mod, msg))
 			return;
 	}
+
+	prerror("FSP: Unhandled message %06x\n", cmd_sub_mod);
  free:
 	free(msg);
 }
@@ -349,6 +437,7 @@ static void fsp_handle_incoming(struct fsp *fsp)
 	struct fsp_msg *msg = zalloc(sizeof(struct fsp_msg));
 	uint32_t h0, w0, w1, reg;
 	int i, dlen, wlen;
+	bool special_response = false;
 
 	h0 = fsp_rreg(fsp, FSP_MBX1_FHDR0_REG);
 	dlen = (h0 >> 16) & 0xff;
@@ -361,7 +450,7 @@ static void fsp_handle_incoming(struct fsp *fsp)
 	    w0, w1, dlen);
 
 	msg->state = fsp_msg_incoming;
-	msg->dlen = dlen;
+	msg->dlen = dlen - 8;
 	msg->word0 = w0;
 	msg->word1 = w1;
 	wlen = (dlen + 3) >> 2;
@@ -377,8 +466,15 @@ static void fsp_handle_incoming(struct fsp *fsp)
 		 FSP_MBX_CTL_HCSP_MASK |
 		 FSP_MBX_CTL_DCSP_MASK);
 
+	fsp_trace_msg(msg, "got");
+
+	/* Some responses are expected out of band */
+	if ((w0 & 0xff) == FSP_MCLASS_HMC_INTFMSG  &&
+	    ((w1 & 0xff) == 0x8a || ((w1 & 0xff) == 0x8b)))
+		special_response = true;
+
 	/* Check for response bit */
-	if (w1 & 0x80) {
+	if (w1 & 0x80 && !special_response) {
 		struct fsp_cmdclass *cmdclass = fsp_get_cmdclass(msg);
 		struct fsp_msg *req;
 
@@ -524,8 +620,10 @@ void fsp_unregister_client(struct fsp_client *client, uint8_t msgclass)
 	list_del_from(&cmdclass->clientq, &client->link);
 }
 
-static void fsp_reg_dump(struct fsp *fsp)
+static void fsp_reg_dump(struct fsp *fsp __unused)
 {
+#if 0
+
 #define FSP_DUMP_ONE(x)	\
 	DBG("  %20s: %x\n", #x, fsp_rreg(fsp, x));
 
@@ -546,6 +644,44 @@ static void fsp_reg_dump(struct fsp *fsp)
 	FSP_DUMP_ONE(FSP_SCRATCH1_REG);
 	FSP_DUMP_ONE(FSP_SCRATCH2_REG);
 	FSP_DUMP_ONE(FSP_SCRATCH3_REG);
+#endif
+}
+
+/* We use a single fixed TCE table for all PSI interfaces */
+static void fsp_init_tce_table(void)
+{
+	fsp_tce_table = (uint64_t *)PSI_TCE_TABLE_BASE;
+
+	memset(fsp_tce_table, 0, PSI_TCE_TABLE_SIZE);
+}
+
+void fsp_tce_map(uint32_t offset, void *addr, uint32_t size)
+{
+	uint64_t raddr = (uint64_t)addr;
+
+	assert(!(offset & 0xfff));
+	assert(!(raddr  & 0xfff));
+	assert(!(size   & 0xfff));
+
+	size   >>= 12;
+	offset >>= 12;
+
+	while(size--) {
+		fsp_tce_table[offset++] = raddr | 0x3;
+		raddr += 0x1000;
+	}
+}
+
+void fsp_tce_unmap(uint32_t offset, uint32_t size)
+{
+	assert(!(offset & 0xfff));
+	assert(!(size   & 0xfff));
+
+	size   >>= 12;
+	offset >>= 12;
+
+	while(size--)
+		fsp_tce_table[offset++] = 0;
 }
 
 static void fsp_create_fsp(const void *spss, int index)
@@ -577,6 +713,7 @@ static void fsp_create_fsp(const void *spss, int index)
 	fsp->iopath_count = count;
 	fsp->state = fsp_mbx_idle;
 
+	/* Iterate all links */
 	for (i = 0; i < count; i++) {
 		const struct spss_iopath *iopath;
 		struct fsp_iopath *fiop;
@@ -620,7 +757,16 @@ static void fsp_create_fsp(const void *spss, int index)
 		if (active)
 			fsp->active_iopath = i;
 
+		/* Disable, configure and enable the TCE table */
+		reg = in_be64(fiop->gxhb_regs + PSIHB_CR);
+		reg &= ~0x2000000000000000ULL;
+		out_be64(fiop->gxhb_regs + PSIHB_CR, reg);
+		out_be64(fiop->gxhb_regs + PSIHB_TAR, PSI_TCE_TABLE_BASE | 1);
+		reg |= 0x2000000000000000ULL;
+		out_be64(fiop->gxhb_regs + PSIHB_CR, reg);
+
 		/* Dump the GXHB registers */
+#if 0
 		DBG("  PSIHB_BBAR   : %llx\n",
 		    in_be64(fiop->gxhb_regs + PSIHB_BBAR));
 		DBG("  PSIHB_FSPBAR : %llx\n",
@@ -635,11 +781,13 @@ static void fsp_create_fsp(const void *spss, int index)
 		    in_be64(fiop->gxhb_regs + PSIHB_SEMR));
 		DBG("  PSIHB_XIVR   : %llx\n",
 		    in_be64(fiop->gxhb_regs + PSIHB_XIVR));
+#endif
 
 		/* Get the FSP register window */
 		reg = in_be64(fiop->gxhb_regs + PSIHB_FSPBAR);
 		fiop->fsp_regs =
 			(void *)(reg | (1ULL << 63) | FSP1_REG_OFFSET);
+		
 	}
 	if (fsp->active_iopath >= 0 && !active_fsp) {
 		fsp_reg_dump(fsp);
@@ -650,10 +798,7 @@ static void fsp_create_fsp(const void *spss, int index)
 	first_fsp = fsp;
 }
 
-/* fsp_preinit -- Early initialization of the FSP stack
- *
- */
-void fsp_preinit(void)
+void fsp_init(void)
 {
 	void *base_spss, *spss;
 	int i;
@@ -663,6 +808,9 @@ void fsp_preinit(void)
 		list_head_init(&fsp_cmdclass[i].msgq);
 		list_head_init(&fsp_cmdclass[i].clientq);
 	}
+
+	/* Initialize a TCE table */
+	fsp_init_tce_table();
 
 	/* Find SPSS in SPIRA */
 	base_spss = spira.ntuples.sp_subsys.addr;

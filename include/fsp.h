@@ -1,8 +1,6 @@
 
 /*
  * IBM System P FSP (Flexible Service Processor)
- *
- * By Sonny Rao, copyright IBM corp 2010
  */
 #ifndef __FSP_H
 #define __FSP_H
@@ -270,7 +268,9 @@
 #define FSP_CMD_OPL	    	0x0cf7100 /* HV->FSP: Operational Load Compl. */
 #define FSP_CMD_HV_STATE_CHG	0x0cf0200 /* FSP->HV: Request HV state change */
 #define FSP_RSP_HV_STATE_CHG	0x0cf8200
-#define FSP_CMD_SP_NEW_ROLE	0x0cf0700
+#define FSP_CMD_SP_NEW_ROLE	0x0cf0700 /* FSP->HV: FSP assuming a new role */
+#define FSP_RSP_SP_NEW_ROLE	0x0cf8700
+
 
 /*
  * Class 0xCE
@@ -278,6 +278,68 @@
 #define FSP_CMD_CONTINUE_IPL	0x0ce7000 /* FSP->HV: HV has control */
 #define FSP_CMD_CONTINUE_ACK	0x0ce5700 /* HV->FSP: HV acks CONTINUE IPL */
 #define FSP_CMD_HV_FUNCTNAL	0x1ce5707 /* HV->FSP: Set HV functional state */
+#define FSP_CMD_HV_QUERY_CAPS	0x1ce0400 /* HV->FSP: Query capabilities */
+#define FSP_RSP_HV_QUERY_CAPS	0x1ce8400
+#define FSP_CMD_SP_QUERY_CAPS	0x0ce0501 /* FSP->HV */
+#define FSP_RSP_SP_QUERY_CAPS	0x0ce8500
+
+/*
+ * Class 0xD5
+ */
+#define FSP_CMD_ALLOC_INBOUND	0x0d50400 /* FSP->HV: Allocate inbound buf. */
+#define FSP_RSP_ALLOC_INBOUND	0x0d58400
+
+/*
+ * Class 0xD7
+ */
+#define FSP_CMD_SURV_ACK	0x1d70000 /* FSP->HV */
+
+/*
+ * Class 0xE0
+ *
+ * HACK ALERT: We mark E00A01 (associate serial port) as not needing
+ * a response. We need to do that because the FSP will send as a result
+ * an Open Virtual Serial of the same class *and* expect a reply before
+ * it will respond to associate serial port. That breaks our logic of
+ * supporting only one cmd/resp outstanding per class.
+ */
+#define FSP_CMD_HMC_INTF_QUERY	0x0e00100 /* FSP->HV */
+#define FSP_RSP_HMC_INTF_QUERY	0x0e08100 /* HV->FSP */
+#define FSP_CMD_ASSOC_SERIAL	0x0e00a01 /* HV->FSP: Associate with a port */
+#define FSP_RSP_ASSOC_SERIAL	0x0e08a00 /* FSP->HV */
+#define FSP_CMD_UNASSOC_SERIAL	0x0e00b01 /* HV->FSP: Deassociate */
+#define FSP_RSP_UNASSOC_SERIAL	0x0e08b00 /* FSP->HV */
+#define FSP_CMD_OPEN_VSERIAL	0x0e00601 /* FSP->HV: Open serial session */
+#define FSP_RSP_OPEN_VSERIAL	0x0e08600 /* HV->FSP */
+#define FSP_CMD_CLOSE_VSERIAL	0x0e00701 /* FSP->HV: Close serial session */
+#define FSP_RSP_CLOSE_VSERIAL	0x0e08700 /* HV->FSP */
+
+/*
+ * Class E1
+ */
+#define FSP_CMD_VSERIAL_IN	0x0e10100 /* FSP->HV */
+#define FSP_CMD_VSERIAL_OUT	0x0e10200 /* HV->FSP */
+
+/*
+ * Layout of the PSI DMA address space
+ *
+ * We instanciate a TCE table of 16K mapping 64M
+ *
+ * Currently we have:
+ *
+ *   - 4x256K serial areas (each divided in 2: in and out buffers)
+ *   - 1M region for inbound buffers
+ */
+#define PSI_DMA_SER0_BASE	0x00000000
+#define PSI_DMA_SER0_SIZE	0x00040000
+#define PSI_DMA_SER1_BASE	0x00040000
+#define PSI_DMA_SER1_SIZE	0x00040000
+#define PSI_DMA_SER2_BASE	0x00080000
+#define PSI_DMA_SER2_SIZE	0x00040000
+#define PSI_DMA_SER3_BASE	0x000c0000
+#define PSI_DMA_SER3_SIZE	0x00040000
+#define PSI_DMA_INBOUND_BUF	0x00100000
+#define PSI_DMA_INBOUND_SIZE	0x00100000
 
 
 /*
@@ -327,9 +389,10 @@ struct fsp_msg {
 	struct list_node	link;
 };
 
-extern void fsp_preinit(void);
+extern void fsp_init(void);
 
 extern struct fsp_msg *fsp_mkmsg(uint32_t cmd_sub_mod, uint8_t add_len, ...);
+extern struct fsp_msg *fsp_mkmsgw(uint32_t cmd_sub_mod, uint8_t add_len, ...);
 
 extern int fsp_queue_msg(struct fsp_msg *msg);
 extern void fsp_poll(void);
@@ -353,5 +416,13 @@ struct fsp_client {
  */
 extern void fsp_register_client(struct fsp_client *client, uint8_t msgclass);
 extern void fsp_unregister_client(struct fsp_client *client, uint8_t msgclass);
+
+/* FSP TCE map/unmap functions */
+extern void fsp_tce_map(uint32_t offset, void *addr, uint32_t size);
+extern void fsp_tce_unmap(uint32_t offset, uint32_t size);
+
+/* FSP console stuff */
+extern void fsp_console_preinit(void);
+extern void fsp_console_init(void);
 
 #endif /* __FSP_H */
