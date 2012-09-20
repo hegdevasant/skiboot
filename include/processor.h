@@ -21,7 +21,11 @@
 #define MSR_LE		0x0000000000000001UL	/* 63 : Little Endian */
 
 /* SPR register definitions */
-#define SPRN_PIR		1023
+#define SPR_TBRL	0x10c
+#define SPR_TBRU	0x10d
+#define SPR_TBWL	0x11c
+#define SPR_TBWU	0x11d
+#define SPR_PIR		0x3ff
 
 /* Thread priority control opcodes */
 #define smt_low		or 1,1,1

@@ -20,7 +20,7 @@ __entry:
 	LOAD_IMM32(%r2,__toc_start + 0x8000)
 
 	/* Check our PIR, avoid threads */
-	mfspr	%r31,SPRN_PIR
+	mfspr	%r31,SPR_PIR
 	andi.	%r0,%r31,3
 	bne	secondary_wait
 
