@@ -1,6 +1,6 @@
 # -*-Makefile-*-
 
-SUBDIRS += ccan
+SUBDIRS += ccan ccan/list
 CCAN_OBJS = list/list.o
 CCAN=ccan/built-in.o
 
