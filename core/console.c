@@ -39,7 +39,7 @@ bool flush_console(void)
 
 	if (con_out > con_in) {
 		req = INMEM_CON_LEN - con_out;
-		len = con_driver->write(con_buf + con_out, req);
+		len = con_driver->write(con_buf + con_out, req);		
 		con_out = (con_out + len) % INMEM_CON_LEN;
 		if (len < req)
 			goto bail;
@@ -56,8 +56,9 @@ static void inmem_write(const char *buf, size_t count)
 {
 	while(count--) {
 		con_buf[con_in++] = *(buf++);
-		if (con_in > INMEM_CON_LEN)
+		if (con_in >= INMEM_CON_LEN)
 			con_in = 0;
+
 		/* If head reaches tail, push tail around & drop chars */
 		if (con_in == con_out)
 			con_out = (con_in + 1) % INMEM_CON_LEN;

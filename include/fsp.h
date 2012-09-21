@@ -270,6 +270,7 @@
 #define FSP_RSP_HV_STATE_CHG	0x0cf8200
 #define FSP_CMD_SP_NEW_ROLE	0x0cf0700 /* FSP->HV: FSP assuming a new role */
 #define FSP_RSP_SP_NEW_ROLE	0x0cf8700
+#define FSP_CMD_SP_RELOAD_COMP	0x0cf0102 /* FSP->HV: FSP reload complete */
 
 
 /*
@@ -358,7 +359,6 @@ enum fsp_msg_state {
 	fsp_msg_incoming,
 };
 
-/* Offset of fields in the message */
 struct fsp_msg {
 	/*
 	 * User fields. Don't populate word0.seq (upper 16 bits), this
@@ -372,12 +372,15 @@ struct fsp_msg {
 		u8		bytes[56];
 	} data;
 
-	/* Set if you are waiting for a response */
-	bool			response;
+	/* Completion function */
+	void (*complete)(struct fsp_msg *msg);
 
 	/*
 	 * Driver updated fields
 	 */
+
+	/* Set if the message expects a response */
+	bool			response;
 
 	/* Response will be filed by driver when response received */
 	struct fsp_msg		*resp;
@@ -391,18 +394,43 @@ struct fsp_msg {
 
 extern void fsp_init(void);
 
-extern struct fsp_msg *fsp_mkmsg(u32 cmd_sub_mod, u8 add_len, ...);
-extern struct fsp_msg *fsp_mkmsgw(u32 cmd_sub_mod, u8 add_len, ...);
+/* Allocate and populate an fsp_msg structure
+ *
+ * WARNING: Do _NOT_ use free() on an fsp_msg, use fsp_freemsg()
+ * instead as we will eventually use pre-allocated message pools
+ */
+extern struct fsp_msg *fsp_allocmsg(void);
+extern struct fsp_msg *fsp_mkmsg(u32 cmd_sub_mod, u8 add_words, ...);
 
-extern int fsp_queue_msg(struct fsp_msg *msg);
-extern void fsp_poll(void);
-extern int fsp_wait_complete(struct fsp_msg *msg);
+/* Free a message
+ *
+ * WARNING: This will also free an attached response if any
+ */
+extern void fsp_freemsg(struct fsp_msg *msg);
+
+/* Free a message and not the attached reply */
+extern void __fsp_freemsg(struct fsp_msg *msg);
+
+/* Enqueue it in the appropriate FSP queue */
+extern int fsp_queue_msg(struct fsp_msg *msg,
+			 void (*comp)(struct fsp_msg *msg));
 
 /* Synchronously send a command. If there's a response, the status is
  * returned as a positive number. A negative result means an error
  * sending the message.
+ *
+ * If autofree is set, the message and the reply (if any) are freed
+ * after extracting the status. If not set, you are responsible for
+ * freeing both the message and an eventual response
+ *
+ * NOTE: This will call fsp_queue_msg(msg, NULL), hence clearing the
+ * completion field of the message. No synchronous message is expected
+ * to utilize asynchronous completions.
  */
-extern int fsp_sync_msg(struct fsp_msg *msg, bool free_it);
+extern int fsp_sync_msg(struct fsp_msg *msg, bool autofree);
+
+/* Process FSP mailbox activity */
+extern void fsp_poll(void);
 
 /* An FSP client is interested in messages for a given class */
 struct fsp_client {

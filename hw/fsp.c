@@ -208,7 +208,11 @@ static bool fsp_post_msg(struct fsp *fsp, struct fsp_msg *msg)
 	if (fsp_check_err(fsp))
 		return false;
 
-	fsp_trace_msg(msg, "snd");
+	/* We avoid tracing outgoing vserial pokes or we end up
+	 * recursively calling into it again and again..
+	 */
+	if ((msg->word0 & 0xff) != 0xe1)
+		fsp_trace_msg(msg, "snd");
 
 	/* Sanity: XUP and SPPEND should both be clear */
 	ctl = fsp_rreg(fsp, FSP_MBX1_HCTL_REG);
@@ -267,15 +271,30 @@ static void fsp_poke_queue(struct fsp_cmdclass *cmdclass)
 	}
 }
 
-struct fsp_msg *fsp_mkmsg(u32 cmd_sub_mod, u8 add_len, ...)
+struct fsp_msg *fsp_allocmsg(void)
 {
-	struct fsp_msg *msg = zalloc(sizeof(struct fsp_msg));
-	va_list list;
+	return zalloc(sizeof(struct fsp_msg));
+}
+
+void __fsp_freemsg(struct fsp_msg *msg)
+{
+	free(msg);
+}
+
+void fsp_freemsg(struct fsp_msg *msg)
+{
+	if (msg->resp)
+		__fsp_freemsg(msg->resp);
+	__fsp_freemsg(msg);
+}
+
+static struct fsp_msg *__fsp_mkmsg(u32 cmd_sub_mod)
+{
+	struct fsp_msg *msg = fsp_allocmsg();
 	bool response = !!(cmd_sub_mod & 0x1000000);
 	u8 cmd = (cmd_sub_mod >> 16) & 0xff;
 	u8 sub = (cmd_sub_mod >>  8) & 0xff;
 	u8 mod =  cmd_sub_mod & 0xff;
-	int i;
 
 	if (!msg) {
 		prerror("FSP: Failed to allocate struct fsp_msg\n");
@@ -283,35 +302,20 @@ struct fsp_msg *fsp_mkmsg(u32 cmd_sub_mod, u8 add_len, ...)
 	}
 	msg->word0 = cmd & 0xff;
 	msg->word1 = mod << 8 | sub;
-	msg->dlen = add_len;
 	msg->response = response;
-
-	va_start(list, add_len);
-	for (i = 0; i < add_len; i++)
-		msg->data.bytes[i] = va_arg(list, int);
-	va_end(list);
 
 	return msg;
 }
 
-struct fsp_msg *fsp_mkmsgw(u32 cmd_sub_mod, u8 add_len, ...)
+struct fsp_msg *fsp_mkmsg(u32 cmd_sub_mod, u8 add_len, ...)
 {
-	struct fsp_msg *msg = zalloc(sizeof(struct fsp_msg));
+	struct fsp_msg *msg = __fsp_mkmsg(cmd_sub_mod);
 	va_list list;
-	bool response = !!(cmd_sub_mod & 0x1000000);
-	u8 cmd = (cmd_sub_mod >> 16) & 0xff;
-	u8 sub = (cmd_sub_mod >>  8) & 0xff;
-	u8 mod =  cmd_sub_mod & 0xff;
 	int i;
 
-	if (!msg) {
-		prerror("FSP: Failed to allocate struct fsp_msg\n");
+	if (!msg)
 		return NULL;
-	}
-	msg->word0 = cmd & 0xff;
-	msg->word1 = mod << 8 | sub;
-	msg->dlen = add_len * 4;
-	msg->response = response;
+	msg->dlen = add_len << 2;
 
 	va_start(list, add_len);
 	for (i = 0; i < add_len; i++)
@@ -321,7 +325,7 @@ struct fsp_msg *fsp_mkmsgw(u32 cmd_sub_mod, u8 add_len, ...)
 	return msg;
 }
 
-int fsp_queue_msg(struct fsp_msg *msg)
+int fsp_queue_msg(struct fsp_msg *msg, void (*comp)(struct fsp_msg *msg))
 {
 	struct fsp_cmdclass *cmdclass;
 	u16 seq;
@@ -332,6 +336,9 @@ int fsp_queue_msg(struct fsp_msg *msg)
 	if (fsp_curseq == 0)
 		fsp_curseq = 0x8000;
 	msg->word0 |= seq << 16;
+
+	/* Set completion */
+	msg->complete = comp;
 
 	/* Queue the message in the appropriate queue */
 	cmdclass = fsp_get_cmdclass(msg);
@@ -352,13 +359,20 @@ int fsp_queue_msg(struct fsp_msg *msg)
 static void fsp_complete_msg(struct fsp_msg *msg)
 {
 	struct fsp_cmdclass *cmdclass = fsp_get_cmdclass(msg);
+	void (*comp)(struct fsp_msg *msg);
+
 	assert(cmdclass);
 
 	DBG("  completing msg,  word0: 0x%08x\n", msg->word0);
 
+	comp = msg->complete;
 	list_del_from(&cmdclass->msgq, &msg->link);
 	cmdclass->busy = false;
 	msg->state = fsp_msg_done;
+
+	barrier();
+	if (comp)
+		(*comp)(msg);
 }
 
 static void fsp_complete_send(struct fsp *fsp)
@@ -401,8 +415,8 @@ static void  fsp_alloc_inbound(struct fsp_msg *msg)
 	act_len = len;
 
  reply:
-	fsp_sync_msg(fsp_mkmsgw(FSP_RSP_ALLOC_INBOUND | rc,
-				3, 0, tce_token, act_len), true);
+	fsp_sync_msg(fsp_mkmsg(FSP_RSP_ALLOC_INBOUND | rc,
+			       3, 0, tce_token, act_len), true);
 }
 
 static void fsp_handle_command(struct fsp_msg *msg)
@@ -426,16 +440,22 @@ static void fsp_handle_command(struct fsp_msg *msg)
 	case FSP_CMD_ALLOC_INBOUND:
 		fsp_alloc_inbound(msg);
 		goto free;
+	case FSP_CMD_SP_RELOAD_COMP:
+		printf("FSP: SP says Reset/Reload complete\n");
+		printf("     There is %s FSP dump\n",
+		       (msg->data.bytes[3] & 0x20) ? "an" : "no");
+		/* XXX Handle FSP dumps ... one day maybe */
+		goto free;
 	}
 
 	list_for_each_safe(&cmdclass->clientq, client, next, link) {
 		if (client->message(cmd_sub_mod, msg))
-			return;
+			goto free;
 	}
 
 	prerror("FSP: Unhandled message %06x\n", cmd_sub_mod);
  free:
-	free(msg);
+	fsp_freemsg(msg);
 }
 
 static void fsp_handle_incoming(struct fsp *fsp)
@@ -487,7 +507,7 @@ static void fsp_handle_incoming(struct fsp *fsp)
 		if (!cmdclass->busy || list_empty(&cmdclass->msgq)) {
 			prerror("FSP #%d: Got orphan response !\n", fsp->index);
 			/* XXX DUMP MESSAGE */
-			free(msg);
+			fsp_freemsg(msg);
 			return;
 		}
 		req = list_top(&cmdclass->msgq, struct fsp_msg, link);
@@ -565,30 +585,29 @@ void fsp_poll(void)
 
 int fsp_wait_complete(struct fsp_msg *msg)
 {
-	/* XXX HANDLE TIMEOUTS */
 	while(msg->state != fsp_msg_done)
 		fsp_poll();
 
 	return 0;
 }
 
-int fsp_sync_msg(struct fsp_msg *msg, bool free_it)
+int fsp_sync_msg(struct fsp_msg *msg, bool autofree)
 {
 	int rc;
 
-	rc = fsp_queue_msg(msg);
+	rc = fsp_queue_msg(msg, NULL);
 	if (rc)
 		goto bail;
 
-	rc = fsp_wait_complete(msg);
-	if (rc == 0 && msg->resp)
+	/* XXX HANDLE TIMEOUTS */
+	while(msg->state != fsp_msg_done)
+		fsp_poll();
+
+	if (msg->resp)
 		rc = (msg->resp->word1 >> 8) & 0xff;
  bail:
-	if (free_it) {
-		if (msg->resp)
-			free(msg->resp);
-		free(msg);
-	}
+	if (autofree)
+		fsp_freemsg(msg);
 	return rc;
 }
 

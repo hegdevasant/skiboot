@@ -50,7 +50,8 @@ static size_t fsp_write_vserial(struct fsp_serial *fs, const char *buf, size_t l
 	u16 space, chunk;
 
 	sync();
-	space = (old_nin + SER_BUF_DATA_SIZE - sb->next_out - 1) % SER_BUF_DATA_SIZE;
+	space = (old_nin + SER_BUF_DATA_SIZE - sb->next_out - 1)
+		% SER_BUF_DATA_SIZE;
 	if (space < len)
 		len = space;
 	if (!len)
@@ -63,12 +64,10 @@ static size_t fsp_write_vserial(struct fsp_serial *fs, const char *buf, size_t l
 	sb->next_in = (old_nin + len) % SER_BUF_DATA_SIZE;
 	sync();
 
-	/* XXX Make those messages asynchronous, handle the need for a new
-	 * one if already pending via a flag & completion callback
-	 */
 	if (sb->next_out == old_nin)
-		fsp_sync_msg(fsp_mkmsgw(FSP_CMD_VSERIAL_OUT, 2,
-					fs->msg_hdr0, fs->msg_hdr1), true);
+		fsp_queue_msg(fsp_mkmsg(FSP_CMD_VSERIAL_OUT, 2,
+					fs->msg_hdr0, fs->msg_hdr1),
+			      fsp_freemsg);
 
 	return len;
 }
@@ -104,7 +103,8 @@ static void fsp_open_vserial(struct fsp_msg *msg)
 	printf("  authority = 0x%02x\n", authority);
 
 	if (sess_id >= MAX_SERIAL || !fsp_serials[sess_id].available) {
-		fsp_sync_msg(fsp_mkmsg(FSP_RSP_OPEN_VSERIAL | 0x2f, 0), true);
+		fsp_queue_msg(fsp_mkmsg(FSP_RSP_OPEN_VSERIAL | 0x2f, 0),
+			      fsp_freemsg);
 		return;
 	}
 	fs = &fsp_serials[sess_id];
@@ -119,18 +119,20 @@ static void fsp_open_vserial(struct fsp_msg *msg)
 	fs->in_buf->partition_id = fs->out_buf->partition_id = part_id;
 	fs->in_buf->session_id	 = fs->out_buf->session_id   = sess_id;
 	fs->in_buf->hmc_id       = fs->out_buf->hmc_id       = hmc_indx;
-	fs->in_buf->data_offset  = fs->out_buf->data_offset  = sizeof(struct fsp_serbuf_hdr);
-	fs->in_buf->last_valid   = fs->out_buf->last_valid   = SER_BUF_DATA_SIZE - 1;
+	fs->in_buf->data_offset  = fs->out_buf->data_offset  =
+		sizeof(struct fsp_serbuf_hdr);
+	fs->in_buf->last_valid   = fs->out_buf->last_valid   =
+		SER_BUF_DATA_SIZE - 1;
 	fs->in_buf->ovf_count    = fs->out_buf->ovf_count    = 0;
 	fs->in_buf->next_in      = fs->out_buf->next_in      = 0;
 	fs->in_buf->flags        = fs->out_buf->flags        = 0;
 	fs->in_buf->reserved     = fs->out_buf->reserved     = 0;
 	fs->in_buf->next_out     = fs->out_buf->next_out     = 0;
 
-	fsp_sync_msg(fsp_mkmsgw(FSP_RSP_OPEN_VSERIAL, 6,
+	fsp_queue_msg(fsp_mkmsg(FSP_RSP_OPEN_VSERIAL, 6,
 				fs->msg_hdr0,
-				fs->msg_hdr1, /* XXX Check pHyp status meaning */
-				0, tce_in, 0, tce_out), true);
+				fs->msg_hdr1, /* XXX Check pHyp status */
+				0, tce_in, 0, tce_out), fsp_freemsg);
 
 #ifdef DVS_CONSOLE
 	/* XXX Check authority ? */
@@ -157,7 +159,8 @@ static void fsp_close_vserial(struct fsp_msg *msg)
 	printf("  authority = 0x%02x\n", authority);
 
 	if (sess_id >= MAX_SERIAL || !fsp_serials[sess_id].available) {
-		fsp_sync_msg(fsp_mkmsg(FSP_RSP_CLOSE_VSERIAL | 0x2f, 0), true);
+		fsp_queue_msg(fsp_mkmsg(FSP_RSP_CLOSE_VSERIAL | 0x2f, 0),
+			      fsp_freemsg);
 		return;
 	}
 #ifdef DVS_CONSOLE
@@ -167,7 +170,7 @@ static void fsp_close_vserial(struct fsp_msg *msg)
 	}
 #endif
 	fsp_serials[sess_id].open = false;
-	fsp_sync_msg(fsp_mkmsg(FSP_RSP_CLOSE_VSERIAL, 0), true);
+	fsp_queue_msg(fsp_mkmsg(FSP_RSP_CLOSE_VSERIAL, 0), fsp_freemsg);
 
 }
 
@@ -187,30 +190,28 @@ static bool fsp_con_msg_hmc(u32 cmd_sub_mod, struct fsp_msg *msg)
 	switch(cmd_sub_mod) {
 	case FSP_CMD_OPEN_VSERIAL:
 		fsp_open_vserial(msg);
-		free(msg);
 		return true;
 	case FSP_CMD_CLOSE_VSERIAL:
 		fsp_close_vserial(msg);
-		free(msg);
 		return true;
 	case FSP_CMD_HMC_INTF_QUERY:
-		printf("Got HMC interface query\n");
-		fsp_sync_msg(fsp_mkmsg(FSP_RSP_HMC_INTF_QUERY, 4,
-				       0,
-				       msg->data.bytes[1],
-				       msg->data.bytes[2],
-				       msg->data.bytes[3]), true);
-		free(msg);
+		printf("FSPCON: Got HMC interface query\n");
+
+		/* Keep that synchronous due to FSP fragile ordering
+		 * of the boot sequence
+		 */
+		fsp_sync_msg(fsp_mkmsg(FSP_RSP_HMC_INTF_QUERY, 1,
+				       msg->data.words[0] & 0x00ffffff), true);
 		got_intf_query = true;
 		return true;
 	}
 	return false;
 }
 
-static bool fsp_con_msg_vt(u32 cmd_sub_mod __unused, struct fsp_msg *msg)
+static bool fsp_con_msg_vt(u32 cmd_sub_mod __unused,
+			   struct fsp_msg *msg __unused)
 {
 	/* We just swallow incoming messages */
-	free(msg);
 	return true;
 }
 
@@ -258,8 +259,8 @@ static void fsp_serial_add(u16 rsrc_id, const char *loc_code)
 
 	/* DVS doesn't have that */
 	if (rsrc_id != 0xffff)
-		fsp_sync_msg(fsp_mkmsgw(FSP_CMD_ASSOC_SERIAL, 2,
-					rsrc_id << 16, index), true);
+		fsp_sync_msg(fsp_mkmsg(FSP_CMD_ASSOC_SERIAL, 2,
+				       (rsrc_id << 16) | 1, index), true);
 }
 
 void fsp_console_init(void)
