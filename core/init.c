@@ -1,6 +1,7 @@
 #include <skiboot.h>
 #include <fsp.h>
 #include <memory.h>
+#include <cpu.h>
 
 /*
  * Boot semaphore, incremented by each CPU calling in
@@ -90,6 +91,9 @@ void main_cpu_entry(void)
 	 * to some of these for the init sequence to make forward progress
 	 */
 	fsp_console_preinit();
+
+	/* Parse the PACA/PCIA */
+	cpu_parse();
 
 	/* Parse the memory layout. */
 	memory_parse();
