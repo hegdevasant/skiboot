@@ -11,6 +11,7 @@
 
 #include <ccan/container_of/container_of.h>
 #include <ccan/list/list.h>
+#include <ccan/short_types/short_types.h>
 
 /* Special ELF sections */
 #define __force_data		__section(".force.data")
