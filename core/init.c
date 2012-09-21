@@ -1,5 +1,6 @@
 #include <skiboot.h>
 #include <fsp.h>
+#include <memory.h>
 
 /*
  * Boot semaphore, incremented by each CPU calling in
@@ -89,6 +90,9 @@ void main_cpu_entry(void)
 	 * to some of these for the init sequence to make forward progress
 	 */
 	fsp_console_preinit();
+
+	/* Parse the memory layout. */
+	memory_parse();
 
 	/* Start FSP/HV state controller */
 	start_fsp_state_control();
