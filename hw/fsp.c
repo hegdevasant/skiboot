@@ -159,6 +159,12 @@ static bool fsp_check_err(struct fsp *fsp)
 
 	/* Check for an error state */
 	hstate = fsp_rreg(fsp, FSP_HDES_REG);
+	if (hstate == 0xffffffff) {
+		prerror("FSP #%d: Link seems to be down\n", fsp->index);
+		/* XXX Start recovery */
+		fsp->state = fsp_mbx_error;
+		return true;
+	}
 
 	/* Clear errors */
 	fsp_wreg(fsp, FSP_HDES_REG, FSP_DBERRSTAT_CLR1);
@@ -396,7 +402,7 @@ static void  fsp_alloc_inbound(struct fsp_msg *msg)
 
  reply:
 	fsp_sync_msg(fsp_mkmsgw(FSP_RSP_ALLOC_INBOUND | rc,
-				2, tce_token, act_len), true);
+				3, 0, tce_token, act_len), true);
 }
 
 static void fsp_handle_command(struct fsp_msg *msg)
@@ -518,6 +524,10 @@ void fsp_poll(void)
 {
 	struct fsp *fsp = fsp_get_active();
 	uint32_t ctl;
+
+	/* Check for error state */
+	if (fsp_check_err(fsp) || fsp->state == fsp_mbx_error)
+		return;
 
 	/* Poll FSP CTL */
 	ctl = fsp_rreg(fsp, FSP_MBX1_HCTL_REG);
@@ -766,21 +776,21 @@ static void fsp_create_fsp(const void *spss, int index)
 		out_be64(fiop->gxhb_regs + PSIHB_CR, reg);
 
 		/* Dump the GXHB registers */
-#if 0
-		DBG("  PSIHB_BBAR   : %llx\n",
-		    in_be64(fiop->gxhb_regs + PSIHB_BBAR));
-		DBG("  PSIHB_FSPBAR : %llx\n",
-		    in_be64(fiop->gxhb_regs + PSIHB_FSPBAR));
-		DBG("  PSIHB_FSPMMR : %llx\n",
-		    in_be64(fiop->gxhb_regs + PSIHB_FSPMMR));
-		DBG("  PSIHB_TAR    : %llx\n",
-		    in_be64(fiop->gxhb_regs + PSIHB_TAR));
-		DBG("  PSIHB_CR     : %llx\n",
-		    in_be64(fiop->gxhb_regs + PSIHB_CR));
-		DBG("  PSIHB_SEMR   : %llx\n",
-		    in_be64(fiop->gxhb_regs + PSIHB_SEMR));
-		DBG("  PSIHB_XIVR   : %llx\n",
-		    in_be64(fiop->gxhb_regs + PSIHB_XIVR));
+#if 1
+		printf("  PSIHB_BBAR   : %llx\n",
+		       in_be64(fiop->gxhb_regs + PSIHB_BBAR));
+		printf("  PSIHB_FSPBAR : %llx\n",
+		       in_be64(fiop->gxhb_regs + PSIHB_FSPBAR));
+		printf("  PSIHB_FSPMMR : %llx\n",
+		       in_be64(fiop->gxhb_regs + PSIHB_FSPMMR));
+		printf("  PSIHB_TAR    : %llx\n",
+		       in_be64(fiop->gxhb_regs + PSIHB_TAR));
+		printf("  PSIHB_CR     : %llx\n",
+		       in_be64(fiop->gxhb_regs + PSIHB_CR));
+		printf("  PSIHB_SEMR   : %llx\n",
+		       in_be64(fiop->gxhb_regs + PSIHB_SEMR));
+		printf("  PSIHB_XIVR   : %llx\n",
+		       in_be64(fiop->gxhb_regs + PSIHB_XIVR));
 #endif
 
 		/* Get the FSP register window */

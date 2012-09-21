@@ -12,8 +12,10 @@
 /* Enable this for mambo console */
 //#define MAMBO_CONSOLE		1
 
-/* Enable this for in-memory console */
-#define INMEM_CONSOLE		1
+/* Enable this to hookup SkiBoot log to the DVS console */
+#define DVS_CONSOLE		1
+
+/* This is the location of our console buffer */
 #define INMEM_CON_START		0x30000000UL
 #define INMEM_CON_LEN  		0x100000
 
