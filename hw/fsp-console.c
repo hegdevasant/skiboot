@@ -9,17 +9,17 @@
 #include <console.h>
 
 struct fsp_serbuf_hdr {
-	uint16_t	partition_id;
-	uint8_t		session_id;
-	uint8_t		hmc_id;
-	uint16_t	data_offset;
-	uint16_t	last_valid;
-	uint16_t	ovf_count;
-	uint16_t	next_in;
-	uint8_t		flags;
-	uint8_t		reserved;
-	uint16_t	next_out;
-	uint8_t		data[];
+	u16	partition_id;
+	u8	session_id;
+	u8	hmc_id;
+	u16	data_offset;
+	u16	last_valid;
+	u16	ovf_count;
+	u16	next_in;
+	u8	flags;
+	u8	reserved;
+	u16	next_out;
+	u8	data[];
 };
 #define SER_BUF_DATA_SIZE	(0x10000 - sizeof(struct fsp_serbuf_hdr))
 
@@ -27,11 +27,11 @@ struct fsp_serial {
 	bool			available;
 	bool			open;
 	char			loc_code[LOC_CODE_SIZE];
-	uint16_t		rsrc_id;
+	u16			rsrc_id;
 	struct fsp_serbuf_hdr	*in_buf;
 	struct fsp_serbuf_hdr	*out_buf;
-	uint32_t		msg_hdr0;
-	uint32_t		msg_hdr1;
+	u32			msg_hdr0;
+	u32			msg_hdr1;
 };
 
 #define MAX_SERIAL	4
@@ -46,8 +46,8 @@ static int fsp_con_port = -1;
 static size_t fsp_write_vserial(struct fsp_serial *fs, const char *buf, size_t len)
 {
 	struct fsp_serbuf_hdr *sb = fs->out_buf;
-	uint16_t old_nin = sb->next_in;
-	uint16_t space, chunk;
+	u16 old_nin = sb->next_in;
+	u16 space, chunk;
 
 	sync();
 	space = (old_nin + SER_BUF_DATA_SIZE - sb->next_out - 1) % SER_BUF_DATA_SIZE;
@@ -88,12 +88,12 @@ static struct con_ops fsp_con_ops = {
 
 static void fsp_open_vserial(struct fsp_msg *msg)
 {
-	uint16_t part_id = msg->data.words[0] & 0xffff;
-	uint16_t sess_id = msg->data.words[1] & 0xffff;
-	uint8_t hmc_sess = msg->data.bytes[0];	
-	uint8_t hmc_indx = msg->data.bytes[1];
-	uint8_t authority = msg->data.bytes[4];
-	uint32_t tce_in, tce_out;
+	u16 part_id = msg->data.words[0] & 0xffff;
+	u16 sess_id = msg->data.words[1] & 0xffff;
+	u8 hmc_sess = msg->data.bytes[0];	
+	u8 hmc_indx = msg->data.bytes[1];
+	u8 authority = msg->data.bytes[4];
+	u32 tce_in, tce_out;
 	struct fsp_serial *fs;
 
 	printf("FSPCON: Got VSerial Open\n");
@@ -143,11 +143,11 @@ static void fsp_open_vserial(struct fsp_msg *msg)
 
 static void fsp_close_vserial(struct fsp_msg *msg)
 {
-	uint16_t part_id = msg->data.words[0] & 0xffff;
-	uint16_t sess_id = msg->data.words[1] & 0xffff;
-	uint8_t hmc_sess = msg->data.bytes[0];	
-	uint8_t hmc_indx = msg->data.bytes[1];
-	uint8_t authority = msg->data.bytes[4];
+	u16 part_id = msg->data.words[0] & 0xffff;
+	u16 sess_id = msg->data.words[1] & 0xffff;
+	u8 hmc_sess = msg->data.bytes[0];	
+	u8 hmc_indx = msg->data.bytes[1];
+	u8 authority = msg->data.bytes[4];
 
 	printf("FSPCON: Got VSerial Close\n");
 	printf("  part_id   = 0x%04x\n", part_id);
@@ -171,7 +171,7 @@ static void fsp_close_vserial(struct fsp_msg *msg)
 
 }
 
-static bool fsp_con_msg_hmc(uint32_t cmd_sub_mod, struct fsp_msg *msg)
+static bool fsp_con_msg_hmc(u32 cmd_sub_mod, struct fsp_msg *msg)
 {
 	/* Associate response */
 	if ((cmd_sub_mod >> 8) == 0xe08a) {
@@ -207,7 +207,7 @@ static bool fsp_con_msg_hmc(uint32_t cmd_sub_mod, struct fsp_msg *msg)
 	return false;
 }
 
-static bool fsp_con_msg_vt(uint32_t cmd_sub_mod __unused, struct fsp_msg *msg)
+static bool fsp_con_msg_vt(u32 cmd_sub_mod __unused, struct fsp_msg *msg)
 {
 	/* We just swallow incoming messages */
 	free(msg);
@@ -241,7 +241,7 @@ void fsp_console_preinit(void)
 	fsp_register_client(&fsp_con_client_vt, FSP_MCLASS_HMC_VT);
 }
 
-static void fsp_serial_add(uint16_t rsrc_id, const char *loc_code)
+static void fsp_serial_add(u16 rsrc_id, const char *loc_code)
 {
 	struct fsp_serial *ser;
 	int index;

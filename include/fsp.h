@@ -364,12 +364,12 @@ struct fsp_msg {
 	 * User fields. Don't populate word0.seq (upper 16 bits), this
 	 * will be done by fsp_queue_msg()
 	 */
-	uint8_t			dlen;	/* not including word0/word1 */
-	uint32_t		word0;	/* seq << 16 | cmd */
-	uint32_t		word1;	/* mod << 8 | sub */
+	u8			dlen;	/* not including word0/word1 */
+	u32			word0;	/* seq << 16 | cmd */
+	u32			word1;	/* mod << 8 | sub */
 	union {
-		uint32_t	words[14];
-		uint8_t		bytes[56];
+		u32		words[14];
+		u8		bytes[56];
 	} data;
 
 	/* Set if you are waiting for a response */
@@ -391,8 +391,8 @@ struct fsp_msg {
 
 extern void fsp_init(void);
 
-extern struct fsp_msg *fsp_mkmsg(uint32_t cmd_sub_mod, uint8_t add_len, ...);
-extern struct fsp_msg *fsp_mkmsgw(uint32_t cmd_sub_mod, uint8_t add_len, ...);
+extern struct fsp_msg *fsp_mkmsg(u32 cmd_sub_mod, u8 add_len, ...);
+extern struct fsp_msg *fsp_mkmsgw(u32 cmd_sub_mod, u8 add_len, ...);
 
 extern int fsp_queue_msg(struct fsp_msg *msg);
 extern void fsp_poll(void);
@@ -407,19 +407,19 @@ extern int fsp_sync_msg(struct fsp_msg *msg, bool free_it);
 /* An FSP client is interested in messages for a given class */
 struct fsp_client {
 	/* Return true to "own" the message (you can free it) */
-	bool	(*message)(uint32_t cmd_sub_mod, struct fsp_msg *msg);
+	bool	(*message)(u32 cmd_sub_mod, struct fsp_msg *msg);
 	struct list_node	link;
 };
 
 /* WARNING: command class FSP_MCLASS_IPL is aliased to FSP_MCLASS_SERVICE,
  * thus a client of one will get both types of messages
  */
-extern void fsp_register_client(struct fsp_client *client, uint8_t msgclass);
-extern void fsp_unregister_client(struct fsp_client *client, uint8_t msgclass);
+extern void fsp_register_client(struct fsp_client *client, u8 msgclass);
+extern void fsp_unregister_client(struct fsp_client *client, u8 msgclass);
 
 /* FSP TCE map/unmap functions */
-extern void fsp_tce_map(uint32_t offset, void *addr, uint32_t size);
-extern void fsp_tce_unmap(uint32_t offset, uint32_t size);
+extern void fsp_tce_map(u32 offset, void *addr, u32 size);
+extern void fsp_tce_unmap(u32 offset, u32 size);
 
 /* FSP console stuff */
 extern void fsp_console_preinit(void);

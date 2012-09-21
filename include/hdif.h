@@ -4,28 +4,28 @@
 #include <skiboot.h>
 
 struct HDIF_common_hdr {
-	uint16_t	d1f0;		/* 0xd1f0 */
-	char		id[6];		/* eye catcher string */
-	uint16_t	instnum;	/* instance number */
-	uint16_t	version;	/* version */
-	uint32_t	total_len;	/* total structure length */
-	uint32_t	hdr_len;	/* header length (currently 0x20) */
-	uint32_t	idptr_off;	/* offset to idata pointers */
-	uint16_t	idptr_count;	/* number of idata pointers */
-	uint16_t	child_count;	/* number of child structures */
-	uint32_t	child_off;	/* offset to child structures array */
+	u16	d1f0;		/* 0xd1f0 */
+	char	id[6];		/* eye catcher string */
+	u16	instnum;	/* instance number */
+	u16	version;	/* version */
+	u32	total_len;	/* total structure length */
+	u32	hdr_len;	/* header length (currently 0x20) */
+	u32	idptr_off;	/* offset to idata pointers */
+	u16	idptr_count;	/* number of idata pointers */
+	u16	child_count;	/* number of child structures */
+	u32	child_off;	/* offset to child structures array */
 } __packed __align(0x10);
 
 struct HDIF_idata_ptr {
-	uint32_t	offset;
-	uint32_t	size;
+	u32	offset;
+	u32	size;
 } __packed __align(0x8);
 
 struct HDIF_array_hdr {
-	uint32_t	offset;
-	uint32_t	ecnt;
-	uint32_t	esize;
-	uint32_t	eactsz;
+	u32	offset;
+	u32	ecnt;
+	u32	esize;
+	u32	eactsz;
 } __packed __align(0x10);
 
 #define HDIF_HDR_LEN		(sizeof(struct HDIF_common_hdr))

@@ -40,9 +40,9 @@ struct fsp {
 
 static struct fsp *first_fsp;
 static struct fsp *active_fsp;
-static uint16_t fsp_curseq = 0x8000;
-static uint64_t *fsp_tce_table;
-static uint32_t fsp_inbound_off;
+static u16 fsp_curseq = 0x8000;
+static u64 *fsp_tce_table;
+static u32 fsp_inbound_off;
 
 struct fsp_cmdclass {
 	int timeout;
@@ -84,7 +84,7 @@ static void fsp_trace_msg(struct fsp_msg *msg __unused,
 			  const char *act __unused)
 {
 #ifdef FSP_TRACE
-	uint32_t csm;
+	u32 csm;
 	int i;
 
 	csm =  (msg->word0 & 0xff) << 16;
@@ -104,7 +104,7 @@ struct fsp *fsp_get_active(void)
 	return active_fsp;
 }
 
-static struct fsp_cmdclass *__fsp_get_cmdclass(uint8_t class)
+static struct fsp_cmdclass *__fsp_get_cmdclass(u8 class)
 {
 	struct fsp_cmdclass *ret;
 
@@ -123,12 +123,12 @@ static struct fsp_cmdclass *__fsp_get_cmdclass(uint8_t class)
 
 static struct fsp_cmdclass *fsp_get_cmdclass(struct fsp_msg *msg)
 {
-	uint8_t c = msg->word0 & 0xff;
+	u8 c = msg->word0 & 0xff;
 
 	return __fsp_get_cmdclass(c);
 }
 
-static void fsp_wreg(struct fsp *fsp, uint32_t reg, uint32_t val)
+static void fsp_wreg(struct fsp *fsp, u32 reg, u32 val)
 {
 	struct fsp_iopath *iop;
 
@@ -140,7 +140,7 @@ static void fsp_wreg(struct fsp *fsp, uint32_t reg, uint32_t val)
 	out_be32(iop->fsp_regs + reg, val);
 }
 
-static uint32_t fsp_rreg(struct fsp *fsp, uint32_t reg)
+static u32 fsp_rreg(struct fsp *fsp, u32 reg)
 {
 	struct fsp_iopath *iop;
 
@@ -154,7 +154,7 @@ static uint32_t fsp_rreg(struct fsp *fsp, uint32_t reg)
 
 static bool fsp_check_err(struct fsp *fsp)
 {
-	uint32_t hstate;
+	u32 hstate;
 	bool ret_abort = false;
 
 	/* Check for an error state */
@@ -196,7 +196,7 @@ static bool fsp_check_err(struct fsp *fsp)
 
 static bool fsp_post_msg(struct fsp *fsp, struct fsp_msg *msg)
 {
-	uint32_t ctl, reg;
+	u32 ctl, reg;
 	int i, wlen;
 
 	DBG("FSP #%d: fsp_post_msg (w0: 0x%08x w1: 0x%08x)\n",
@@ -267,14 +267,14 @@ static void fsp_poke_queue(struct fsp_cmdclass *cmdclass)
 	}
 }
 
-struct fsp_msg *fsp_mkmsg(uint32_t cmd_sub_mod, uint8_t add_len, ...)
+struct fsp_msg *fsp_mkmsg(u32 cmd_sub_mod, u8 add_len, ...)
 {
 	struct fsp_msg *msg = zalloc(sizeof(struct fsp_msg));
 	va_list list;
 	bool response = !!(cmd_sub_mod & 0x1000000);
-	uint8_t cmd = (cmd_sub_mod >> 16) & 0xff;
-	uint8_t sub = (cmd_sub_mod >>  8) & 0xff;
-	uint8_t mod =  cmd_sub_mod & 0xff;
+	u8 cmd = (cmd_sub_mod >> 16) & 0xff;
+	u8 sub = (cmd_sub_mod >>  8) & 0xff;
+	u8 mod =  cmd_sub_mod & 0xff;
 	int i;
 
 	if (!msg) {
@@ -294,14 +294,14 @@ struct fsp_msg *fsp_mkmsg(uint32_t cmd_sub_mod, uint8_t add_len, ...)
 	return msg;
 }
 
-struct fsp_msg *fsp_mkmsgw(uint32_t cmd_sub_mod, uint8_t add_len, ...)
+struct fsp_msg *fsp_mkmsgw(u32 cmd_sub_mod, u8 add_len, ...)
 {
 	struct fsp_msg *msg = zalloc(sizeof(struct fsp_msg));
 	va_list list;
 	bool response = !!(cmd_sub_mod & 0x1000000);
-	uint8_t cmd = (cmd_sub_mod >> 16) & 0xff;
-	uint8_t sub = (cmd_sub_mod >>  8) & 0xff;
-	uint8_t mod =  cmd_sub_mod & 0xff;
+	u8 cmd = (cmd_sub_mod >> 16) & 0xff;
+	u8 sub = (cmd_sub_mod >>  8) & 0xff;
+	u8 mod =  cmd_sub_mod & 0xff;
 	int i;
 
 	if (!msg) {
@@ -324,7 +324,7 @@ struct fsp_msg *fsp_mkmsgw(uint32_t cmd_sub_mod, uint8_t add_len, ...)
 int fsp_queue_msg(struct fsp_msg *msg)
 {
 	struct fsp_cmdclass *cmdclass;
-	uint16_t seq;
+	u16 seq;
 
 	/* Grab a new sequence number */
 	seq = fsp_curseq;
@@ -379,10 +379,10 @@ static void fsp_complete_send(struct fsp *fsp)
 
 static void  fsp_alloc_inbound(struct fsp_msg *msg)
 {
-	uint16_t func_id = msg->data.words[0] & 0xffff;
-	uint32_t len = msg->data.words[1];
-	uint32_t tce_token = 0, act_len = 0;
-	uint8_t rc = 0;
+	u16 func_id = msg->data.words[0] & 0xffff;
+	u32 len = msg->data.words[1];
+	u32 tce_token = 0, act_len = 0;
+	u8 rc = 0;
 	void *buf;
 
 	printf("FSP: Allocate inbound buffer func: %04x len: %d\n",
@@ -409,7 +409,7 @@ static void fsp_handle_command(struct fsp_msg *msg)
 {
 	struct fsp_cmdclass *cmdclass = fsp_get_cmdclass(msg);
 	struct fsp_client *client, *next;
-	uint32_t cmd_sub_mod;
+	u32 cmd_sub_mod;
 
 	if (!cmdclass) {
 		prerror("FSP: Got message for unknown class %x\n",
@@ -441,7 +441,7 @@ static void fsp_handle_command(struct fsp_msg *msg)
 static void fsp_handle_incoming(struct fsp *fsp)
 {
 	struct fsp_msg *msg = zalloc(sizeof(struct fsp_msg));
-	uint32_t h0, w0, w1, reg;
+	u32 h0, w0, w1, reg;
 	int i, dlen, wlen;
 	bool special_response = false;
 
@@ -523,7 +523,7 @@ static void fsp_check_queues(void)
 void fsp_poll(void)
 {
 	struct fsp *fsp = fsp_get_active();
-	uint32_t ctl;
+	u32 ctl;
 
 	/* Check for error state */
 	if (fsp_check_err(fsp) || fsp->state == fsp_mbx_error)
@@ -616,14 +616,14 @@ static bool fsp_check_impl(const void *spss, int i)
 	return true;
 }
 
-void fsp_register_client(struct fsp_client *client, uint8_t msgclass)
+void fsp_register_client(struct fsp_client *client, u8 msgclass)
 {
 	struct fsp_cmdclass *cmdclass = __fsp_get_cmdclass(msgclass);
 
 	list_add_tail(&cmdclass->clientq, &client->link);
 }
 
-void fsp_unregister_client(struct fsp_client *client, uint8_t msgclass)
+void fsp_unregister_client(struct fsp_client *client, u8 msgclass)
 {
 	struct fsp_cmdclass *cmdclass = __fsp_get_cmdclass(msgclass);
 
@@ -660,14 +660,14 @@ static void fsp_reg_dump(struct fsp *fsp __unused)
 /* We use a single fixed TCE table for all PSI interfaces */
 static void fsp_init_tce_table(void)
 {
-	fsp_tce_table = (uint64_t *)PSI_TCE_TABLE_BASE;
+	fsp_tce_table = (u64 *)PSI_TCE_TABLE_BASE;
 
 	memset(fsp_tce_table, 0, PSI_TCE_TABLE_SIZE);
 }
 
-void fsp_tce_map(uint32_t offset, void *addr, uint32_t size)
+void fsp_tce_map(u32 offset, void *addr, u32 size)
 {
-	uint64_t raddr = (uint64_t)addr;
+	u64 raddr = (u64)addr;
 
 	assert(!(offset & 0xfff));
 	assert(!(raddr  & 0xfff));
@@ -682,7 +682,7 @@ void fsp_tce_map(uint32_t offset, void *addr, uint32_t size)
 	}
 }
 
-void fsp_tce_unmap(uint32_t offset, uint32_t size)
+void fsp_tce_unmap(u32 offset, u32 size)
 {
 	assert(!(offset & 0xfff));
 	assert(!(size   & 0xfff));
@@ -730,7 +730,7 @@ static void fsp_create_fsp(const void *spss, int index)
 		unsigned int iopath_sz;
 		const char *ststr;
 		bool active;
-		uint64_t reg;
+		u64 reg;
 
 		iopath = HDIF_get_iarray_item(spss, SPSS_IDATA_SP_IOPATH,
 					      i, &iopath_sz);

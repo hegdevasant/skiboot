@@ -16,12 +16,12 @@
 
 struct spira_ntuple {
 	void		*addr;
-	uint16_t	alloc_cnt;
-	uint16_t	act_cnt;
-	uint32_t	alloc_len;
-	uint32_t	act_len;
-	uint32_t	tce_off;
-	uint64_t	padding;
+	u16		alloc_cnt;
+	u16		act_cnt;
+	u32		alloc_len;
+	u32		act_len;
+	u32		tce_off;
+	u64		padding;
 } __packed;
 
 #define SPIRA_NTUPLES_COUNT	0x17
@@ -56,9 +56,9 @@ struct spira_ntuples {
 struct spira {
 	struct HDIF_common_hdr	hdr;
 	struct HDIF_idata_ptr	ntuples_ptr;
-	uint64_t		pad;
+	u64			pad;
 	struct spira_ntuples	ntuples;
-	uint8_t			reserved[0x4e0];
+	u8			reserved[0x4e0];
 } __packed __align(0x100);
 
 extern struct spira spira;
@@ -67,8 +67,8 @@ struct proc_init_data {
 	struct HDIF_common_hdr	hdr;
 	struct HDIF_idata_ptr	regs_ptr;
 	struct {
-		uint64_t	nia;
-		uint64_t	msr;
+		u64	nia;
+		u64	msr;
 	} regs;
 } __packed __align(0x10);
 
@@ -91,14 +91,14 @@ struct proc_init_data {
 #define SPSS_IDATA_SP_IMPL	2
 
 struct spss_sp_impl {
-	uint16_t	hw_version;
-	uint16_t	sw_version;
-	uint16_t	func_flags;
+	u16	hw_version;
+	u16	sw_version;
+	u16	func_flags;
 #define SPSS_SP_IMPL_FLAGS_INSTALLED	0x8000
 #define SPSS_SP_IMPL_FLAGS_FUNCTIONAL	0x4000
 #define SPSS_SP_IMPL_FLAGS_PRIMARY	0x2000
-	uint8_t		chip_version;
-	uint8_t		reserved;
+	u8	chip_version;
+	u8	reserved;
 };
 
 /* Idata index 3 is deprecated */
@@ -111,28 +111,28 @@ struct spss_sp_impl {
 
 /* An HDIF array of IO path */
 struct spss_iopath {
-	uint16_t	iopath_type;
+	u16	iopath_type;
 #define SPSS_IOPATH_TYPE_IOHUB_PHB	0x0001
 #define SPSS_IOPATH_TYPE_PSI		0x0002
 	union {
 		struct {
-			uint16_t	iohub_chip_inst;
-			uint16_t	iohub_chip_port;
-			uint16_t	phb_id;
+			u16	iohub_chip_inst;
+			u16	iohub_chip_port;
+			u16	phb_id;
 		} __packed iohub_phb;
 
 		struct {
-			uint16_t	link_status;
+			u16	link_status;
 #define SPSS_IO_PATH_PSI_LINK_BAD_FRU	0x0000
 #define SPSS_IO_PATH_PSI_LINK_CURRENT	0x0001
 #define SPSS_IO_PATH_PSI_LINK_BACKUP	0x0002
-			uint8_t		ml2_version;
-			uint8_t		reserved;
-			uint16_t	slca_count;
-			uint8_t		slca_idx[16];
-			uint32_t	proc_chip_id;
-			uint32_t	reserved2;
-			uint64_t	gxhb_base;
+			u8	ml2_version;
+			u8	reserved;
+			u16	slca_count;
+			u8	slca_idx[16];
+			u32	proc_chip_id;
+			u32	reserved2;
+			u64	gxhb_base;
 		} __packed psi;
 	};
 } __packed;

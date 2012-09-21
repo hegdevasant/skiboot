@@ -9,7 +9,7 @@
 unsigned int boot_cpu_count __force_data = 0;
 enum ipl_state ipl_state = ipl_initial;
 
-static bool state_control_msg(uint32_t cmd_sub_mod, struct fsp_msg *msg)
+static bool state_control_msg(u32 cmd_sub_mod, struct fsp_msg *msg)
 {
 	switch(cmd_sub_mod) {
 	case FSP_CMD_CONTINUE_IPL:
