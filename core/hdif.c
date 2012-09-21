@@ -72,3 +72,54 @@ int HDIF_get_iarray_size(const void *hdif, unsigned int di)
 	return ahdr->ecnt;
 }
 
+struct HDIF_child_ptr *
+HDIF_child_arr(const struct HDIF_common_hdr *hdif, unsigned int idx)
+{
+	struct HDIF_child_ptr *children = (void *)hdif + hdif->child_off;
+
+	if (idx >= hdif->child_count) {
+		prerror("HDIF: child array idx out of range!\n");
+		return NULL;
+	}
+
+	return &children[idx];
+}
+
+struct HDIF_common_hdr *HDIF_child(const struct HDIF_common_hdr *hdif,
+				   const struct HDIF_child_ptr *child,
+				   unsigned int idx,
+				   const char *eyecatcher)
+{
+	void *base = (void *)hdif;
+	struct HDIF_common_hdr *ret;
+	long child_off;
+
+	/* child must be in hdif's child array */
+	child_off = (void *)child - (base + hdif->child_off);
+	assert(child_off % sizeof(struct HDIF_child_ptr) == 0);
+	assert(child_off / sizeof(struct HDIF_child_ptr)
+	       < hdif->child_count);
+
+	assert(idx < child->count);
+
+	if (child->size < sizeof(struct HDIF_common_hdr)) {
+		prerror("HDIF: %s child #%i too small: %u\n",
+			eyecatcher, idx, child->size);
+		return NULL;
+	}
+
+	ret = base + child->offset + child->size * idx;
+	if (!HDIF_check(ret, eyecatcher)) {
+		prerror("HDIF: %s child #%i bad type\n",
+			eyecatcher, idx);
+		return NULL;
+	}
+
+	return ret;
+}
+		
+
+	
+
+	
+

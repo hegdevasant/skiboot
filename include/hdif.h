@@ -28,6 +28,12 @@ struct HDIF_array_hdr {
 	u32	eactsz;
 } __packed __align(0x10);
 
+struct HDIF_child_ptr {
+	uint32_t	offset;
+	uint32_t	size;
+	uint32_t	count;
+} __packed;
+
 #define HDIF_HDR_LEN		(sizeof(struct HDIF_common_hdr))
 #define HDIF_ARRAY_OFFSET	(sizeof(struct HDIF_array_hdr))
 
@@ -81,4 +87,27 @@ extern const void *HDIF_get_iarray_item(const void *hdif, unsigned int di,
  */
 extern int HDIF_get_iarray_size(const void *hdif, unsigned int di);
 
+/* HDIF_child_arr - Get a child array from this HDIF.
+ *
+ * @hdif  : HDIF structure pointer
+ * @idx	  : the child to get
+ *
+ * NULL means an error (not that many children).
+ */
+extern struct HDIF_child_ptr *
+HDIF_child_arr(const struct HDIF_common_hdr *hdif, unsigned int idx);
+
+/* HDIF_child - Deref a child_ptr entry.
+ *
+ * @hdif  : HDIF structure pointer
+ * @child : the child returned from HDIF_child_arr
+ * @idx	  : the index of the child to get (< child->count).
+ * @eyecatcher: the 6-char ID expected for this child.
+ *
+ * NULL means an error.
+ */
+extern struct HDIF_common_hdr *HDIF_child(const struct HDIF_common_hdr *hdif,
+					  const struct HDIF_child_ptr *child,
+					  unsigned int idx,
+					  const char *eyecatcher);
 #endif /* __HDIF_H */
