@@ -26,18 +26,18 @@ struct fsp_serbuf_hdr {
 struct fsp_serial {
 	bool			available;
 	bool			open;
+	bool			log_port;
+	bool			out_poke;
 	char			loc_code[LOC_CODE_SIZE];
 	u16			rsrc_id;
 	struct fsp_serbuf_hdr	*in_buf;
 	struct fsp_serbuf_hdr	*out_buf;
 	struct fsp_msg		*poke_msg;
-	bool			out_poke;
 };
 
 #define MAX_SERIAL	4
 
 static struct fsp_serial fsp_serials[MAX_SERIAL];
-static int fsp_ser_count;
 static bool got_intf_query;
 
 #ifdef DVS_CONSOLE
@@ -137,6 +137,7 @@ static void fsp_open_vserial(struct fsp_msg *msg)
 			      fsp_freemsg);
 		return;
 	}
+
 	fs = &fsp_serials[sess_id];
 	fs->open = true;
 
@@ -171,8 +172,7 @@ static void fsp_open_vserial(struct fsp_msg *msg)
 				0, tce_in, 0, tce_out), fsp_freemsg);
 
 #ifdef DVS_CONSOLE
-	/* XXX Check authority ? */
-	if (fs->rsrc_id == 0xffff) {
+	if (fs->log_port) {
 		fsp_con_port = sess_id;
 		sync();
 		set_console(&fsp_con_ops);
@@ -205,7 +205,7 @@ static void fsp_close_vserial(struct fsp_msg *msg)
 	fs = &fsp_serials[sess_id];
 
 #ifdef DVS_CONSOLE
-	if (fs->rsrc_id == 0xffff) {
+	if (fs->log_port) {
 		fsp_con_port = -1;
 		set_console(NULL);
 	}
@@ -292,22 +292,23 @@ void fsp_console_preinit(void)
 	fsp_register_client(&fsp_con_client_vt, FSP_MCLASS_HMC_VT);
 }
 
-static void fsp_serial_add(u16 rsrc_id, const char *loc_code)
+static void fsp_serial_add(int index, u16 rsrc_id, const char *loc_code,
+			   bool log_port)
 {
 	struct fsp_serial *ser;
-	int index;
-
-	if (fsp_ser_count >= MAX_SERIAL)
-		return;
 
 	lock(&con_lock);
-	index = fsp_ser_count++;
 	ser = &fsp_serials[index];
+
+	if (ser->available) {
+		unlock(&con_lock);
+		return;
+	}
 
 	ser->rsrc_id = rsrc_id;
 	strncpy(ser->loc_code, loc_code, LOC_CODE_SIZE);
 	ser->available = true;
-	unlock(&con_lock);
+	ser->log_port = log_port;
 
 	/* DVS doesn't have that */
 	if (rsrc_id != 0xffff)
@@ -317,11 +318,46 @@ static void fsp_serial_add(u16 rsrc_id, const char *loc_code)
 
 void fsp_console_init(void)
 {
-	/* XXX PARSE IPL PARAMS FOR SERIAL PORTS */
+	const struct iplparms_serial *ipser;
+	const void *ipl_parms;
+	int count, i;
+
+	/* Wait until we got the intf query before moving on */
 	while (!got_intf_query)
 		fsp_poll();
 
-	fsp_serial_add(0xffff, "DVS");
-	fsp_serial_add(0x2a00, "T1");
+	/* Add DVS ports. We currently have session 0 and 3, 0 is for
+	 * OS use. 3 is our debug port
+	 */
+	fsp_serial_add(0, 0xffff, "DVS_OS", false);
+	fsp_serial_add(3, 0xffff, "DVS_FW", true);
+
+	/* Parse serial port data */
+	ipl_parms = spira.ntuples.ipl_parms.addr;
+	if (!ipl_parms) {
+		prerror("FSPCON: Cannot find IPL Parms in SPIRA\n");
+		return;
+	}
+	if (!HDIF_check(ipl_parms, "IPLPMS")) {
+		prerror("FSPCON: IPL Parms has wrong header type\n");
+		return;
+	}
+
+	count = HDIF_get_iarray_size(ipl_parms, IPLPARMS_IDATA_SERIAL);
+	if (!count) {
+		prerror("FSPCON: No serial port in the IPL Parms\n");
+		return;
+	}
+	if (count > 2) {
+		prerror("FSPCON: %d serial ports, truncating to 2\n", count);
+		count = 2;
+	}
+	for (i = 0; i < count; i++) {
+		ipser = HDIF_get_iarray_item(ipl_parms, IPLPARMS_IDATA_SERIAL,
+					     i, NULL);
+		printf("FSPCON: Serial %d rsrc: %04x loc: %s\n",
+		       i, ipser->rsrc_id, ipser->loc_code);
+		fsp_serial_add(i + 1, ipser->rsrc_id, ipser->loc_code, false);
+	}
 }
 
