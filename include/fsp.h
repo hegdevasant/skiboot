@@ -408,6 +408,9 @@ extern void fsp_init(void);
 extern struct fsp_msg *fsp_allocmsg(void);
 extern struct fsp_msg *fsp_mkmsg(u32 cmd_sub_mod, u8 add_words, ...);
 
+/* Populate a pre-allocated msg */
+extern void fsp_fillmsg(struct fsp_msg *msg, u32 cmd_sub_mod, u8 add_words, ...);
+
 /* Free a message
  *
  * WARNING: This will also free an attached response if any

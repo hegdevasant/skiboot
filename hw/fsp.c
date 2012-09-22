@@ -290,38 +290,47 @@ void fsp_freemsg(struct fsp_msg *msg)
 	__fsp_freemsg(msg);
 }
 
-static struct fsp_msg *__fsp_mkmsg(u32 cmd_sub_mod)
+static void __fsp_fillmsg(struct fsp_msg *msg, u32 cmd_sub_mod,
+			  u8 add_words, va_list list)
 {
-	struct fsp_msg *msg = fsp_allocmsg();
 	bool response = !!(cmd_sub_mod & 0x1000000);
 	u8 cmd = (cmd_sub_mod >> 16) & 0xff;
 	u8 sub = (cmd_sub_mod >>  8) & 0xff;
 	u8 mod =  cmd_sub_mod & 0xff;
+	int i;
+
+	msg->word0 = cmd & 0xff;
+	msg->word1 = mod << 8 | sub;
+	msg->response = response;
+	msg->dlen = add_words << 2;
+
+	for (i = 0; i < add_words; i++)
+		msg->data.words[i] = va_arg(list, unsigned int);
+	va_end(list);
+
+}
+
+extern void fsp_fillmsg(struct fsp_msg *msg, u32 cmd_sub_mod, u8 add_words, ...)
+{
+	va_list list;
+
+	va_start(list, add_words);
+	__fsp_fillmsg(msg, cmd_sub_mod, add_words, list);
+	va_end(list);
+}
+
+struct fsp_msg *fsp_mkmsg(u32 cmd_sub_mod, u8 add_words, ...)
+{
+	struct fsp_msg *msg = fsp_allocmsg();
+	va_list list;
 
 	if (!msg) {
 		prerror("FSP: Failed to allocate struct fsp_msg\n");
 		return NULL;
 	}
-	msg->word0 = cmd & 0xff;
-	msg->word1 = mod << 8 | sub;
-	msg->response = response;
 
-	return msg;
-}
-
-struct fsp_msg *fsp_mkmsg(u32 cmd_sub_mod, u8 add_len, ...)
-{
-	struct fsp_msg *msg = __fsp_mkmsg(cmd_sub_mod);
-	va_list list;
-	int i;
-
-	if (!msg)
-		return NULL;
-	msg->dlen = add_len << 2;
-
-	va_start(list, add_len);
-	for (i = 0; i < add_len; i++)
-		msg->data.words[i] = va_arg(list, unsigned int);
+	va_start(list, add_words);
+	__fsp_fillmsg(msg, cmd_sub_mod, add_words, list);
 	va_end(list);
 
 	return msg;
