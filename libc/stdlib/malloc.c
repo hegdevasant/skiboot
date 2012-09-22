@@ -16,7 +16,7 @@
 #include "string.h"
 #include "unistd.h"
 #include "malloc_defs.h"
-
+#include "assert.h"
 
 static int clean(void);
 
@@ -29,6 +29,14 @@ static char *heap_start, *heap_end;
 
 static struct lock malloc_lock;
 
+#ifdef DEBUG_MALLOC
+#define ASSERT_MPTR(_ptr)  					\
+	assert ((_ptr) && ((char *)(_ptr)) >= heap_start &&	\
+		((char *)(_ptr) < heap_end))
+#else
+#define ASSERT_MPTR(_ptr) do { } while(0)
+#endif
+
 /*
  * Standard malloc function
  */
@@ -39,7 +47,7 @@ static void *__malloc(size_t size)
 	size_t blksize;
 
 	/* align size */
-	size = (size + 3) & ~3ul;
+	size = (size + 7) & ~7ul;
 
          /* size of memory block including the chunk */
 	blksize = size + sizeof(struct chunk);
@@ -59,6 +67,9 @@ static void *__malloc(size_t size)
 
 	header = act;
 	data = act + sizeof(struct chunk);
+
+	ASSERT_MPTR(header);
+	ASSERT_MPTR(data);
 
 	/* Check if there is space left in the uninitialized part of the heap */
 	if (act + blksize > heap_end) {
@@ -87,6 +98,8 @@ static void *__malloc(size_t size)
 			}
 		}
 
+		ASSERT_MPTR(header);
+
 		// Check if we need to split this memory block into two
 		if (((struct chunk *) header)->length > blksize) {
 			//available memory is too big
@@ -102,11 +115,15 @@ static void *__malloc(size_t size)
 			((struct chunk *) header)->inuse = 0;
 			((struct chunk *) header)->length =
 			    alt - blksize;
+
+			assert(!((alt - blksize) & 7));
+			assert(!((unsigned long)header & 7));
 		} else {
 			//new memory matched exactly in available memory
 			((struct chunk *) header)->inuse = 1;
 			data = header + sizeof(struct chunk);
 		}
+		ASSERT_MPTR(data);
 
 	} else {
 
@@ -141,11 +158,9 @@ static int clean(void)
 	char check = 0;
 
 	header = heap_start;
-	//if (act == 0)		// This should never happen
-	//	act = heap_end;
+	assert(act != 0);
 
 	while (header < act) {
-
 		if (((struct chunk *) header)->inuse == 0) {
 			if (firstfree == 0) {
 				/* First free block in a row, only save address */
@@ -162,12 +177,10 @@ static int clean(void)
 			firstfree = 0;
 
 		}
-
 		header = header + sizeof(struct chunk)
 		         + ((struct chunk *) header)->length;
 
 	}
-
 	return check;
 }
 

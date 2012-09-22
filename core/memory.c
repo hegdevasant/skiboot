@@ -52,7 +52,10 @@ static bool add_address_range(const struct HDIF_common_hdr *msarea,
 	unsigned int i;
 	struct address_range *new;
 
+	printf("MEM: malloc'ing addranges: count=%d\n", ramptr->count);
 	new = malloc(sizeof(*new) + ramptr->count*sizeof(struct ram_area));
+	printf("MEM: got: %p\n", new);
+
 	if (!new) {
 		prerror("Failed to allocate memory for %u ram areas\n",
 			ramptr->count);

@@ -13,8 +13,8 @@
 #include <lock.h>
 
 struct chunk {
-	unsigned inuse : 4;
-	unsigned length : 28;
+	unsigned int inuse;
+	unsigned int length;
 } __attribute__((packed));
 
 extern void lock_malloc(void);

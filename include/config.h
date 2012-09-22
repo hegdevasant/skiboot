@@ -6,6 +6,9 @@
 /* Enable lock debugging */
 #define DEBUG_LOCKS		1
 
+/* Enable malloc debugging */
+#define DEBUG_MALLOC		1
+
 /* Heap size set to 1M for now */
 #define HEAP_SIZE		0x100000
 
