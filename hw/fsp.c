@@ -661,7 +661,7 @@ static bool fsp_check_impl(const void *spss, int i)
 
 	/* Find an check the SP Implementation structure */
 	sp_impl = HDIF_get_idata(spss, SPSS_IDATA_SP_IMPL, NULL);
-	if (!sp_impl) {
+	if (!CHECK_SPPTR(sp_impl)) {
 		prerror("FSP #%d: SPSS/SP_Implementation not found !\n", i);
 		return false;
 	}
@@ -796,7 +796,7 @@ static void fsp_create_fsp(const void *spss, int index)
 
 		iopath = HDIF_get_iarray_item(spss, SPSS_IDATA_SP_IOPATH,
 					      i, &iopath_sz);
-		if (!iopath) {
+		if (!CHECK_SPPTR(iopath)) {
 			prerror("FSP #%d: Can't find IO PATH %d\n", index, i);
 			fsp->iopath_count = i;
 			break;

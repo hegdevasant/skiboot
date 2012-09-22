@@ -339,7 +339,7 @@ void fsp_console_init(void)
 
 	/* Parse serial port data */
 	ipl_parms = spira.ntuples.ipl_parms.addr;
-	if (!ipl_parms) {
+	if (!CHECK_SPPTR(ipl_parms)) {
 		prerror("FSPCON: Cannot find IPL Parms in SPIRA\n");
 		return;
 	}
@@ -365,6 +365,8 @@ void fsp_console_init(void)
 	for (i = 0; i < count; i++) {
 		ipser = HDIF_get_iarray_item(ipl_parms, IPLPARMS_IDATA_SERIAL,
 					     i, NULL);
+		if (!CHECK_SPPTR(ipser))
+			continue;
 		printf("FSPCON: Serial %d rsrc: %04x loc: %s\n",
 		       i, ipser->rsrc_id, ipser->loc_code);
 		fsp_serial_add(i + 1, ipser->rsrc_id, ipser->loc_code, false);

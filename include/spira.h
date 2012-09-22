@@ -63,6 +63,16 @@ struct spira {
 
 extern struct spira spira;
 
+/* This macro can be used to check the validity of a pointer returned
+ * by one of the HDIF API functions. It returns true if the pointer
+ * appears valid. If it's not valid and not NULL, it will print some
+ * error in the log as well.
+ */
+#define CHECK_SPPTR(_ptr)	spira_check_ptr(_ptr, __FILE__, __LINE__)
+
+extern bool spira_check_ptr(const void *ptr, const char *file,
+			    unsigned int line);
+
 struct proc_init_data {
 	struct HDIF_common_hdr	hdr;
 	struct HDIF_idata_ptr	regs_ptr;
