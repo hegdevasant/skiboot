@@ -36,8 +36,12 @@ malloc(size_t size)
 {
 	char *header;
 	void *data;
-	size_t blksize;         /* size of memory block including the chunk */
+	size_t blksize;
 
+	/* align size */
+	size = (size + 3) & ~3ul;
+
+         /* size of memory block including the chunk */
 	blksize = size + sizeof(struct chunk);
 
 	/* has malloc been called for the first time? */
