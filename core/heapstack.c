@@ -15,7 +15,7 @@ void *sbrk(int incr)
 
 	if (brk + incr > &heap[HEAP_SIZE]) {
 		errno = ENOMEM;
-		return NULL;
+		return (void *)-1;
 	}
 	brk += incr;
 	return prev;
