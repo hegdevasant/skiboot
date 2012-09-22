@@ -322,6 +322,11 @@
 #define FSP_CMD_VSERIAL_OUT	0x0e10200 /* HV->FSP */
 
 /*
+ * Class E8
+ */
+#define FSP_CMD_DISP_SRC_DIRECT	0x01e84a42 /* HV->FSP */
+
+/*
  * Layout of the PSI DMA address space
  *
  * We instanciate a TCE table of 16K mapping 64M

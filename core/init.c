@@ -89,17 +89,25 @@ void main_cpu_entry(void)
 	 */
 	fsp_console_preinit();
 
+	/* Start FSP/HV state controller & perform OPL */
+	start_fsp_state_control();
+
+	op_display(OP_LOG, OP_MOD_INIT, 0x0000);
+
 	/* Parse the memory layout. */
 	memory_parse();
 
-	/* Start FSP/HV state controller */
-	start_fsp_state_control();
+	op_display(OP_LOG, OP_MOD_INIT, 0x0001);
 
 	/* Tell FSP we are in standby (XXX use running ?) */
 	fsp_sync_msg(fsp_mkmsg(FSP_CMD_HV_FUNCTNAL, 1, 0x01000000), true);
 
+	op_display(OP_LOG, OP_MOD_INIT, 0x0002);
+
 	/* Finish initializing the console */
 	fsp_console_init();
+
+	op_display(OP_LOG, OP_MOD_INIT, 0x0003);
 
 	/* Nothing to do */
 	while(true)

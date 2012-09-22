@@ -14,6 +14,8 @@
 #include <ccan/list/list.h>
 #include <ccan/short_types/short_types.h>
 
+#include <op-panel.h>
+
 /* Special ELF sections */
 #define __force_data		__section(".force.data")
 
@@ -33,7 +35,10 @@ enum ipl_state {
 extern enum ipl_state ipl_state;
 
 /* For use by debug code */
-void backtrace(void);
+extern void backtrace(void);
+
+/* Convert a 4-bit number to a hex char */
+extern char tohex(uint8_t nibble);
 
 #endif /* __SKIBOOT_H */
 

@@ -309,6 +309,7 @@ static void fsp_serial_add(int index, u16 rsrc_id, const char *loc_code,
 	strncpy(ser->loc_code, loc_code, LOC_CODE_SIZE);
 	ser->available = true;
 	ser->log_port = log_port;
+	unlock(&con_lock);
 
 	/* DVS doesn't have that */
 	if (rsrc_id != 0xffff)
@@ -326,11 +327,15 @@ void fsp_console_init(void)
 	while (!got_intf_query)
 		fsp_poll();
 
+	op_display(OP_LOG, OP_MOD_FSPCON, 0x0000);
+
 	/* Add DVS ports. We currently have session 0 and 3, 0 is for
 	 * OS use. 3 is our debug port
 	 */
 	fsp_serial_add(0, 0xffff, "DVS_OS", false);
+	op_display(OP_LOG, OP_MOD_FSPCON, 0x0001);
 	fsp_serial_add(3, 0xffff, "DVS_FW", true);
+	op_display(OP_LOG, OP_MOD_FSPCON, 0x0002);
 
 	/* Parse serial port data */
 	ipl_parms = spira.ntuples.ipl_parms.addr;
@@ -343,6 +348,8 @@ void fsp_console_init(void)
 		return;
 	}
 
+	op_display(OP_LOG, OP_MOD_FSPCON, 0x0003);
+
 	count = HDIF_get_iarray_size(ipl_parms, IPLPARMS_IDATA_SERIAL);
 	if (!count) {
 		prerror("FSPCON: No serial port in the IPL Parms\n");
@@ -352,12 +359,18 @@ void fsp_console_init(void)
 		prerror("FSPCON: %d serial ports, truncating to 2\n", count);
 		count = 2;
 	}
+
+	op_display(OP_LOG, OP_MOD_FSPCON, 0x0004);
+
 	for (i = 0; i < count; i++) {
 		ipser = HDIF_get_iarray_item(ipl_parms, IPLPARMS_IDATA_SERIAL,
 					     i, NULL);
 		printf("FSPCON: Serial %d rsrc: %04x loc: %s\n",
 		       i, ipser->rsrc_id, ipser->loc_code);
 		fsp_serial_add(i + 1, ipser->rsrc_id, ipser->loc_code, false);
+		op_display(OP_LOG, OP_MOD_FSPCON, 0x0010 + i);
 	}
+
+	op_display(OP_LOG, OP_MOD_FSPCON, 0x0005);
 }
 

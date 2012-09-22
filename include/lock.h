@@ -33,34 +33,11 @@ struct lock {
  *
  */
 
-#ifdef DEBUG_LOCKS
-extern void lock_check(struct lock *l);
-extern void unlock_check(struct lock *l);
-#else
-static inline void lock_check(struct lock *l) { };
-static inline void unlock_check(struct lock *l) { };
-#endif
+extern bool bust_locks;
 
 extern bool try_lock(struct lock *l);
-
-static inline void lock(struct lock *l)
-{
-	lock_check(l);
-	for (;;) {
-		if (try_lock(l))
-			break;
-		smt_low();
-	}
-	smt_medium();
-}
-
-static inline void unlock(struct lock *l)
-{
-	unlock_check(l);
-
-	lwsync();
-	l->lock_val = 0;
-}
+extern void lock(struct lock *l);
+extern void unlock(struct lock *l);
 
 /* The debug output can happen while the FSP lock, so we need some kind
  * of recursive lock support here. I don't want all locks to be recursive
@@ -68,14 +45,6 @@ static inline void unlock(struct lock *l)
  * returns false if the lock was already held by this cpu. If it returns
  * true, then the caller shall release it when done.
  */
-static inline bool lock_recursive(struct lock *l)
-{
-	if ((l->lock_val & 1) &&
-	    (l->lock_val >> 32) == mfspr(SPR_PIR))
-		return false;
-
-	lock(l);
-	return true;
-}
+extern bool lock_recursive(struct lock *l);
 
 #endif /* __LOCK_H */
