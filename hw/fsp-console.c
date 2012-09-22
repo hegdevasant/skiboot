@@ -30,8 +30,8 @@ struct fsp_serial {
 	u16			rsrc_id;
 	struct fsp_serbuf_hdr	*in_buf;
 	struct fsp_serbuf_hdr	*out_buf;
-	u32			msg_hdr0;
-	u32			msg_hdr1;
+	struct fsp_msg		*poke_msg;
+	bool			out_poke;
 };
 
 #define MAX_SERIAL	4
@@ -43,11 +43,40 @@ static bool got_intf_query;
 #ifdef DVS_CONSOLE
 static int fsp_con_port = -1;
 
+static void fsp_pokemsg_reclaim(struct fsp_msg *msg)
+{
+	struct fsp_serial *fs = msg->user_data;
+
+	/* Synchronize with fsp_write_serial() */
+	lock(&con_lock);
+	if (fs->open) {
+		if (fs->out_poke) {
+			fs->out_poke = false;
+			fsp_queue_msg(fs->poke_msg, fsp_pokemsg_reclaim);
+		} else
+			fs->poke_msg->state = fsp_msg_unused;
+	} else {
+		fsp_freemsg(msg);
+		fs->poke_msg = NULL;
+	}
+	unlock(&con_lock);
+}
+
+/* NOTE: This is meant to be called with the con_lock held. This will
+ * be true as well of the runtime variant called via the OPAL APIs
+ * unless we change the locking scheme (might be suitable to have
+ * the console call this without lock, and use the FSP lock here,
+ * since fsp_queue_msg() supports recursive locking. That would
+ * limit the number of atomic ops on the console path.
+ */
 static size_t fsp_write_vserial(struct fsp_serial *fs, const char *buf, size_t len)
 {
 	struct fsp_serbuf_hdr *sb = fs->out_buf;
 	u16 old_nin = sb->next_in;
 	u16 space, chunk;
+
+	if (!fs->open)
+		return 0;
 
 	sync();
 	space = (old_nin + SER_BUF_DATA_SIZE - sb->next_out - 1)
@@ -64,11 +93,12 @@ static size_t fsp_write_vserial(struct fsp_serial *fs, const char *buf, size_t l
 	sb->next_in = (old_nin + len) % SER_BUF_DATA_SIZE;
 	sync();
 
-	if (sb->next_out == old_nin)
-		fsp_queue_msg(fsp_mkmsg(FSP_CMD_VSERIAL_OUT, 2,
-					fs->msg_hdr0, fs->msg_hdr1),
-			      fsp_freemsg);
-
+	if (sb->next_out == old_nin) {
+		if (fs->poke_msg->state == fsp_msg_unused)
+			fsp_queue_msg(fs->poke_msg, fsp_pokemsg_reclaim);
+		else
+			fs->out_poke = true;
+	}
 	return len;
 }
 
@@ -113,8 +143,14 @@ static void fsp_open_vserial(struct fsp_msg *msg)
 	tce_in = PSI_DMA_SER0_BASE + PSI_DMA_SER0_SIZE * sess_id;
 	tce_out = tce_in + SER0_BUFFER_SIZE/2;
 
-	fs->msg_hdr0 = msg->data.words[0];
-	fs->msg_hdr1 = msg->data.words[1] & 0xffff;
+	/* If we still have a msg, wait for it to go away */
+	while (fs->poke_msg)
+		fsp_poll();
+
+	fs->poke_msg = fsp_mkmsg(FSP_CMD_VSERIAL_OUT, 2,
+				 msg->data.words[0],
+				 msg->data.words[1] & 0xffff);
+	fs->poke_msg->user_data = fs;
 
 	fs->in_buf->partition_id = fs->out_buf->partition_id = part_id;
 	fs->in_buf->session_id	 = fs->out_buf->session_id   = sess_id;
@@ -130,14 +166,15 @@ static void fsp_open_vserial(struct fsp_msg *msg)
 	fs->in_buf->next_out     = fs->out_buf->next_out     = 0;
 
 	fsp_queue_msg(fsp_mkmsg(FSP_RSP_OPEN_VSERIAL, 6,
-				fs->msg_hdr0,
-				fs->msg_hdr1, /* XXX Check pHyp status */
+				msg->data.words[0],
+				msg->data.words[1] & 0xffff,
 				0, tce_in, 0, tce_out), fsp_freemsg);
 
 #ifdef DVS_CONSOLE
 	/* XXX Check authority ? */
 	if (fs->rsrc_id == 0xffff) {
 		fsp_con_port = sess_id;
+		sync();
 		set_console(&fsp_con_ops);
 	}
 #endif
@@ -150,6 +187,7 @@ static void fsp_close_vserial(struct fsp_msg *msg)
 	u8 hmc_sess = msg->data.bytes[0];	
 	u8 hmc_indx = msg->data.bytes[1];
 	u8 authority = msg->data.bytes[4];
+	struct fsp_serial *fs;
 
 	printf("FSPCON: Got VSerial Close\n");
 	printf("  part_id   = 0x%04x\n", part_id);
@@ -163,13 +201,25 @@ static void fsp_close_vserial(struct fsp_msg *msg)
 			      fsp_freemsg);
 		return;
 	}
+
+	fs = &fsp_serials[sess_id];
+
 #ifdef DVS_CONSOLE
-	if (fsp_serials[sess_id].rsrc_id == 0xffff) {
+	if (fs->rsrc_id == 0xffff) {
 		fsp_con_port = -1;
 		set_console(NULL);
 	}
 #endif
-	fsp_serials[sess_id].open = false;
+	
+	lock(&con_lock);
+	fs->open = false;
+	fs->out_poke = false;
+	if (fs->poke_msg && fs->poke_msg->state == fsp_msg_unused) {
+		fsp_freemsg(fs->poke_msg);
+		fs->poke_msg = NULL;
+	}
+	unlock(&con_lock);
+
 	fsp_queue_msg(fsp_mkmsg(FSP_RSP_CLOSE_VSERIAL, 0), fsp_freemsg);
 
 }
@@ -250,12 +300,14 @@ static void fsp_serial_add(u16 rsrc_id, const char *loc_code)
 	if (fsp_ser_count >= MAX_SERIAL)
 		return;
 
+	lock(&con_lock);
 	index = fsp_ser_count++;
 	ser = &fsp_serials[index];
 
 	ser->rsrc_id = rsrc_id;
 	strncpy(ser->loc_code, loc_code, LOC_CODE_SIZE);
 	ser->available = true;
+	unlock(&con_lock);
 
 	/* DVS doesn't have that */
 	if (rsrc_id != 0xffff)
@@ -269,7 +321,6 @@ void fsp_console_init(void)
 	while (!got_intf_query)
 		fsp_poll();
 
-	/* DVS somewhat has to be 0 */
 	fsp_serial_add(0xffff, "DVS");
 	fsp_serial_add(0x2a00, "T1");
 }

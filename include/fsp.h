@@ -350,7 +350,7 @@
 /* An FSP message */
 
 enum fsp_msg_state {
-	fsp_msg_unused,
+	fsp_msg_unused = 0,
 	fsp_msg_queued,
 	fsp_msg_sent,
 	fsp_msg_wresp,
@@ -372,8 +372,9 @@ struct fsp_msg {
 		u8		bytes[56];
 	} data;
 
-	/* Completion function */
+	/* Completion function. Called with no lock held */
 	void (*complete)(struct fsp_msg *msg);
+	void *user_data;
 
 	/*
 	 * Driver updated fields
@@ -411,7 +412,13 @@ extern void fsp_freemsg(struct fsp_msg *msg);
 /* Free a message and not the attached reply */
 extern void __fsp_freemsg(struct fsp_msg *msg);
 
-/* Enqueue it in the appropriate FSP queue */
+/* Enqueue it in the appropriate FSP queue
+ *
+ * NOTE: This supports being called with the FSP lock already
+ * held. This is the only function in this module that does so
+ * and is meant to be used that way for sending serial "poke"
+ * commands to the FSP.
+ */
 extern int fsp_queue_msg(struct fsp_msg *msg,
 			 void (*comp)(struct fsp_msg *msg));
 
@@ -439,8 +446,12 @@ struct fsp_client {
 	struct list_node	link;
 };
 
-/* WARNING: command class FSP_MCLASS_IPL is aliased to FSP_MCLASS_SERVICE,
- * thus a client of one will get both types of messages
+/* WARNING: Command class FSP_MCLASS_IPL is aliased to FSP_MCLASS_SERVICE,
+ * thus a client of one will get both types of messages.
+ *
+ * WARNING: Client register/unregister takes *NO* lock. These are expected
+ * to be called early at boot before CPUs are brought up and before
+ * fsp_poll() can race. The client callback is called with no lock held.
  */
 extern void fsp_register_client(struct fsp_client *client, u8 msgclass);
 extern void fsp_unregister_client(struct fsp_client *client, u8 msgclass);

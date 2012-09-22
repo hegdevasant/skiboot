@@ -1,4 +1,17 @@
 
+skiboot changes:
+
+ - Added malloc lock
+ - Added a few functions
+ - Malloc will always 4 byte align everything
+ - Added asserts, requires core to provide abort()
+
+WARNINGS:
+
+ - don't use free() on the result of memalign() (should be fixable)
+
+Previous notes:
+
  Standard C library for the SLOF firmware project
  ================================================
 

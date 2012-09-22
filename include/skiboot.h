@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <assert.h>
+#include <errno.h>
 
 #include <ccan/container_of/container_of.h>
 #include <ccan/list/list.h>
@@ -30,6 +31,9 @@ enum ipl_state {
 	ipl_got_caps		= 0x00000008
 };
 extern enum ipl_state ipl_state;
+
+/* For use by debug code */
+void backtrace(void);
 
 #endif /* __SKIBOOT_H */
 

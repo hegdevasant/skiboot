@@ -10,7 +10,12 @@
  *     IBM Corporation - initial implementation
  *****************************************************************************/
 
+#include <lock.h>
+
 struct chunk {
 	unsigned inuse : 4;
 	unsigned length : 28;
 } __attribute__((packed));
+
+extern void lock_malloc(void);
+extern void unlock_malloc(void);

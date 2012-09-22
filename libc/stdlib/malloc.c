@@ -27,12 +27,12 @@ static char *act;
 /* Pointers to start and end of heap: */
 static char *heap_start, *heap_end;
 
+static struct lock malloc_lock;
 
 /*
  * Standard malloc function
  */
-void *
-malloc(size_t size)
+static void *__malloc(size_t size)
 {
 	char *header;
 	void *data;
@@ -119,12 +119,22 @@ malloc(size_t size)
 	return data;
 }
 
+void *malloc(size_t size)
+{
+	void *ret;
+
+	lock_malloc();
+	ret = __malloc(size);
+	unlock_malloc();
+
+	return ret;
+}
+
 
 /*
  * Merge free memory blocks in initialized heap if possible
  */
-static int
-clean(void)
+static int clean(void)
 {
 	char *header;
 	char *firstfree = 0;
@@ -169,3 +179,14 @@ void *zalloc(size_t size)
 		memset(ret, 0, size);
 	return ret;
 }
+
+void lock_malloc(void)
+{
+	lock(&malloc_lock);
+}
+
+void unlock_malloc(void)
+{
+	unlock(&malloc_lock);
+}
+

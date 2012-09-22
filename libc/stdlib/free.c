@@ -14,8 +14,7 @@
 #include "stdlib.h"
 #include "malloc_defs.h"
 
-void
-free(void *ptr)
+void free(void *ptr)
 {
 	struct chunk *header;
 

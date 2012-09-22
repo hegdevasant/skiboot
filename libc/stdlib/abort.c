@@ -13,12 +13,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-void abort(void)
-{
-	fputs(stderr, "Aborting!\n");
-	for (;;);
-}
-
 void assert_fail(const char *msg)
 {
 	fputs(stderr, "Assert fail:");

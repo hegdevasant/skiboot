@@ -27,6 +27,8 @@
 #define SPR_TBWU	0x11d
 #define SPR_PIR		0x3ff
 
+#ifdef __ASSEMBLY__
+
 /* Thread priority control opcodes */
 #define smt_low		or 1,1,1
 #define smt_medium	or 2,2,2
@@ -36,10 +38,22 @@
 #define smt_extra_high	or 7,7,7
 #define smt_very_low	or 31,31,31
 
-#ifndef __ASSEMBLY__
+#else /* __ASSEMBLY__ */
 
 #include <compiler.h>
 #include <stdint.h>
+
+/*
+ * SMT priority
+ */
+
+static inline void smt_low(void)	{ asm volatile("or 1,1,1");	}
+static inline void smt_medium(void) 	{ asm volatile("or 2,2,2");	}
+static inline void smt_high(void)	{ asm volatile("or 3,3,3");	}
+static inline void smt_medium_high(void){ asm volatile("or 5,5,5");	}
+static inline void smt_medium_low(void)	{ asm volatile("or 6,6,6");	}
+static inline void smt_extra_high(void)	{ asm volatile("or 7,7,7");	}
+static inline void smt_very_low(void)	{ asm volatile("or 31,31,31");	}
 
 /*
  * SPR access functions
