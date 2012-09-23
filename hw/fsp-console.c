@@ -279,13 +279,16 @@ static struct fsp_client fsp_con_client_vt = {
 void fsp_console_preinit(void)
 {
 	int i;
+	void *base;
 
 	/* Initialize out data structure pointers & TCE maps */
+	base = (void *)SER0_BUFFER_BASE;
 	for (i = 0; i < MAX_SERIAL; i++) {
 		struct fsp_serial *ser = &fsp_serials[i];
 
-		ser->in_buf = (void *)SER0_BUFFER_BASE;
-		ser->out_buf = (void *)(SER0_BUFFER_BASE + SER0_BUFFER_SIZE/2);
+		ser->in_buf = base;
+		ser->out_buf = base + SER0_BUFFER_SIZE/2;
+		base += SER0_BUFFER_SIZE;
 	}
 	fsp_tce_map(PSI_DMA_SER0_BASE, (void*)SER0_BUFFER_BASE,
 		    4 * PSI_DMA_SER0_SIZE);
