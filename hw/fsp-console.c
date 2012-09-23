@@ -39,6 +39,7 @@ struct fsp_serial {
 
 static struct fsp_serial fsp_serials[MAX_SERIAL];
 static bool got_intf_query;
+static bool got_assoc_resp;
 
 #ifdef DVS_CONSOLE
 static int fsp_con_port = -1;
@@ -172,6 +173,7 @@ static void fsp_open_vserial(struct fsp_msg *msg)
 				0, tce_in, 0, tce_out), fsp_freemsg);
 
 #ifdef DVS_CONSOLE
+	printf("  log_port  = %d\n", fs->log_port);
 	if (fs->log_port) {
 		fsp_con_port = sess_id;
 		sync();
@@ -228,8 +230,9 @@ static bool fsp_con_msg_hmc(u32 cmd_sub_mod, struct fsp_msg *msg)
 {
 	/* Associate response */
 	if ((cmd_sub_mod >> 8) == 0xe08a) {
-		printf("Got associate response, status 0x%02x\n",
+		printf("FSPCON: Got associate response, status 0x%02x\n",
 		       cmd_sub_mod & 0xff);
+		got_assoc_resp = true;
 		return true;
 	}
 	if ((cmd_sub_mod >> 8) == 0xe08b) {
@@ -312,9 +315,14 @@ static void fsp_serial_add(int index, u16 rsrc_id, const char *loc_code,
 	unlock(&con_lock);
 
 	/* DVS doesn't have that */
-	if (rsrc_id != 0xffff)
+	if (rsrc_id != 0xffff) {
+		got_assoc_resp = false;
 		fsp_sync_msg(fsp_mkmsg(FSP_CMD_ASSOC_SERIAL, 2,
 				       (rsrc_id << 16) | 1, index), true);
+		/* XXX add timeout ? */
+		while(!got_assoc_resp)
+			fsp_poll();
+	}
 }
 
 void fsp_console_init(void)
