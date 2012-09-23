@@ -130,6 +130,35 @@ static struct fsp_cmdclass *fsp_get_cmdclass(struct fsp_msg *msg)
 	return __fsp_get_cmdclass(c);
 }
 
+static struct fsp_msg *__fsp_allocmsg(void)
+{
+	return zalloc(sizeof(struct fsp_msg));
+}
+
+struct fsp_msg *fsp_allocmsg(bool alloc_response)
+{
+	struct fsp_msg *msg;
+
+	msg = __fsp_allocmsg();
+	if (!msg)
+		return NULL;
+	if (alloc_response)
+		msg->resp = __fsp_allocmsg();
+	return msg;
+}
+
+void __fsp_freemsg(struct fsp_msg *msg)
+{
+	free(msg);
+}
+
+void fsp_freemsg(struct fsp_msg *msg)
+{
+	if (msg->resp)
+		__fsp_freemsg(msg->resp);
+	__fsp_freemsg(msg);
+}
+
 static void fsp_wreg(struct fsp *fsp, u32 reg, u32 val)
 {
 	struct fsp_iopath *iop;
@@ -273,23 +302,6 @@ static void fsp_poke_queue(struct fsp_cmdclass *cmdclass)
 	}
 }
 
-struct fsp_msg *fsp_allocmsg(void)
-{
-	return zalloc(sizeof(struct fsp_msg));
-}
-
-void __fsp_freemsg(struct fsp_msg *msg)
-{
-	free(msg);
-}
-
-void fsp_freemsg(struct fsp_msg *msg)
-{
-	if (msg->resp)
-		__fsp_freemsg(msg->resp);
-	__fsp_freemsg(msg);
-}
-
 static void __fsp_fillmsg(struct fsp_msg *msg, u32 cmd_sub_mod,
 			  u8 add_words, va_list list)
 {
@@ -321,7 +333,7 @@ extern void fsp_fillmsg(struct fsp_msg *msg, u32 cmd_sub_mod, u8 add_words, ...)
 
 struct fsp_msg *fsp_mkmsg(u32 cmd_sub_mod, u8 add_words, ...)
 {
-	struct fsp_msg *msg = fsp_allocmsg();
+	struct fsp_msg *msg = fsp_allocmsg(!!(cmd_sub_mod & 0x1000000));
 	va_list list;
 
 	if (!msg) {
@@ -356,8 +368,9 @@ int fsp_queue_msg(struct fsp_msg *msg, void (*comp)(struct fsp_msg *msg))
 	/* Set completion */
 	msg->complete = comp;
 
-	/* Clear response */
-	msg->resp = NULL;
+	/* Clear response state */
+	if (msg->resp)
+		msg->resp->state = fsp_msg_unused;
 
 	/* Queue the message in the appropriate queue */
 	cmdclass = fsp_get_cmdclass(msg);
@@ -490,29 +503,16 @@ static void fsp_handle_command(struct fsp_msg *msg)
 	fsp_freemsg(msg);
 }
 
-/* WARNING: This will drop the FSP lock */
-static void fsp_handle_incoming(struct fsp *fsp)
+static void __fsp_fill_incoming(struct fsp *fsp, struct fsp_msg *msg,
+				int dlen, u32 w0, u32 w1)
 {
-	struct fsp_msg *msg = zalloc(sizeof(struct fsp_msg));
-	u32 h0, w0, w1, reg;
-	int i, dlen, wlen;
-	bool special_response = false;
+	unsigned int wlen, i, reg;
 
-	h0 = fsp_rreg(fsp, FSP_MBX1_FHDR0_REG);
-	dlen = (h0 >> 16) & 0xff;
-
-	reg = FSP_MBX1_FDATA_AREA;
-	w0 = fsp_rreg(fsp, reg); reg += 4;
-	w1 = fsp_rreg(fsp, reg); reg += 4;
-
-	DBG("  Incoming: w0: 0x%08x, w1: 0x%08x, dlen: %d\n",
-	    w0, w1, dlen);
-
-	msg->state = fsp_msg_incoming;
 	msg->dlen = dlen - 8;
 	msg->word0 = w0;
 	msg->word1 = w1;
 	wlen = (dlen + 3) >> 2;
+	reg = FSP_MBX1_FDATA_AREA + 8;
 	for (i = 0; i < wlen; i++) {
 		msg->data.words[i] = fsp_rreg(fsp, reg);
 		reg += 4;
@@ -526,6 +526,34 @@ static void fsp_handle_incoming(struct fsp *fsp)
 		 FSP_MBX_CTL_DCSP_MASK);
 
 	fsp_trace_msg(msg, "got");
+}
+
+static void __fsp_drop_incoming(struct fsp *fsp)
+{
+	/* Ack it (XDN) and clear HPEND & counts */
+	fsp_wreg(fsp, FSP_MBX1_HCTL_REG,
+		 FSP_MBX_CTL_XDN |
+		 FSP_MBX_CTL_HPEND |
+		 FSP_MBX_CTL_HCSP_MASK |
+		 FSP_MBX_CTL_DCSP_MASK);
+}
+
+/* WARNING: This will drop the FSP lock */
+static void fsp_handle_incoming(struct fsp *fsp)
+{
+	struct fsp_msg *msg;
+	u32 h0, w0, w1;
+	unsigned int dlen;
+	bool special_response = false;
+
+	h0 = fsp_rreg(fsp, FSP_MBX1_FHDR0_REG);
+	dlen = (h0 >> 16) & 0xff;
+
+	w0 = fsp_rreg(fsp, FSP_MBX1_FDATA_AREA);
+	w1 = fsp_rreg(fsp, FSP_MBX1_FDATA_AREA + 4);
+
+	DBG("  Incoming: w0: 0x%08x, w1: 0x%08x, dlen: %d\n",
+	    w0, w1, dlen);
 
 	/* Some responses are expected out of band */
 	if ((w0 & 0xff) == FSP_MCLASS_HMC_INTFMSG  &&
@@ -534,14 +562,13 @@ static void fsp_handle_incoming(struct fsp *fsp)
 
 	/* Check for response bit */
 	if (w1 & 0x80 && !special_response) {
-		struct fsp_cmdclass *cmdclass = fsp_get_cmdclass(msg);
+		struct fsp_cmdclass *cmdclass = __fsp_get_cmdclass(w0 & 0xff);
 		struct fsp_msg *req;
 
 		if (!cmdclass->busy || list_empty(&cmdclass->msgq)) {	
 			unlock(&fsp_lock);
 			prerror("FSP #%d: Got orphan response !\n", fsp->index);
-			/* XXX DUMP MESSAGE */
-			fsp_freemsg(msg);
+			__fsp_drop_incoming(fsp);
 			return;
 		}
 		req = list_top(&cmdclass->msgq, struct fsp_msg, link);
@@ -550,19 +577,43 @@ static void fsp_handle_incoming(struct fsp *fsp)
 		if (req->state != fsp_msg_wresp ||
 		    (req->word0 & 0xff) != (w0 & 0xff) ||
 		    (req->word1 & 0xff) != (w1 & 0x7f)) {
+			__fsp_drop_incoming(fsp);
 			unlock(&fsp_lock);
 			prerror("FSP #%d: Response doesn't match pending msg\n",
 				fsp->index);
-			/* XXX DUMP MESSAGE */
-			fsp_freemsg(msg);
 			return;
 		}
 
-		/* Complete will drop the lock */
-		req->resp = msg;
+		/* Allocate response if needed */
+		if (!req->resp) {
+			req->resp = __fsp_allocmsg();
+			if (!req->resp) {
+				__fsp_drop_incoming(fsp);
+				unlock(&fsp_lock);
+				prerror("FSP #%d: Failed to allocate response\n",
+					fsp->index);
+				return;
+			}
+		}
+
+		/* Populate and complete (will drop the lock) */
+		req->resp->state = fsp_msg_response;
+		__fsp_fill_incoming(fsp, req->resp, dlen, w0, w1);
 		fsp_complete_msg(req);
 		return;
 	}
+
+	/* Allocate an incoming message */
+	msg = __fsp_allocmsg();
+	if (!msg) {
+		__fsp_drop_incoming(fsp);
+		unlock(&fsp_lock);
+		prerror("FSP #%d: Failed to allocate incoming msg\n",
+			fsp->index);
+		return;
+	}
+	msg->state = fsp_msg_incoming;
+	__fsp_fill_incoming(fsp, msg, dlen, w0, w1);
 	unlock(&fsp_lock);
 
 	/* Handle FSP commands. This can recurse into fsp_queue_msg etc.. */

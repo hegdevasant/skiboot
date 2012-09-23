@@ -362,6 +362,7 @@ enum fsp_msg_state {
 	fsp_msg_done,
 	fsp_msg_timeout,
 	fsp_msg_incoming,
+	fsp_msg_response,
 };
 
 struct fsp_msg {
@@ -405,7 +406,7 @@ extern void fsp_init(void);
  * WARNING: Do _NOT_ use free() on an fsp_msg, use fsp_freemsg()
  * instead as we will eventually use pre-allocated message pools
  */
-extern struct fsp_msg *fsp_allocmsg(void);
+extern struct fsp_msg *fsp_allocmsg(bool alloc_response);
 extern struct fsp_msg *fsp_mkmsg(u32 cmd_sub_mod, u8 add_words, ...);
 
 /* Populate a pre-allocated msg */

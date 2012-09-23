@@ -18,7 +18,7 @@ void op_display(enum op_severity sev, enum op_module mod, uint16_t code)
 	 * in case of fatal errors
 	 */
 	if (!op_msg)
-		op_msg = fsp_allocmsg();
+		op_msg = fsp_allocmsg(true);
 	if (!op_msg)
 		return;
 
