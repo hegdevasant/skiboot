@@ -87,11 +87,11 @@ static void *__malloc(size_t size)
 		if (header >= act) {
 			if (clean()) {
 				// merging of free blocks succeeded, so try again
-				return malloc(size);
+				return __malloc(size);
 			} else if (sbrk(blksize) == heap_end) {
 				// succeeded to get more memory, so try again
 				heap_end += blksize;
-				return malloc(size);
+				return __malloc(size);
 			} else {
 				// No more memory available
 				return 0;
