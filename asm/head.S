@@ -17,7 +17,7 @@ __head:
 .global __entry
 __entry:
 	/* Get ourselves a TOC */
-	LOAD_IMM32(%r2,__toc_start + 0x8000)
+	LOAD_IMM32(%r2,__toc_start)
 
 	/* Check our PIR, avoid threads */
 	mfspr	%r31,SPR_PIR
@@ -39,6 +39,9 @@ __entry:
 	/* We got a primary, get ready for C code: get a stack */
 	LOAD_ADDR_FROM_TOC(%r1, stack_top)
 	ld	%r1,0(%r1)
+	li	%r3,0
+	std	%r3,0(%r1)
+	std	%r3,16(%r1)
 
 	/* Clear BSS before we try to use that stack */
 	LOAD_IMM32(%r3, _sbss)
@@ -70,7 +73,7 @@ secondary_wait:
 	lwz	%r4,0(%r4)
 	mtctr	%r4
 1:	lwz	%r5,CPUTHREAD_PIR(%r3)
-	cmpwi	%r5,%r31
+	cmpw	%r5,%r31
 	beq	2f
 	addi	%r3,%r3,CPUTHREAD_SIZE
 	bdnz	1b
@@ -84,6 +87,9 @@ secondary_wait:
 
 	/* Get our stack and jump to C */
 	ld	%r1,CPUTHREAD_STACK(%r3)
+	li	%r0,0
+	std	%r0,0(%r1)
+	std	%r0,16(%r1)
 	bl	secondary_cpu_entry
 	b	.
 

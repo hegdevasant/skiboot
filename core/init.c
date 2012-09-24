@@ -136,10 +136,12 @@ void main_cpu_entry(void)
 
 void secondary_cpu_entry(struct cpu_thread *cpu)
 {
+	printf("INIT: CPU PIR 0x%04x called in\n", cpu->pir);
+
 	/* Secondary CPU called in */
 	cpu_callin(cpu);
 
-	/* Wait for work */
+	/* Wait for work to do */
 	while(true)
 		smt_very_low();
 }

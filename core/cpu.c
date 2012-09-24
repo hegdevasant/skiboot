@@ -136,7 +136,7 @@ bool __cpu_parse(void)
 		/* Mark boot CPU */
 		if (boot_cpu) {
 			if (t->state != cpu_state_available) {
-				prerror("CPU: Boot CPU marked unavailable !\n");
+				prerror("CPU: Boot CPU unavailable !\n");
 				op_display(OP_FATAL, OP_MOD_CPU, 4);
 			}
 			t->state = cpu_state_boot;
@@ -160,6 +160,8 @@ void cpu_bringup(void)
 {
 	unsigned int i;
 
+	printf("CPU: Allocating secondary CPU stacks\n");
+
 	/* Alloc all stacks for functional CPUs and count available ones */
 	for (i = 0; i < num_cpu_threads(); i++) {
 		struct cpu_thread *t = &cpu_threads[i];
@@ -167,8 +169,6 @@ void cpu_bringup(void)
 
 		if (t->state != cpu_state_available)
 			continue;
-		printf("CPU: Allocating stack for CPU %d (PIR: 0x%04x)\n",
-		       i, t->pir);
 		stack = memalign(16, STACK_SIZE);
 		if (!stack) {
 			prerror("CPU: Failed to allocate stack !\n");
@@ -195,7 +195,6 @@ void cpu_bringup(void)
 			smt_very_low();
 			sync();
 		}
-		printf("CPU %d: Called in (PIR: 0x%04x)\n", i, t->pir);
 	}
 }
 

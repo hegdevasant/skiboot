@@ -34,6 +34,7 @@ enum op_module {
  * 'BA060002' : Bad (or not found) CPU timebase data
  * 'BA060003' : Bad (or not found) CPU id data
  * 'BA060004' : Primary CPU marked unavailable
+ * 'BA060005' : Bad (or not found) CPU cache data
  */
 
 extern void op_display(enum op_severity, enum op_module, uint16_t code);

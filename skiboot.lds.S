@@ -20,13 +20,14 @@ SECTIONS
 		*(.branch_lt)
 	}
  
+	. = ALIGN(0x1000);
+
 	.opd : {
 		*(.opd)
 	}
   
-	. = ALIGN(0x1000);
-	__toc_start = .;
 	.got : {
+		__toc_start = . + 0x8000;
 		*(.got)
 		*(.toc)
 	}
