@@ -81,6 +81,12 @@ void cpu_parse(void)
 				i, size, t->id);
 			return;
 		}
+		t->cache = HDIF_get_idata(paca, 4, &size);
+		if (!t->cache || size < sizeof(*t->cache)) {
+			prerror("CPU[%i]: bad cache size %u @ %p\n",
+				i, size, t->cache);
+			return;
+		}
 
 		printf("CPU %i: PIR=%i RES=%i %s %s(%u threads)\n",
 		       i, t->id->pir, t->id->process_interrupt_line,
@@ -91,6 +97,12 @@ void cpu_parse(void)
 		       ((t->id->verify_exists_flags
 			 & CPU_ID_NUM_SECONDARY_THREAD_MASK)
 			>> CPU_ID_NUM_SECONDARY_THREAD_SHIFT) + 1);
+		printf("    Cache: I=%u D=%u/%u/%u/%u\n",
+		       t->cache->icache_size_kb,
+		       t->cache->l1_dcache_size_kb,
+		       t->cache->l2_dcache_size_kb,
+		       t->cache->l3_dcache_size_kb,
+		       t->cache->l35_dcache_size_kb);
 
 		paca = (void *)paca + spira.ntuples.paca.alloc_len;
 	}
