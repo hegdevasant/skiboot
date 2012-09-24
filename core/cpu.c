@@ -3,6 +3,11 @@
 
 struct cpu_thread *cpu_threads;
 
+u32 num_cpu_threads(void)
+{
+	return spira.ntuples.paca.act_cnt;
+}
+
 static const char *cpu_state(u32 flags)
 {
 	switch ((flags & CPU_ID_VERIFY_MASK) >> CPU_ID_VERIFY_SHIFT) {
@@ -16,6 +21,21 @@ static const char *cpu_state(u32 flags)
 		return "UNUSABLE";
 	}
 	abort();
+}
+
+struct cpu_thread *find_cpu_by_processor_chip_id(u32 id)
+{
+	unsigned int i;
+
+	for (i = 0; i < num_cpu_threads(); i++) {
+		struct cpu_thread *t = &cpu_threads[i];
+
+		if (t->id->verify_exists_flags & CPU_ID_SECONDARY_THREAD)
+			continue;
+		if (t->id->processor_chip_id == id)
+			return t;
+	}
+	return NULL;
 }
 
 void cpu_parse(void)
@@ -36,14 +56,16 @@ void cpu_parse(void)
 		return;
 	}
 
-	cpu_threads = malloc(spira.ntuples.paca.act_cnt * sizeof(*cpu_threads));
+	printf("Found %u CPUS\n", num_cpu_threads());
+
+	cpu_threads = malloc(num_cpu_threads() * sizeof(*cpu_threads));
 	if (!cpu_threads) {
 		prerror("PACA: could not allocate for %u cpus\n",
-			spira.ntuples.paca.act_cnt);
+			num_cpu_threads());
 		return;
 	}
 
-	for (i = 0; i < spira.ntuples.paca.act_cnt; i++) {
+	for (i = 0; i < num_cpu_threads(); i++) {
 		u32 size;
 		struct cpu_thread *t = &cpu_threads[i];
 

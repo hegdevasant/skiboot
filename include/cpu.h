@@ -53,4 +53,8 @@ struct cpu_thread {
 
 /* This populates cpu_threads array. */
 extern void cpu_parse(void);
+
+extern u32 num_cpu_threads(void);
+
+struct cpu_thread *find_cpu_by_processor_chip_id(u32 id);
 #endif /* __CPU_H */

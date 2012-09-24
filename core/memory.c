@@ -1,5 +1,6 @@
 #include <spira.h>
 #include <memory.h>
+#include <cpu.h>
 
 struct list_head address_ranges = LIST_HEAD_INIT(address_ranges);
 
@@ -66,6 +67,11 @@ static bool add_address_range(const struct HDIF_common_hdr *msarea,
 	new->fru_id = fruid;
 	new->fru_id_len = fruidlen;
 	new->arange = arange;
+	new->attached = find_cpu_by_processor_chip_id(arange->chip);
+	if (!new->attached) {
+		prerror("mem: could not find chip id %u\n", arange->chip);
+		return false;
+	}
 	list_head_init(&new->shared);
 
 	if (id->flags & MS_AREA_SHARED)
