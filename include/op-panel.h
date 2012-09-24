@@ -19,6 +19,7 @@ enum op_module {
 	OP_MOD_FSP	= 0x3033,	/* '03' - FSP */
 	OP_MOD_FSPCON	= 0x3034,	/* '04' - FSPCON */
 	OP_MOD_CHIPTOD	= 0x3035,	/* '05' - ChipTOP */
+	OP_MOD_CPU	= 0x3036,	/* '06' - CPU bringup */
 };
 
 /* Common codes:
@@ -28,6 +29,11 @@ enum op_module {
  * 'BA010002' : Unlocking not-owned lock
  * 'BA006666' : Abort
  * 'BA050000' : Failed ChipTOD init/sync
+ * 'BA060000' : Invalid SPPACA
+ * 'BA060001' : Failed to allocate CPU array
+ * 'BA060002' : Bad (or not found) CPU timebase data
+ * 'BA060003' : Bad (or not found) CPU id data
+ * 'BA060004' : Primary CPU marked unavailable
  */
 
 extern void op_display(enum op_severity, enum op_module, uint16_t code);

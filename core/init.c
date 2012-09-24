@@ -3,6 +3,7 @@
 #include <memory.h>
 #include <chiptod.h>
 #include <cpu.h>
+#include <processor.h>
 
 /*
  * Boot semaphore, incremented by each CPU calling in
@@ -111,15 +112,34 @@ void main_cpu_entry(void)
 	/* Parse the PACA/PCIA */
 	cpu_parse();
 
-	/* XXX Call in secondary CPUs */
+	op_display(OP_LOG, OP_MOD_INIT, 0x0004);
+
+	/* Call in secondary CPUs */
+	cpu_bringup();
+
+	op_display(OP_LOG, OP_MOD_INIT, 0x0005);
 
 	/* Enable timebase synchronization */
 	chiptod_init();
 
+	op_display(OP_LOG, OP_MOD_INIT, 0x0006);
+
 	/* Parse the memory layout. */
 	memory_parse();
+
+	op_display(OP_LOG, OP_MOD_INIT, 0x9999);
 
 	/* Nothing to do */
 	while(true)
 		fsp_poll();
+}
+
+void secondary_cpu_entry(struct cpu_thread *cpu)
+{
+	/* Secondary CPU called in */
+	cpu_callin(cpu);
+
+	/* Wait for work */
+	while(true)
+		smt_very_low();
 }

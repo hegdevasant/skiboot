@@ -39,6 +39,8 @@
 #define SPR_TBWL	0x11c	/* RW: Timebase low */
 #define SPR_TBWU	0x11d	/* RW: Timebase high */
 #define SPR_TBU40	0x11e	/* RW: Timebase Upper 40 bit */
+#define SPR_HSPRG0	0x130	/* RW: Hypervisor scratch 0 */
+#define SPR_HSPRG1	0x131	/* RW: Hypervisor scratch 1 */
 #define SPR_TFMR	0x13d
 #define SPR_HMER	0x150	/* Hypervisor Maintenance Exception */
 #define SPR_HMEER	0x151	/* HMER interrupt enable mask */

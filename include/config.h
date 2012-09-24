@@ -9,11 +9,8 @@
 /* Enable malloc debugging */
 #define DEBUG_MALLOC		1
 
-/* Heap size set to 1M for now */
-#define HEAP_SIZE		0x100000
-
-/* Boot stack size set to 1M as well */
-#define STACK_SIZE		0x100000
+/* Boot stack size set to 64K as well */
+#define STACK_SIZE		0x10000
 
 /* Enable this for mambo console */
 //#define MAMBO_CONSOLE		1
@@ -47,6 +44,9 @@
 #define FSP_INBOUND_BUFS	0x04600000UL
 #define FSP_INBOUND_SIZE	0x00100000UL
 
+/* This is our heap, the max size is set to be 16M */
+#define HEAP_BASE		0x05000000UL
+#define HEAP_SIZE		0x01000000
 
 #endif /* __CONFIG_H */
 

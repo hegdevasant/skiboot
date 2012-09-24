@@ -46,15 +46,46 @@ struct HDIF_cpu_timebase {
 	u32 memory_bus_frequency;
 };
 
+/*
+ * cpu_thread is our internal structure representing each
+ * thread in the system
+ */
+
+enum cpu_thread_state {
+	cpu_state_unknown	= 0,	/* At boot time */
+	cpu_state_unavailable,		/* Not available */
+	cpu_state_available,		/* Assumed to spin in asm entry */
+	cpu_state_boot,			/* Our boot CPU */
+	cpu_state_idle,			/* Secondary called in */
+};
+
 struct cpu_thread {
+	uint32_t		pir;
+	enum cpu_thread_state	state;
+	void			*stack;
+
+	/* SPIRA structures */
 	const struct HDIF_cpu_id *id;
 	const struct HDIF_cpu_timebase *timebase;
 };
 
+/* This global is set to 1 to allow secondaries to callin,
+ * typically set after the primary has allocated the cpu_thread
+ * array and stacks
+ */
+extern unsigned long cpu_secondary_start;
+
 /* This populates cpu_threads array. */
 extern void cpu_parse(void);
+
+/* This brings up our secondaries */
+extern void cpu_bringup(void);
+
+/* This is called by secondaries as they call in */
+extern void cpu_callin(struct cpu_thread *cpu);
 
 extern u32 num_cpu_threads(void);
 
 struct cpu_thread *find_cpu_by_processor_chip_id(u32 id);
+
 #endif /* __CPU_H */

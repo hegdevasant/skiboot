@@ -5,19 +5,18 @@
 #include <skiboot.h>
 #include <processor.h>
 
-/* Small heap used for libc'c sbrk/malloc */
-static char heap[HEAP_SIZE] __attribute__ ((aligned(16)));
-static char *brk = heap;
+static uint64_t brk = HEAP_BASE;
 
 void *sbrk(int incr)
 {
-	void *prev = brk;
+	void *prev = (void *)brk;
 
-	if (brk + incr > &heap[HEAP_SIZE]) {
+	if ((brk + incr) > (HEAP_BASE + HEAP_SIZE)) {
 		errno = ENOMEM;
 		return (void *)-1;
 	}
 	brk += incr;
+
 	return prev;
 }
 

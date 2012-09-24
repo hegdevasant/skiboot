@@ -34,6 +34,8 @@ __entry:
 	cmpwi	cr0,%r4,0
 	bne	secondary_wait
 
+	smt_medium
+
 	/* We got a primary, get ready for C code: get a stack */
 	LOAD_ADDR_FROM_TOC(%r1, stack_top)
 	ld	%r1,0(%r1)
@@ -52,7 +54,37 @@ __entry:
 
 	/* Secondary CPUs wait here . r31 is PIR */
 secondary_wait:	
+
+	/* Wait for cpu_secondary_start to be set */
+	LOAD_ADDR_FROM_TOC(%r3, cpu_secondary_start)
+1:	smt_very_low	
+	ld	%r0,0(%r3)
+	cmpdi	%r0,0
+	beq	1b
+
+	/* Lookup our PIR in the cpu_threads array */
+	smt_medium
+	LOAD_ADDR_FROM_TOC(%r3, cpu_threads)
+	LOAD_ADDR_FROM_TOC(%r4, cpu_threads_count)
+	ld	%r3,0(%r3)
+	lwz	%r4,0(%r4)
+	mtctr	%r4
+1:	lwz	%r5,CPUTHREAD_PIR(%r3)
+	cmpwi	%r5,%r31
+	beq	2f
+	addi	%r3,%r3,CPUTHREAD_SIZE
+	bdnz	1b
+
+	/* Not found... what to do ? set some global error ? */
 	smt_very_low
+	b	.
+
+2:	/* Got our cpu_thread, stick a copy of it in HSPRG0 */
+	mtspr	SPR_HSPRG0,%r3
+
+	/* Get our stack and jump to C */
+	ld	%r1,CPUTHREAD_STACK(%r3)
+	bl	secondary_cpu_entry
 	b	.
 
 	/* NACA */
