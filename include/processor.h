@@ -11,8 +11,8 @@
 #define PPC_BITLSHIFT(be)	(63 - (be))
 
 /* P7 MSR bits */
-#define MSR_SF		PPC_BIT(0)		/* 64-bit mode */
-#define MSR_HV		PPC_BIT(1)		/* Hypervisor mode */
+#define MSR_SF		PPC_BIT(0)	/* 64-bit mode */
+#define MSR_HV		PPC_BIT(3)	/* Hypervisor mode */
 #define MSR_VEC		PPC_BIT(38)	/* VMX enable */
 #define MSR_VSX		PPC_BIT(40)	/* VSX enable */
 #define MSR_EE		PPC_BIT(48)	/* External Int. Enable */

@@ -12,7 +12,7 @@ static struct proc_init_data proc_init_data = {
 	},
 	.regs = {
 		.nia	= 0x180,
-		.msr  	= 0x9000000000000000,
+		.msr  	= 0x9000000000000000, /* SF | HV */
 	},
 };
 
