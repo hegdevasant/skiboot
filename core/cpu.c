@@ -98,6 +98,14 @@ bool __cpu_parse(void)
 		t->pir = t->id->pir;
 		boot_cpu = t->pir == boot_pir;
 
+		t->cache = HDIF_get_idata(paca, 4, &size);
+		if (!t->cache || size < sizeof(*t->cache)) {
+			prerror("CPU[%i]: bad cache size %u @ %p\n",
+				i, size, t->cache);
+			op_display(OP_FATAL, OP_MOD_CPU, 5);
+			return false;
+		}
+
 		printf("CPU %i: PIR=%i RES=%i %s %s(%u threads)\n",
 		       i, t->id->pir, t->id->process_interrupt_line,
 		       t->id->verify_exists_flags & CPU_ID_PACA_RESERVED
@@ -107,6 +115,12 @@ bool __cpu_parse(void)
 		       ((t->id->verify_exists_flags
 			 & CPU_ID_NUM_SECONDARY_THREAD_MASK)
 			>> CPU_ID_NUM_SECONDARY_THREAD_SHIFT) + 1);
+		printf("    Cache: I=%u D=%u/%u/%u/%u\n",
+		       t->cache->icache_size_kb,
+		       t->cache->l1_dcache_size_kb,
+		       t->cache->l2_dcache_size_kb,
+		       t->cache->l3_dcache_size_kb,
+		       t->cache->l35_dcache_size_kb);
 
 		state = (t->id->verify_exists_flags & CPU_ID_VERIFY_MASK) >>
 			CPU_ID_VERIFY_SHIFT;

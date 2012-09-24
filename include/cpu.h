@@ -46,6 +46,28 @@ struct HDIF_cpu_timebase {
 	u32 memory_bus_frequency;
 };
 
+struct HDIF_cpu_cache {
+	u32 icache_size_kb;
+	u32 icache_line_size;
+	u32 l1_dcache_size_kb;
+	u32 l1_dcache_line_size;
+	u32 l2_dcache_size_kb;
+	u32 l2_line_size;
+	u32 l3_dcache_size_kb;
+	u32 l3_line_size;
+	u32 icache_block_size;
+	u32 dcache_assoc_sets;
+	u32 icache_assoc_sets;
+	u32 dtlb_entries;
+	u32 dtlb_assoc_sets;
+	u32 itlb_entries;
+	u32 itlb_assoc_sets;
+	u32 reservation_size;
+	u32 l2_cache_assoc_sets;
+	u32 l35_dcache_size_kb;
+	u32 l35_cache_line_size;
+};	
+
 /*
  * cpu_thread is our internal structure representing each
  * thread in the system
@@ -67,6 +89,7 @@ struct cpu_thread {
 	/* SPIRA structures */
 	const struct HDIF_cpu_id *id;
 	const struct HDIF_cpu_timebase *timebase;
+	const struct HDIF_cpu_cache *cache;
 };
 
 /* This global is set to 1 to allow secondaries to callin,
