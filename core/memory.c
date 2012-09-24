@@ -85,11 +85,11 @@ static bool add_address_range(const struct HDIF_common_hdr *msarea,
 		unsigned int size;
 
 		ramarea = HDIF_child(msarea, ramptr, i, "RAM   ");
-		if (!ramarea)
+		if (!CHECK_SPPTR(ramarea))
 			return false;
 
 		new->ram_areas[i].raid = HDIF_get_idata(ramarea, 2, &size);
-		if (!new->ram_areas[i].raid)
+		if (!CHECK_SPPTR(new->ram_areas[i].raid))
 			return false;
 		if (size < sizeof(*new->ram_areas[i].raid)) {
 			prerror("msarea %p ramarea %i id too small\n",
@@ -142,7 +142,7 @@ static void get_msareas(const struct HDIF_common_hdr *ms_vpd)
 
 	/* First childptr refers to msareas. */
 	msptr = HDIF_child_arr(ms_vpd, 0);
-	if (!msptr) {
+	if (!CHECK_SPPTR(msptr)) {
 		prerror("ms_vpd: no children at %p\n", ms_vpd);
 		return;
 	}
@@ -157,11 +157,11 @@ static void get_msareas(const struct HDIF_common_hdr *ms_vpd)
 		unsigned int size, j;
 
 		msarea = HDIF_child(ms_vpd, msptr, i, "MSAREA");
-		if (!msarea)
+		if (!CHECK_SPPTR(msarea))
 			return;
 
 		id = HDIF_get_idata(msarea, 2, &size);
-		if (!id)
+		if (!CHECK_SPPTR(id))
 			return;
 		if (size < sizeof(*id)) {
 			prerror("ms_vpd %p msarea #%i id size too small!\n",
@@ -183,7 +183,7 @@ static void get_msareas(const struct HDIF_common_hdr *ms_vpd)
 			continue;
 
 		arr = HDIF_get_idata(msarea, 4, &size);
-		if (!arr)
+		if (!CHECK_SPPTR(arr))
 			continue;
 
 		if (size < sizeof(*arr)) {
@@ -199,11 +199,11 @@ static void get_msareas(const struct HDIF_common_hdr *ms_vpd)
 		}
 
 		ramptr = HDIF_child_arr(msarea, 0);
-		if (!ramptr)
+		if (!CHECK_SPPTR(ramptr))
 			return;
 
 		fruid = HDIF_get_idata(msarea, 0, &size);
-		if (!fruid)
+		if (!CHECK_SPPTR(fruid))
 			return;
 
 		/* This offset is from the arr, not the header! */
@@ -239,7 +239,7 @@ void memory_parse(void)
 		printf("MSVPD[%i] is at %p\n", i, ms_vpd);
 
 		msac = HDIF_get_idata(ms_vpd, 0, &size);
-		if (!msac || size < sizeof(*msac)) {
+		if (!CHECK_SPPTR(msac) || size < sizeof(*msac)) {
 			prerror("ms_vpd[%i]: bad msac size %u @ %p\n",
 				i, size, msac);
 			return;
@@ -247,7 +247,7 @@ void memory_parse(void)
 		printf("MSAC[%i] is at %p\n", i, msac);
 
 		tcms = HDIF_get_idata(ms_vpd, 1, &size);
-		if (!tcms || size < sizeof(*tcms)) {
+		if (!CHECK_SPPTR(tcms) || size < sizeof(*tcms)) {
 			prerror("ms_vpd[%i]: bad tcms size %u @ %p\n",
 				i, size, tcms);
 			return;

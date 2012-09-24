@@ -270,6 +270,7 @@
 #define FSP_RSP_HV_STATE_CHG	0x0cf8200
 #define FSP_CMD_SP_NEW_ROLE	0x0cf0700 /* FSP->HV: FSP assuming a new role */
 #define FSP_RSP_SP_NEW_ROLE	0x0cf8700
+#define FSP_CMD_SP_RELOAD_COMP	0x0cf0102 /* FSP->HV: FSP reload complete */
 
 
 /*
@@ -321,6 +322,11 @@
 #define FSP_CMD_VSERIAL_OUT	0x0e10200 /* HV->FSP */
 
 /*
+ * Class E8
+ */
+#define FSP_CMD_DISP_SRC_DIRECT	0x01e84a42 /* HV->FSP */
+
+/*
  * Layout of the PSI DMA address space
  *
  * We instanciate a TCE table of 16K mapping 64M
@@ -349,16 +355,16 @@
 /* An FSP message */
 
 enum fsp_msg_state {
-	fsp_msg_unused,
+	fsp_msg_unused = 0,
 	fsp_msg_queued,
 	fsp_msg_sent,
 	fsp_msg_wresp,
 	fsp_msg_done,
 	fsp_msg_timeout,
 	fsp_msg_incoming,
+	fsp_msg_response,
 };
 
-/* Offset of fields in the message */
 struct fsp_msg {
 	/*
 	 * User fields. Don't populate word0.seq (upper 16 bits), this
@@ -372,12 +378,16 @@ struct fsp_msg {
 		u8		bytes[56];
 	} data;
 
-	/* Set if you are waiting for a response */
-	bool			response;
+	/* Completion function. Called with no lock held */
+	void (*complete)(struct fsp_msg *msg);
+	void *user_data;
 
 	/*
 	 * Driver updated fields
 	 */
+
+	/* Set if the message expects a response */
+	bool			response;
 
 	/* Response will be filed by driver when response received */
 	struct fsp_msg		*resp;
@@ -391,18 +401,52 @@ struct fsp_msg {
 
 extern void fsp_init(void);
 
-extern struct fsp_msg *fsp_mkmsg(u32 cmd_sub_mod, u8 add_len, ...);
-extern struct fsp_msg *fsp_mkmsgw(u32 cmd_sub_mod, u8 add_len, ...);
+/* Allocate and populate an fsp_msg structure
+ *
+ * WARNING: Do _NOT_ use free() on an fsp_msg, use fsp_freemsg()
+ * instead as we will eventually use pre-allocated message pools
+ */
+extern struct fsp_msg *fsp_allocmsg(bool alloc_response);
+extern struct fsp_msg *fsp_mkmsg(u32 cmd_sub_mod, u8 add_words, ...);
 
-extern int fsp_queue_msg(struct fsp_msg *msg);
-extern void fsp_poll(void);
-extern int fsp_wait_complete(struct fsp_msg *msg);
+/* Populate a pre-allocated msg */
+extern void fsp_fillmsg(struct fsp_msg *msg, u32 cmd_sub_mod, u8 add_words, ...);
+
+/* Free a message
+ *
+ * WARNING: This will also free an attached response if any
+ */
+extern void fsp_freemsg(struct fsp_msg *msg);
+
+/* Free a message and not the attached reply */
+extern void __fsp_freemsg(struct fsp_msg *msg);
+
+/* Enqueue it in the appropriate FSP queue
+ *
+ * NOTE: This supports being called with the FSP lock already
+ * held. This is the only function in this module that does so
+ * and is meant to be used that way for sending serial "poke"
+ * commands to the FSP.
+ */
+extern int fsp_queue_msg(struct fsp_msg *msg,
+			 void (*comp)(struct fsp_msg *msg));
 
 /* Synchronously send a command. If there's a response, the status is
  * returned as a positive number. A negative result means an error
  * sending the message.
+ *
+ * If autofree is set, the message and the reply (if any) are freed
+ * after extracting the status. If not set, you are responsible for
+ * freeing both the message and an eventual response
+ *
+ * NOTE: This will call fsp_queue_msg(msg, NULL), hence clearing the
+ * completion field of the message. No synchronous message is expected
+ * to utilize asynchronous completions.
  */
-extern int fsp_sync_msg(struct fsp_msg *msg, bool free_it);
+extern int fsp_sync_msg(struct fsp_msg *msg, bool autofree);
+
+/* Process FSP mailbox activity */
+extern void fsp_poll(void);
 
 /* An FSP client is interested in messages for a given class */
 struct fsp_client {
@@ -411,8 +455,12 @@ struct fsp_client {
 	struct list_node	link;
 };
 
-/* WARNING: command class FSP_MCLASS_IPL is aliased to FSP_MCLASS_SERVICE,
- * thus a client of one will get both types of messages
+/* WARNING: Command class FSP_MCLASS_IPL is aliased to FSP_MCLASS_SERVICE,
+ * thus a client of one will get both types of messages.
+ *
+ * WARNING: Client register/unregister takes *NO* lock. These are expected
+ * to be called early at boot before CPUs are brought up and before
+ * fsp_poll() can race. The client callback is called with no lock held.
  */
 extern void fsp_register_client(struct fsp_client *client, u8 msgclass);
 extern void fsp_unregister_client(struct fsp_client *client, u8 msgclass);

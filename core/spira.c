@@ -44,3 +44,17 @@ struct spira spira = {
 	},
 };
 
+#define SPIRA_HEAP_BASE		0x04000000UL
+#define SPIRA_HEAP_SIZE		0x00400000
+
+bool spira_check_ptr(const void *ptr, const char *file, unsigned int line)
+{
+	if (!ptr)
+		return false;
+	if (((unsigned long)ptr) >= SPIRA_HEAP_BASE &&
+	    ((unsigned long)ptr) < (SPIRA_HEAP_BASE + SPIRA_HEAP_SIZE))
+		return true;
+
+	prerror("SPIRA: Bad pointer %p at %s line %d\n", ptr, file, line);
+	return false;
+}

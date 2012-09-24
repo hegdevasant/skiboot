@@ -12,6 +12,8 @@ static size_t con_in;
 static size_t con_out;
 static struct con_ops *con_driver;
 
+struct lock con_lock;
+
 #ifdef MAMBO_CONSOLE
 static void mambo_write(const char *buf, size_t count)
 {
@@ -30,7 +32,7 @@ static void mambo_write(const char *buf __unused, size_t count __unused) { }
 /* Flush the console buffer into the driver, returns true
  * if there is more to go
  */
-bool flush_console(void)
+bool __flush_console(void)
 {
 	size_t req, len = 0;
 
@@ -39,7 +41,7 @@ bool flush_console(void)
 
 	if (con_out > con_in) {
 		req = INMEM_CON_LEN - con_out;
-		len = con_driver->write(con_buf + con_out, req);
+		len = con_driver->write(con_buf + con_out, req);		
 		con_out = (con_out + len) % INMEM_CON_LEN;
 		if (len < req)
 			goto bail;
@@ -52,12 +54,24 @@ bail:
 	return con_out != con_in;
 }
 
+bool flush_console(void)
+{
+	bool ret;
+
+	lock(&con_lock);
+	ret = __flush_console();
+	unlock(&con_lock);
+
+	return ret;
+}
+
 static void inmem_write(const char *buf, size_t count)
 {
 	while(count--) {
 		con_buf[con_in++] = *(buf++);
-		if (con_in > INMEM_CON_LEN)
+		if (con_in >= INMEM_CON_LEN)
 			con_in = 0;
+
 		/* If head reaches tail, push tail around & drop chars */
 		if (con_in == con_out)
 			con_out = (con_in + 1) % INMEM_CON_LEN;
@@ -66,10 +80,15 @@ static void inmem_write(const char *buf, size_t count)
 
 ssize_t write(int fd __unused, const void *buf, size_t count)
 {
+
+	lock(&con_lock);
+
 	mambo_write(buf, count);
 	inmem_write(buf, count);
 
-	flush_console();
+	__flush_console();
+
+	unlock(&con_lock);
 
 	return count;
 }

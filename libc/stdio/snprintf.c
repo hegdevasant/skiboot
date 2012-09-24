@@ -1,5 +1,5 @@
 /******************************************************************************
- * Copyright (c) 2004, 2008, 2012 IBM Corporation
+ * Copyright (c) 2004, 2008 IBM Corporation
  * All rights reserved.
  * This program and the accompanying materials
  * are made available under the terms of the BSD License
@@ -10,13 +10,21 @@
  *     IBM Corporation - initial implementation
  *****************************************************************************/
 
-#include <stdlib.h>
 #include <stdio.h>
 
-void assert_fail(const char *msg)
+
+int snprintf(char *buff, size_t size, const char *format, ...)
 {
-	fputs(stderr, "Assert fail:");
-	fputs(stderr, msg);
-	fputs(stderr, "\n");
-	abort();
+	va_list ar;
+	int count;
+
+	if ((buff==NULL) || (format==NULL))
+		return(-1);
+
+	va_start(ar, format);
+	count = vsnprintf(buff, size, format, ar);
+	va_end(ar);
+	
+	return(count);
 }
+

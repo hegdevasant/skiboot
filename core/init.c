@@ -18,7 +18,6 @@ static bool state_control_msg(u32 cmd_sub_mod, struct fsp_msg *msg)
 		/* We get a CONTINUE_IPL as a response to OPL */
 		printf("INIT: Got CONTINUE_IPL !\n");
 		ipl_state |= ipl_got_continue;
-		free(msg);
 		return true;
 
 	case FSP_CMD_HV_STATE_CHG:
@@ -30,7 +29,6 @@ static bool state_control_msg(u32 cmd_sub_mod, struct fsp_msg *msg)
 		 * we add support for auto-freeing of messages
 		 */
 		fsp_sync_msg(fsp_mkmsg(FSP_RSP_HV_STATE_CHG, 0), true);
-		free(msg);
 		return true;
 
 	case FSP_CMD_SP_NEW_ROLE:
@@ -38,16 +36,16 @@ static bool state_control_msg(u32 cmd_sub_mod, struct fsp_msg *msg)
 		printf("INIT: FSP assuming new role\n");
 		fsp_sync_msg(fsp_mkmsg(FSP_RSP_SP_NEW_ROLE, 0), true);
 		ipl_state |= ipl_got_new_role;
-		free(msg);
 		return true;
 
 	case FSP_CMD_SP_QUERY_CAPS:
 		printf("INIT: FSP query capabilities\n");
-		/* XXX Do something saner */
-		fsp_sync_msg(fsp_mkmsgw(FSP_RSP_SP_QUERY_CAPS, 4,
-					0x3ff80000, 0, 0, 0), true);
+		/* XXX Do something saner. For now do a synchronous
+	         * response and hard code our capabilities
+		 */
+		fsp_sync_msg(fsp_mkmsg(FSP_RSP_SP_QUERY_CAPS, 4,
+				       0x3ff80000, 0, 0, 0), true);
 		ipl_state |= ipl_got_caps;
-		free(msg);
 		return true;		
 	}
 	return false;
@@ -92,20 +90,28 @@ void main_cpu_entry(void)
 	 */
 	fsp_console_preinit();
 
+	/* Start FSP/HV state controller & perform OPL */
+	start_fsp_state_control();
+
+	op_display(OP_LOG, OP_MOD_INIT, 0x0000);
+
+	op_display(OP_LOG, OP_MOD_INIT, 0x0001);
+
+	/* Tell FSP we are in standby (XXX use running ?) */
+	fsp_sync_msg(fsp_mkmsg(FSP_CMD_HV_FUNCTNAL, 1, 0x01000000), true);
+
+	op_display(OP_LOG, OP_MOD_INIT, 0x0002);
+
+	/* Finish initializing the console */
+	fsp_console_init();
+
+	op_display(OP_LOG, OP_MOD_INIT, 0x0003);
+
 	/* Parse the PACA/PCIA */
 	cpu_parse();
 
 	/* Parse the memory layout. */
 	memory_parse();
-
-	/* Start FSP/HV state controller */
-	start_fsp_state_control();
-
-	/* Tell FSP we are in standby (XXX use running ?) */
-	fsp_sync_msg(fsp_mkmsgw(FSP_CMD_HV_FUNCTNAL, 1, 0x01000000), true);
-
-	/* Finish initializing the console */
-	fsp_console_init();
 
 	/* Nothing to do */
 	while(true)

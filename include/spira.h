@@ -29,7 +29,7 @@ struct spira_ntuple {
 struct spira_ntuples {
 	struct HDIF_array_hdr	array_hdr;
 	struct spira_ntuple	sp_subsys;		/* 0x040 */
-	struct spira_ntuple	ipl_params;		/* 0x060 */
+	struct spira_ntuple	ipl_parms;		/* 0x060 */
 	struct spira_ntuple	nt_enclosure_vpd;	/* 0x080 */
 	struct spira_ntuple	slca;			/* 0x0a0 */
 	struct spira_ntuple	backplane_vpd;		/* 0x0c0 */
@@ -62,6 +62,16 @@ struct spira {
 } __packed __align(0x100);
 
 extern struct spira spira;
+
+/* This macro can be used to check the validity of a pointer returned
+ * by one of the HDIF API functions. It returns true if the pointer
+ * appears valid. If it's not valid and not NULL, it will print some
+ * error in the log as well.
+ */
+#define CHECK_SPPTR(_ptr)	spira_check_ptr(_ptr, __FILE__, __LINE__)
+
+extern bool spira_check_ptr(const void *ptr, const char *file,
+			    unsigned int line);
 
 struct proc_init_data {
 	struct HDIF_common_hdr	hdr;
@@ -136,5 +146,21 @@ struct spss_iopath {
 		} __packed psi;
 	};
 } __packed;
+
+/*
+ * IPL Parms structure
+ *
+ */
+
+/* Idata index 8: serial ports */
+#define IPLPARMS_IDATA_SERIAL	8
+
+/* An HDIF array of serial descriptions */
+struct iplparms_serial {
+	uint8_t		loc_code[80];
+	uint16_t	rsrc_id;
+	uint16_t	flags;
+#define PLPARMS_SERIAL_FLAGS_CALLHOME	0x8000
+};
 
 #endif /* __SPIRA_H */

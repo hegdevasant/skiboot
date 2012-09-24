@@ -87,10 +87,12 @@ naca:
 	.byte	0x01			/* 0x01b7 : PCIA format */
 	.space	0xe48
 
+	.balign	0x10
 hv_release_data:
 	.space	58
 	.llong	0x666			/* VRM ? */
 
+	.balign	0x10
 hv_lid_load_table:
 	.long	0x10
 	.long	0x10

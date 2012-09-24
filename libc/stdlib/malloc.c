@@ -16,7 +16,7 @@
 #include "string.h"
 #include "unistd.h"
 #include "malloc_defs.h"
-
+#include "assert.h"
 
 static int clean(void);
 
@@ -27,17 +27,29 @@ static char *act;
 /* Pointers to start and end of heap: */
 static char *heap_start, *heap_end;
 
+static struct lock malloc_lock;
+
+#ifdef DEBUG_MALLOC
+#define ASSERT_MPTR(_ptr)  					\
+	assert ((_ptr) && ((char *)(_ptr)) >= heap_start &&	\
+		((char *)(_ptr) < heap_end))
+#else
+#define ASSERT_MPTR(_ptr) do { } while(0)
+#endif
 
 /*
  * Standard malloc function
  */
-void *
-malloc(size_t size)
+static void *__malloc(size_t size)
 {
 	char *header;
 	void *data;
-	size_t blksize;         /* size of memory block including the chunk */
+	size_t blksize;
 
+	/* align size */
+	size = (size + 7) & ~7ul;
+
+         /* size of memory block including the chunk */
 	blksize = size + sizeof(struct chunk);
 
 	/* has malloc been called for the first time? */
@@ -56,6 +68,9 @@ malloc(size_t size)
 	header = act;
 	data = act + sizeof(struct chunk);
 
+	ASSERT_MPTR(header);
+	ASSERT_MPTR(data);
+
 	/* Check if there is space left in the uninitialized part of the heap */
 	if (act + blksize > heap_end) {
 		//search at begin of heap
@@ -72,16 +87,18 @@ malloc(size_t size)
 		if (header >= act) {
 			if (clean()) {
 				// merging of free blocks succeeded, so try again
-				return malloc(size);
+				return __malloc(size);
 			} else if (sbrk(blksize) == heap_end) {
 				// succeeded to get more memory, so try again
 				heap_end += blksize;
-				return malloc(size);
+				return __malloc(size);
 			} else {
 				// No more memory available
 				return 0;
 			}
 		}
+
+		ASSERT_MPTR(header);
 
 		// Check if we need to split this memory block into two
 		if (((struct chunk *) header)->length > blksize) {
@@ -98,11 +115,15 @@ malloc(size_t size)
 			((struct chunk *) header)->inuse = 0;
 			((struct chunk *) header)->length =
 			    alt - blksize;
+
+			assert(!((alt - blksize) & 7));
+			assert(!((unsigned long)header & 7));
 		} else {
 			//new memory matched exactly in available memory
 			((struct chunk *) header)->inuse = 1;
 			data = header + sizeof(struct chunk);
 		}
+		ASSERT_MPTR(data);
 
 	} else {
 
@@ -115,23 +136,31 @@ malloc(size_t size)
 	return data;
 }
 
+void *malloc(size_t size)
+{
+	void *ret;
+
+	lock_malloc();
+	ret = __malloc(size);
+	unlock_malloc();
+
+	return ret;
+}
+
 
 /*
  * Merge free memory blocks in initialized heap if possible
  */
-static int
-clean(void)
+static int clean(void)
 {
 	char *header;
 	char *firstfree = 0;
 	char check = 0;
 
 	header = heap_start;
-	//if (act == 0)		// This should never happen
-	//	act = heap_end;
+	assert(act != 0);
 
 	while (header < act) {
-
 		if (((struct chunk *) header)->inuse == 0) {
 			if (firstfree == 0) {
 				/* First free block in a row, only save address */
@@ -148,12 +177,10 @@ clean(void)
 			firstfree = 0;
 
 		}
-
 		header = header + sizeof(struct chunk)
 		         + ((struct chunk *) header)->length;
 
 	}
-
 	return check;
 }
 
@@ -165,3 +192,14 @@ void *zalloc(size_t size)
 		memset(ret, 0, size);
 	return ret;
 }
+
+void lock_malloc(void)
+{
+	lock(&malloc_lock);
+}
+
+void unlock_malloc(void)
+{
+	unlock(&malloc_lock);
+}
+

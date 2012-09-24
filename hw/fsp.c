@@ -3,11 +3,12 @@
  *
  * TODO: - Handle redundant FSPs
  */
+#include <stdarg.h>
 #include <processor.h>
 #include <spira.h>
 #include <io.h>
 #include <fsp.h>
-#include <stdarg.h>
+#include <lock.h>
 
 //#define DBG(fmt...)	printf(fmt)
 #define DBG(fmt...)	do { } while(0)
@@ -43,6 +44,7 @@ static struct fsp *active_fsp;
 static u16 fsp_curseq = 0x8000;
 static u64 *fsp_tce_table;
 static u32 fsp_inbound_off;
+static struct lock fsp_lock;
 
 struct fsp_cmdclass {
 	int timeout;
@@ -128,6 +130,35 @@ static struct fsp_cmdclass *fsp_get_cmdclass(struct fsp_msg *msg)
 	return __fsp_get_cmdclass(c);
 }
 
+static struct fsp_msg *__fsp_allocmsg(void)
+{
+	return zalloc(sizeof(struct fsp_msg));
+}
+
+struct fsp_msg *fsp_allocmsg(bool alloc_response)
+{
+	struct fsp_msg *msg;
+
+	msg = __fsp_allocmsg();
+	if (!msg)
+		return NULL;
+	if (alloc_response)
+		msg->resp = __fsp_allocmsg();
+	return msg;
+}
+
+void __fsp_freemsg(struct fsp_msg *msg)
+{
+	free(msg);
+}
+
+void fsp_freemsg(struct fsp_msg *msg)
+{
+	if (msg->resp)
+		__fsp_freemsg(msg->resp);
+	__fsp_freemsg(msg);
+}
+
 static void fsp_wreg(struct fsp *fsp, u32 reg, u32 val)
 {
 	struct fsp_iopath *iop;
@@ -208,7 +239,11 @@ static bool fsp_post_msg(struct fsp *fsp, struct fsp_msg *msg)
 	if (fsp_check_err(fsp))
 		return false;
 
-	fsp_trace_msg(msg, "snd");
+	/* We avoid tracing outgoing vserial pokes or we end up
+	 * recursively calling into it again and again..
+	 */
+	if ((msg->word0 & 0xff) != 0xe1)
+		fsp_trace_msg(msg, "snd");
 
 	/* Sanity: XUP and SPPEND should both be clear */
 	ctl = fsp_rreg(fsp, FSP_MBX1_HCTL_REG);
@@ -267,77 +302,82 @@ static void fsp_poke_queue(struct fsp_cmdclass *cmdclass)
 	}
 }
 
-struct fsp_msg *fsp_mkmsg(u32 cmd_sub_mod, u8 add_len, ...)
+static void __fsp_fillmsg(struct fsp_msg *msg, u32 cmd_sub_mod,
+			  u8 add_words, va_list list)
 {
-	struct fsp_msg *msg = zalloc(sizeof(struct fsp_msg));
-	va_list list;
 	bool response = !!(cmd_sub_mod & 0x1000000);
 	u8 cmd = (cmd_sub_mod >> 16) & 0xff;
 	u8 sub = (cmd_sub_mod >>  8) & 0xff;
 	u8 mod =  cmd_sub_mod & 0xff;
 	int i;
 
-	if (!msg) {
-		prerror("FSP: Failed to allocate struct fsp_msg\n");
-		return NULL;
-	}
 	msg->word0 = cmd & 0xff;
 	msg->word1 = mod << 8 | sub;
-	msg->dlen = add_len;
 	msg->response = response;
+	msg->dlen = add_words << 2;
 
-	va_start(list, add_len);
-	for (i = 0; i < add_len; i++)
-		msg->data.bytes[i] = va_arg(list, int);
-	va_end(list);
-
-	return msg;
-}
-
-struct fsp_msg *fsp_mkmsgw(u32 cmd_sub_mod, u8 add_len, ...)
-{
-	struct fsp_msg *msg = zalloc(sizeof(struct fsp_msg));
-	va_list list;
-	bool response = !!(cmd_sub_mod & 0x1000000);
-	u8 cmd = (cmd_sub_mod >> 16) & 0xff;
-	u8 sub = (cmd_sub_mod >>  8) & 0xff;
-	u8 mod =  cmd_sub_mod & 0xff;
-	int i;
-
-	if (!msg) {
-		prerror("FSP: Failed to allocate struct fsp_msg\n");
-		return NULL;
-	}
-	msg->word0 = cmd & 0xff;
-	msg->word1 = mod << 8 | sub;
-	msg->dlen = add_len * 4;
-	msg->response = response;
-
-	va_start(list, add_len);
-	for (i = 0; i < add_len; i++)
+	for (i = 0; i < add_words; i++)
 		msg->data.words[i] = va_arg(list, unsigned int);
 	va_end(list);
 
+}
+
+extern void fsp_fillmsg(struct fsp_msg *msg, u32 cmd_sub_mod, u8 add_words, ...)
+{
+	va_list list;
+
+	va_start(list, add_words);
+	__fsp_fillmsg(msg, cmd_sub_mod, add_words, list);
+	va_end(list);
+}
+
+struct fsp_msg *fsp_mkmsg(u32 cmd_sub_mod, u8 add_words, ...)
+{
+	struct fsp_msg *msg = fsp_allocmsg(!!(cmd_sub_mod & 0x1000000));
+	va_list list;
+
+	if (!msg) {
+		prerror("FSP: Failed to allocate struct fsp_msg\n");
+		return NULL;
+	}
+
+	va_start(list, add_words);
+	__fsp_fillmsg(msg, cmd_sub_mod, add_words, list);
+	va_end(list);
+
 	return msg;
 }
 
-int fsp_queue_msg(struct fsp_msg *msg)
+int fsp_queue_msg(struct fsp_msg *msg, void (*comp)(struct fsp_msg *msg))
 {
 	struct fsp_cmdclass *cmdclass;
+	bool need_unlock;
 	u16 seq;
+	int rc = 0;
+
+	/* Recursive locking */
+	need_unlock = lock_recursive(&fsp_lock);
 
 	/* Grab a new sequence number */
 	seq = fsp_curseq;
 	fsp_curseq = fsp_curseq + 1;
 	if (fsp_curseq == 0)
 		fsp_curseq = 0x8000;
-	msg->word0 |= seq << 16;
+	msg->word0 = (msg->word0 & 0xffff) | seq << 16;
+
+	/* Set completion */
+	msg->complete = comp;
+
+	/* Clear response state */
+	if (msg->resp)
+		msg->resp->state = fsp_msg_unused;
 
 	/* Queue the message in the appropriate queue */
 	cmdclass = fsp_get_cmdclass(msg);
 	if (!cmdclass) {
 		prerror("FSP: Invalid message class\n");
-		return -1;
+		rc = -1;
+		goto unlock;
 	}
 
 	list_add_tail(&cmdclass->msgq, &msg->link);
@@ -346,21 +386,34 @@ int fsp_queue_msg(struct fsp_msg *msg)
 	/* Poke the queue */
 	fsp_poke_queue(cmdclass);
 
-	return 0;
+ unlock:
+	if (need_unlock)
+		unlock(&fsp_lock);
+
+	return rc;
 }
 
+/* WARNING: This will drop the FSP lock !!! */
 static void fsp_complete_msg(struct fsp_msg *msg)
 {
 	struct fsp_cmdclass *cmdclass = fsp_get_cmdclass(msg);
+	void (*comp)(struct fsp_msg *msg);
+
 	assert(cmdclass);
 
 	DBG("  completing msg,  word0: 0x%08x\n", msg->word0);
 
+	comp = msg->complete;
 	list_del_from(&cmdclass->msgq, &msg->link);
 	cmdclass->busy = false;
 	msg->state = fsp_msg_done;
+
+	unlock(&fsp_lock);
+	if (comp)
+		(*comp)(msg);
 }
 
+/* WARNING: This will drop the FSP lock !!! */
 static void fsp_complete_send(struct fsp *fsp)
 {
 	struct fsp_msg *msg = fsp->pending;
@@ -371,9 +424,10 @@ static void fsp_complete_send(struct fsp *fsp)
 	DBG("  completing send, word0: 0x%08x, resp: %d\n",
 	    msg->word0, msg->response);
 
-	if (msg->response)
+	if (msg->response) {
 		msg->state = fsp_msg_wresp;
-	else
+		unlock(&fsp_lock);
+	} else
 		fsp_complete_msg(msg);
 }
 
@@ -388,6 +442,7 @@ static void  fsp_alloc_inbound(struct fsp_msg *msg)
 	printf("FSP: Allocate inbound buffer func: %04x len: %d\n",
 	       func_id, len);
 
+	lock(&fsp_lock);
 	if ((fsp_inbound_off + len) > FSP_INBOUND_SIZE) {
 		prerror("FSP: Out of space in buffer area !\n");
 		rc = 0xeb;
@@ -398,13 +453,17 @@ static void  fsp_alloc_inbound(struct fsp_msg *msg)
 	len = (len + 0xfff) & ~0xfff;
 	fsp_inbound_off += len;
 	fsp_tce_map(tce_token, buf, len);
+	printf("FSP:  -> buffer at 0x%p, TCE: 0x%08x, alen: 0x%x\n",
+	       buf, tce_token, len);
 	act_len = len;
 
  reply:
-	fsp_sync_msg(fsp_mkmsgw(FSP_RSP_ALLOC_INBOUND | rc,
-				3, 0, tce_token, act_len), true);
+	unlock(&fsp_lock);
+	fsp_queue_msg(fsp_mkmsg(FSP_RSP_ALLOC_INBOUND | rc,
+				3, 0, tce_token, act_len), fsp_freemsg);
 }
 
+/* This is called without the FSP lock */
 static void fsp_handle_command(struct fsp_msg *msg)
 {
 	struct fsp_cmdclass *cmdclass = fsp_get_cmdclass(msg);
@@ -426,40 +485,34 @@ static void fsp_handle_command(struct fsp_msg *msg)
 	case FSP_CMD_ALLOC_INBOUND:
 		fsp_alloc_inbound(msg);
 		goto free;
+	case FSP_CMD_SP_RELOAD_COMP:
+		printf("FSP: SP says Reset/Reload complete\n");
+		printf("     There is %s FSP dump\n",
+		       (msg->data.bytes[3] & 0x20) ? "an" : "no");
+		/* XXX Handle FSP dumps ... one day maybe */
+		goto free;
 	}
 
 	list_for_each_safe(&cmdclass->clientq, client, next, link) {
 		if (client->message(cmd_sub_mod, msg))
-			return;
+			goto free;
 	}
 
 	prerror("FSP: Unhandled message %06x\n", cmd_sub_mod);
  free:
-	free(msg);
+	fsp_freemsg(msg);
 }
 
-static void fsp_handle_incoming(struct fsp *fsp)
+static void __fsp_fill_incoming(struct fsp *fsp, struct fsp_msg *msg,
+				int dlen, u32 w0, u32 w1)
 {
-	struct fsp_msg *msg = zalloc(sizeof(struct fsp_msg));
-	u32 h0, w0, w1, reg;
-	int i, dlen, wlen;
-	bool special_response = false;
+	unsigned int wlen, i, reg;
 
-	h0 = fsp_rreg(fsp, FSP_MBX1_FHDR0_REG);
-	dlen = (h0 >> 16) & 0xff;
-
-	reg = FSP_MBX1_FDATA_AREA;
-	w0 = fsp_rreg(fsp, reg); reg += 4;
-	w1 = fsp_rreg(fsp, reg); reg += 4;
-
-	DBG("  Incoming: w0: 0x%08x, w1: 0x%08x, dlen: %d\n",
-	    w0, w1, dlen);
-
-	msg->state = fsp_msg_incoming;
 	msg->dlen = dlen - 8;
 	msg->word0 = w0;
 	msg->word1 = w1;
 	wlen = (dlen + 3) >> 2;
+	reg = FSP_MBX1_FDATA_AREA + 8;
 	for (i = 0; i < wlen; i++) {
 		msg->data.words[i] = fsp_rreg(fsp, reg);
 		reg += 4;
@@ -473,6 +526,34 @@ static void fsp_handle_incoming(struct fsp *fsp)
 		 FSP_MBX_CTL_DCSP_MASK);
 
 	fsp_trace_msg(msg, "got");
+}
+
+static void __fsp_drop_incoming(struct fsp *fsp)
+{
+	/* Ack it (XDN) and clear HPEND & counts */
+	fsp_wreg(fsp, FSP_MBX1_HCTL_REG,
+		 FSP_MBX_CTL_XDN |
+		 FSP_MBX_CTL_HPEND |
+		 FSP_MBX_CTL_HCSP_MASK |
+		 FSP_MBX_CTL_DCSP_MASK);
+}
+
+/* WARNING: This will drop the FSP lock */
+static void fsp_handle_incoming(struct fsp *fsp)
+{
+	struct fsp_msg *msg;
+	u32 h0, w0, w1;
+	unsigned int dlen;
+	bool special_response = false;
+
+	h0 = fsp_rreg(fsp, FSP_MBX1_FHDR0_REG);
+	dlen = (h0 >> 16) & 0xff;
+
+	w0 = fsp_rreg(fsp, FSP_MBX1_FDATA_AREA);
+	w1 = fsp_rreg(fsp, FSP_MBX1_FDATA_AREA + 4);
+
+	DBG("  Incoming: w0: 0x%08x, w1: 0x%08x, dlen: %d\n",
+	    w0, w1, dlen);
 
 	/* Some responses are expected out of band */
 	if ((w0 & 0xff) == FSP_MCLASS_HMC_INTFMSG  &&
@@ -481,25 +562,61 @@ static void fsp_handle_incoming(struct fsp *fsp)
 
 	/* Check for response bit */
 	if (w1 & 0x80 && !special_response) {
-		struct fsp_cmdclass *cmdclass = fsp_get_cmdclass(msg);
+		struct fsp_cmdclass *cmdclass = __fsp_get_cmdclass(w0 & 0xff);
 		struct fsp_msg *req;
 
-		if (!cmdclass->busy || list_empty(&cmdclass->msgq)) {
+		if (!cmdclass->busy || list_empty(&cmdclass->msgq)) {	
+			unlock(&fsp_lock);
 			prerror("FSP #%d: Got orphan response !\n", fsp->index);
-			/* XXX DUMP MESSAGE */
-			free(msg);
+			__fsp_drop_incoming(fsp);
 			return;
 		}
 		req = list_top(&cmdclass->msgq, struct fsp_msg, link);
 
-		/* XXX Check matching req/resp ? */
-		DBG("  -> resp for w0: %x w1: %x\n", req->word0, req->word1);
-		req->resp = msg;
+		/* Check if the response seems to match the message */
+		if (req->state != fsp_msg_wresp ||
+		    (req->word0 & 0xff) != (w0 & 0xff) ||
+		    (req->word1 & 0xff) != (w1 & 0x7f)) {
+			__fsp_drop_incoming(fsp);
+			unlock(&fsp_lock);
+			prerror("FSP #%d: Response doesn't match pending msg\n",
+				fsp->index);
+			return;
+		}
+
+		/* Allocate response if needed */
+		if (!req->resp) {
+			req->resp = __fsp_allocmsg();
+			if (!req->resp) {
+				__fsp_drop_incoming(fsp);
+				unlock(&fsp_lock);
+				prerror("FSP #%d: Failed to allocate response\n",
+					fsp->index);
+				return;
+			}
+		}
+
+		/* Populate and complete (will drop the lock) */
+		req->resp->state = fsp_msg_response;
+		__fsp_fill_incoming(fsp, req->resp, dlen, w0, w1);
 		fsp_complete_msg(req);
 		return;
 	}
 
-	/* Handle FSP commands. This can recurse into fsp_queue_command etc.. */
+	/* Allocate an incoming message */
+	msg = __fsp_allocmsg();
+	if (!msg) {
+		__fsp_drop_incoming(fsp);
+		unlock(&fsp_lock);
+		prerror("FSP #%d: Failed to allocate incoming msg\n",
+			fsp->index);
+		return;
+	}
+	msg->state = fsp_msg_incoming;
+	__fsp_fill_incoming(fsp, msg, dlen, w0, w1);
+	unlock(&fsp_lock);
+
+	/* Handle FSP commands. This can recurse into fsp_queue_msg etc.. */
 	fsp_handle_command(msg);
 }
 
@@ -525,9 +642,14 @@ void fsp_poll(void)
 	struct fsp *fsp = fsp_get_active();
 	u32 ctl;
 
+	lock(&fsp_lock);
+
 	/* Check for error state */
-	if (fsp_check_err(fsp) || fsp->state == fsp_mbx_error)
+ again:
+	if (fsp_check_err(fsp) || fsp->state == fsp_mbx_error) {
+		unlock(&fsp_lock);
 		return;
+	}
 
 	/* Poll FSP CTL */
 	ctl = fsp_rreg(fsp, FSP_MBX1_HCTL_REG);
@@ -539,15 +661,20 @@ void fsp_poll(void)
 	if (ctl & FSP_MBX_CTL_XUP) {
 		fsp_wreg(fsp, FSP_MBX1_HCTL_REG, FSP_MBX_CTL_XUP);
 		if (fsp->state == fsp_mbx_send) {
-
-			/* Complete message */
-			fsp_complete_send(fsp);
-
 			/* mbox is free */
 			fsp->state = fsp_mbx_idle;
 
+			/* Complete message (will srop lock) */
+			fsp_complete_send(fsp);
+			lock(&fsp_lock);
+
 			/* Check for something else to send */
 			fsp_check_queues();
+
+			/* Lock can have been dropped, so ctl is now
+			 * potentially invalid, let's recheck
+			 */
+			goto again;
 		} else {
 			prerror("FSP #%d: Got XUP with no pending message !\n",
 				fsp->index);
@@ -558,37 +685,32 @@ void fsp_poll(void)
 		/* XXX Handle send timeouts!!! */
 	}
 
-	/* Is there an incoming message ? */
-	if (ctl & FSP_MBX_CTL_HPEND)
+	/* Is there an incoming message ? This will drop the lock */
+	if (ctl & FSP_MBX_CTL_HPEND) {
 		fsp_handle_incoming(fsp);
+		return;
+	}
+
+	unlock(&fsp_lock);
 }
 
-int fsp_wait_complete(struct fsp_msg *msg)
+int fsp_sync_msg(struct fsp_msg *msg, bool autofree)
 {
+	int rc;
+
+	rc = fsp_queue_msg(msg, NULL);
+	if (rc)
+		goto bail;
+
 	/* XXX HANDLE TIMEOUTS */
 	while(msg->state != fsp_msg_done)
 		fsp_poll();
 
-	return 0;
-}
-
-int fsp_sync_msg(struct fsp_msg *msg, bool free_it)
-{
-	int rc;
-
-	rc = fsp_queue_msg(msg);
-	if (rc)
-		goto bail;
-
-	rc = fsp_wait_complete(msg);
-	if (rc == 0 && msg->resp)
+	if (msg->resp)
 		rc = (msg->resp->word1 >> 8) & 0xff;
  bail:
-	if (free_it) {
-		if (msg->resp)
-			free(msg->resp);
-		free(msg);
-	}
+	if (autofree)
+		fsp_freemsg(msg);
 	return rc;
 }
 
@@ -599,7 +721,7 @@ static bool fsp_check_impl(const void *spss, int i)
 
 	/* Find an check the SP Implementation structure */
 	sp_impl = HDIF_get_idata(spss, SPSS_IDATA_SP_IMPL, NULL);
-	if (!sp_impl) {
+	if (!CHECK_SPPTR(sp_impl)) {
 		prerror("FSP #%d: SPSS/SP_Implementation not found !\n", i);
 		return false;
 	}
@@ -734,7 +856,7 @@ static void fsp_create_fsp(const void *spss, int index)
 
 		iopath = HDIF_get_iarray_item(spss, SPSS_IDATA_SP_IOPATH,
 					      i, &iopath_sz);
-		if (!iopath) {
+		if (!CHECK_SPPTR(iopath)) {
 			prerror("FSP #%d: Can't find IO PATH %d\n", index, i);
 			fsp->iopath_count = i;
 			break;

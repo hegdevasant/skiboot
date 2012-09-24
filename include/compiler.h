@@ -15,6 +15,12 @@
 #define offsetof(type,m)	__builtin_offsetof(type,m)
 #endif
 
+/* Compiler barrier */
+static inline void barrier(void)
+{
+	asm volatile("" : : : "memory");
+}
+
 #endif /* __ASSEMBLY__ */
 
 /* Stringification macro */
