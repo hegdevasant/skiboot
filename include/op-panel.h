@@ -18,6 +18,7 @@ enum op_module {
 	OP_MOD_LOCK	= 0x3032,	/* '02' - spinlocks */
 	OP_MOD_FSP	= 0x3033,	/* '03' - FSP */
 	OP_MOD_FSPCON	= 0x3034,	/* '04' - FSPCON */
+	OP_MOD_CHIPTOD	= 0x3035,	/* '05' - ChipTOP */
 };
 
 /* Common codes:
@@ -26,6 +27,7 @@ enum op_module {
  * 'BA010001' : Unlocking unlocked lock
  * 'BA010002' : Unlocking not-owned lock
  * 'BA006666' : Abort
+ * 'BA050000' : Failed ChipTOD init/sync
  */
 
 extern void op_display(enum op_severity, enum op_module, uint16_t code);

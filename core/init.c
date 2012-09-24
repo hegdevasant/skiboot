@@ -1,6 +1,7 @@
 #include <skiboot.h>
 #include <fsp.h>
 #include <memory.h>
+#include <chiptod.h>
 
 /*
  * Boot semaphore, incremented by each CPU calling in
@@ -108,6 +109,11 @@ void main_cpu_entry(void)
 	fsp_console_init();
 
 	op_display(OP_LOG, OP_MOD_INIT, 0x0003);
+
+	/* XXX Call in secondary CPUs */
+
+	/* Enable timebase synchronization */
+	chiptod_init();
 
 	/* Nothing to do */
 	while(true)

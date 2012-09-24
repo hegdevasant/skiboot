@@ -161,6 +161,33 @@ struct iplparms_serial {
 	uint16_t	rsrc_id;
 	uint16_t	flags;
 #define PLPARMS_SERIAL_FLAGS_CALLHOME	0x8000
-};
+} __packed;
+
+/*
+ * Chip TOD structure
+ *
+ * This is an array of 32 entries (I assume per possible chip)
+ */
+
+/* Idata index 0: Chip ID data (array) */
+#define CHIPTOD_IDATA_CHIPID	0
+
+struct chiptod_chipid {
+	uint32_t	chip_id;
+	uint32_t	flags;
+#define CHIPTOD_ID_FLAGS_PRIMARY	0x02
+#define CHIPTOD_ID_FLAGS_SECONDARY	0x01
+#define CHIPTOD_ID_FLAGS_STATUS_MASK	0x0c
+#define CHIPTOD_ID_FLAGS_STATUS_OK	0x04
+#define CHIPTOD_ID_FLAGS_STATUS_NOK	0x08
+} __packed;
+
+/* Idata index 0: Chip Initialization data */
+#define CHIPTOD_IDATA_CHIPINIT	1
+
+struct chiptod_chipinit {
+	uint32_t	ctrl_reg_internal;
+	uint32_t	tod_ctrl_reg;
+} __packed;
 
 #endif /* __SPIRA_H */
