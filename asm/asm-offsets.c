@@ -2,6 +2,7 @@
 #include <types.h>
 #include <skiboot.h>
 #include <spira.h>
+#include <processor.h>
 
 #define DEFINE(sym, val) \
         asm volatile("\n->" #sym " %0 " #val : : "i" (val))
@@ -11,7 +12,14 @@
 
 int main(void)
 {
-//	OFFSET(HTHREAD_HV_TREGS, hthread, hv_tregs);
 	OFFSET(SPIRA_ACTUAL_SIZE, spira, reserved);
+
+#if 0 /* Test stuff */
+	DEFINE(FOOBAR1M, SPR_TFMR_MAX_CYC_BET_STEPS_MASK);
+	DEFINE(FOOBAR1S, SPR_TFMR_MAX_CYC_BET_STEPS_LSH);
+	DEFINE(FOOBAR2M, SPR_TFMR_SYNC_BIT_SEL_MASK);
+	DEFINE(FOOBAR2S, SPR_TFMR_SYNC_BIT_SEL_LSH);
+#endif
+
 	return 0;
 }
