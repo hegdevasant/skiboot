@@ -24,6 +24,7 @@ SECTIONS
 		*(.opd)
 	}
   
+	. = ALIGN(0x1000);
 	__toc_start = .;
 	.got : {
 		*(.got)
