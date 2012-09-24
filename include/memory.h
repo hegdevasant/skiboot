@@ -41,6 +41,9 @@ struct address_range {
 	/* This is our element inside msarea's Address Range Array. */
 	const struct HDIF_ms_area_address_range *arange;
 
+	/* Which primary thread (ie. physical chip id) are we connected to? */
+	struct cpu_thread *attached;
+
 	/* Interleaved MS Area ID, or -1 if not shared. */
 	int share_id;
 

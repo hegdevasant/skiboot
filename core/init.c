@@ -2,6 +2,7 @@
 #include <fsp.h>
 #include <memory.h>
 #include <chiptod.h>
+#include <cpu.h>
 
 /*
  * Boot semaphore, incremented by each CPU calling in
@@ -95,9 +96,6 @@ void main_cpu_entry(void)
 
 	op_display(OP_LOG, OP_MOD_INIT, 0x0000);
 
-	/* Parse the memory layout. */
-	memory_parse();
-
 	op_display(OP_LOG, OP_MOD_INIT, 0x0001);
 
 	/* Tell FSP we are in standby (XXX use running ?) */
@@ -110,10 +108,16 @@ void main_cpu_entry(void)
 
 	op_display(OP_LOG, OP_MOD_INIT, 0x0003);
 
+	/* Parse the PACA/PCIA */
+	cpu_parse();
+
 	/* XXX Call in secondary CPUs */
 
 	/* Enable timebase synchronization */
 	chiptod_init();
+
+	/* Parse the memory layout. */
+	memory_parse();
 
 	/* Nothing to do */
 	while(true)
