@@ -4,19 +4,6 @@
 
 struct list_head address_ranges = LIST_HEAD_INIT(address_ranges);
 
-/* Mainstore Address Configuration */
-struct HDIF_ms_vpd_msac {
-	uint64_t max_configured_ms_address;
-	uint64_t max_possible_ms_address;
-	uint32_t deprecated;
-	uint64_t mirrorable_memory_starting_address;
-} __attribute__((packed));
-
-/* Total Configured Mainstore */
-struct HDIF_ms_vpd_tcms {
-	uint64_t total_in_mb;
-};
-
 struct HDIF_ms_area_id {
 	uint16_t id;
 	uint16_t parent_type;
@@ -141,7 +128,7 @@ static void get_msareas(const struct HDIF_common_hdr *ms_vpd)
 	const struct HDIF_child_ptr *msptr;
 
 	/* First childptr refers to msareas. */
-	msptr = HDIF_child_arr(ms_vpd, 0);
+	msptr = HDIF_child_arr(ms_vpd, MSVPD_CHILD_MS_AREAS);
 	if (!CHECK_SPPTR(msptr)) {
 		prerror("ms_vpd: no children at %p\n", ms_vpd);
 		return;
@@ -217,51 +204,60 @@ static void get_msareas(const struct HDIF_common_hdr *ms_vpd)
 	}
 }
 
-void memory_parse(void)
+bool __memory_parse(void)
 {
 	struct HDIF_common_hdr *ms_vpd;
-	unsigned int size, i;
-	const struct HDIF_ms_vpd_msac *msac;
-	const struct HDIF_ms_vpd_tcms *tcms;
+	const struct msvpd_ms_addr_config *msac;
+	const struct msvpd_total_config_ms *tcms;
+	unsigned int size;
 
 	ms_vpd = spira.ntuples.ms_vpd.addr;
-	if (!HDIF_check(ms_vpd, "MS VPD")) {
-		prerror("ms_vpd: invalid id field at %p\n", ms_vpd);
-		return;
+	if (!ms_vpd || !HDIF_check(ms_vpd, MSVPD_HDIF_SIG)) {
+		prerror("MS VPD: invalid id field at %p\n", ms_vpd);
+		op_display(OP_FATAL, OP_MOD_MEM, 0x0000);
+		return false;
 	}
 	if (spira.ntuples.ms_vpd.act_len < sizeof(*ms_vpd)) {
-		prerror("ms_vpd: invalid size %u\n",
+		prerror("MS VPD: invalid size %u\n",
 			spira.ntuples.ms_vpd.act_len);
-		return;
+		op_display(OP_FATAL, OP_MOD_MEM, 0x0001);
+		return false;
 	}
 
-	for (i = 0; i < spira.ntuples.ms_vpd.act_cnt; i++) {
-		printf("MSVPD[%i] is at %p\n", i, ms_vpd);
+	printf("MS VPD: is at %p\n", ms_vpd);
 
-		msac = HDIF_get_idata(ms_vpd, 0, &size);
-		if (!CHECK_SPPTR(msac) || size < sizeof(*msac)) {
-			prerror("ms_vpd[%i]: bad msac size %u @ %p\n",
-				i, size, msac);
-			return;
-		}
-		printf("MSAC[%i] is at %p\n", i, msac);
-
-		tcms = HDIF_get_idata(ms_vpd, 1, &size);
-		if (!CHECK_SPPTR(tcms) || size < sizeof(*tcms)) {
-			prerror("ms_vpd[%i]: bad tcms size %u @ %p\n",
-				i, size, tcms);
-			return;
-		}
-		printf("TCMS is at %p\n", tcms);
-
-		printf("Maximum configured address: 0x%llx\n",
-		       msac->max_configured_ms_address);
-		printf("Maximum possible address: 0x%llx\n",
-		       msac->max_possible_ms_address);
-
-		get_msareas(ms_vpd);
-
-		ms_vpd = (void *)ms_vpd + spira.ntuples.ms_vpd.act_len;
-		printf("Total MB of RAM: 0x%llx\n", tcms->total_in_mb);
+	msac = HDIF_get_idata(ms_vpd, MSVPD_IDATA_MS_ADDR_CONFIG, &size);
+	if (!CHECK_SPPTR(msac) || size < sizeof(*msac)) {
+		prerror("MS VPD: bad msac size %u @ %p\n", size, msac);
+		op_display(OP_FATAL, OP_MOD_MEM, 0x0002);
+		return false;
 	}
-}	
+	printf("MS VPD: MSAC is at %p\n", msac);
+
+	tcms = HDIF_get_idata(ms_vpd, MSVPD_IDATA_TOTAL_CONFIG_MS, &size);
+	if (!CHECK_SPPTR(tcms) || size < sizeof(*tcms)) {
+		prerror("MS VPD: Bad tcms size %u @ %p\n", size, tcms);
+		op_display(OP_FATAL, OP_MOD_MEM, 0x0003);
+		return false;
+	}
+	printf("MS VPD: TCMS is at %p\n", tcms);
+
+	printf("MS VPD: Maximum configured address: 0x%llx\n",
+	       msac->max_configured_ms_address);
+	printf("MS VPD: Maximum possible address: 0x%llx\n",
+	       msac->max_possible_ms_address);
+
+	get_msareas(ms_vpd);
+
+	printf("MS VPD: Total MB of RAM: 0x%llx\n", tcms->total_in_mb);
+
+	return true;
+}
+
+void memory_parse(void)
+{
+	if (!__memory_parse()) {
+		prerror("MS VPD: Failed memory init !\n");
+		abort();
+	}
+}

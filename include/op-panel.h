@@ -20,6 +20,7 @@ enum op_module {
 	OP_MOD_FSPCON	= 0x3034,	/* '04' - FSPCON */
 	OP_MOD_CHIPTOD	= 0x3035,	/* '05' - ChipTOP */
 	OP_MOD_CPU	= 0x3036,	/* '06' - CPU bringup */
+	OP_MOD_MEM	= 0x3037,	/* '07' - Memory */
 };
 
 /* Common codes:
@@ -35,6 +36,10 @@ enum op_module {
  * 'BA060003' : Bad (or not found) CPU id data
  * 'BA060004' : Primary CPU marked unavailable
  * 'BA060005' : Bad (or not found) CPU cache data
+ * 'BA070000' : Cannot find MS VPD or invalid
+ * 'BA070001' : MS VPD wrong size
+ * 'BA070002' : MS VPD doesn't have an MSAC
+ * 'BA070003' : MS VPD doesn't have a total config
  */
 
 extern void op_display(enum op_severity, enum op_module, uint16_t code);

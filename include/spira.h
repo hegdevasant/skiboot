@@ -190,4 +190,59 @@ struct chiptod_chipinit {
 	uint32_t	tod_ctrl_reg;
 } __packed;
 
+/*
+ * MS VPD - Memory Description Tree
+ *
+ * One such structure pointing to the various memory arrays
+ * along with other infos about the BCRs, Page Mover, XSCOM,...
+ */
+#define MSVPD_HDIF_SIG	"MS VPD"
+
+/* Idata index 0: Mainstore address config */
+#define MSVPD_IDATA_MS_ADDR_CONFIG	0
+
+/* Mainstore Address Configuration */
+struct msvpd_ms_addr_config {
+	uint64_t max_configured_ms_address;
+	uint64_t max_possible_ms_address;
+	uint32_t deprecated;
+	uint64_t mirrorable_memory_starting_address;
+} __attribute__((packed));
+
+/* Idata index 1: Total configured mainstore */
+#define MSVPD_IDATA_TOTAL_CONFIG_MS	1
+
+struct msvpd_total_config_ms {
+	uint64_t total_in_mb;
+};
+
+/* Idata index 2: Page mover and sync structure */
+#define MSVPD_IDATA_PMOVER_SYNCHRO	2
+
+struct msvpd_pmover_bsr_synchro {
+	uint32_t	flags;
+#define MSVPD_PMS_FLAG_HWLOCK_EN	0x80000000
+#define MSVPD_PMS_FLAG_PMOVER_EN	0x40000000
+#define MSVPD_PMS_FLAG_BSR_EN		0x20000000
+#define MSVPD_PMS_FLAG_XSCOMBASE_VALID	0x10000000
+	/* P7 values for BSR mode */
+#define MSVPD_PMS_FLAG_P7BSR_1M_MODE	0x00000000
+#define MSVPD_PMS_FLAG_P7BSR_2M_MODE	0x02000000
+#define MSVPD_PMS_FLAG_P7BSR_4M_MODE	0x04000000
+#define MSVPD_PMS_FLAG_P7BSR_8M_MODE	0x06000000
+	uint32_t	hwlocks_per_page;
+	uint64_t	hwlock_addr;
+	uint64_t	pmover_addr;
+	uint64_t	bsr_addr;
+	uint64_t	xscom_addr;
+
+};
+
+/* Idata index 3: Memory Trace Array */
+
+/* Idata index 4: UE Address Array */
+
+/* Child index 0: MS area child structure */
+#define MSVPD_CHILD_MS_AREAS		0
+
 #endif /* __SPIRA_H */
