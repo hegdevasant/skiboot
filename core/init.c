@@ -4,6 +4,7 @@
 #include <chiptod.h>
 #include <cpu.h>
 #include <processor.h>
+#include <xscom.h>
 
 /*
  * Boot semaphore, incremented by each CPU calling in
@@ -103,25 +104,30 @@ void main_cpu_entry(void)
 
 	op_display(OP_LOG, OP_MOD_INIT, 0x0002);
 
+	/* Initialize XSCOM */
+	xscom_init();
+
+	op_display(OP_LOG, OP_MOD_INIT, 0x0003);
+
 	/* Finish initializing the console */
 	fsp_console_init();
 
-	op_display(OP_LOG, OP_MOD_INIT, 0x0003);
+	op_display(OP_LOG, OP_MOD_INIT, 0x0004);
 
 	/* Parse the PACA/PCIA */
 	cpu_parse();
 
-	op_display(OP_LOG, OP_MOD_INIT, 0x0004);
+	op_display(OP_LOG, OP_MOD_INIT, 0x0005);
 
 	/* Call in secondary CPUs */
 	cpu_bringup();
 
-	op_display(OP_LOG, OP_MOD_INIT, 0x0005);
+	op_display(OP_LOG, OP_MOD_INIT, 0x0006);
 
 	/* Enable timebase synchronization */
 	chiptod_init();
 
-	op_display(OP_LOG, OP_MOD_INIT, 0x0006);
+	op_display(OP_LOG, OP_MOD_INIT, 0x0007);
 
 	/* Parse the memory layout. */
 	memory_parse();

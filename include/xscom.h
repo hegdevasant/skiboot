@@ -20,20 +20,27 @@
 	uint32_t _pir = pir;				\
 	((_pir >> 4) & 0x38) | ((_pir >> 5) & 0x3); })
 
+/*
+ * Error handling:
+ *
+ * Error codes TBD, 0 = success
+ */
 
 /* Targetted SCOM access */
-extern uint64_t xscom_read(uint32_t gcid, uint32_t pcb_addr);
-extern void xscom_write(uint32_t gcid, uint32_t pcb_addr, uint64_t val);
+extern int xscom_read(uint32_t gcid, uint32_t pcb_addr, uint64_t *val);
+extern int xscom_write(uint32_t gcid, uint32_t pcb_addr, uint64_t val);
 
 /* This chip SCOM access */
-static inline uint64_t xscom_readme(uint32_t pcb_addr)
+static inline int xscom_readme(uint32_t pcb_addr, uint64_t *val)
 {
-	return xscom_read(PIR2GCID(mfspr(SPR_PIR)), pcb_addr);
+	return xscom_read(PIR2GCID(mfspr(SPR_PIR)), pcb_addr, val);
 }
 
-static inline void xscom_writeme(uint32_t pcb_addr, uint64_t val)
+static inline int xscom_writeme(uint32_t pcb_addr, uint64_t val)
 {
-	xscom_write(PIR2GCID(mfspr(SPR_PIR)), pcb_addr, val);
+	return xscom_write(PIR2GCID(mfspr(SPR_PIR)), pcb_addr, val);
 }
+
+extern void xscom_init(void);
 
 #endif /* __XSCOM_H */
