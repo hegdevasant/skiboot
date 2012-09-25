@@ -140,7 +140,8 @@ bool __cpu_parse(void)
 				op_display(OP_FATAL, OP_MOD_CPU, 4);
 			}
 			t->state = cpu_state_boot;
-			t->stack = stack_top;
+			t->stack = boot_stack_top;
+			mtspr(SPR_HSPRG0, (uint64_t)t);
 		}
 
 		paca = (void *)paca + spira.ntuples.paca.alloc_len;

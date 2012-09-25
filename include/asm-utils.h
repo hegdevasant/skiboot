@@ -1,6 +1,14 @@
 #ifndef __ASM_UTILS_H
 #define __ASM_UTILS_H
 
+/*
+ * Do NOT use the immediate load helpers with symbols
+ * only with constants. Symbols will _not_ be resolved
+ * by the linker since we are building -pie, and will
+ * instead generate relocs of a type our little built-in
+ * relocator can't handle
+ */
+
 /* Load an immediate 64-bit value into a register */
 #define LOAD_IMM64(r, e)			\
 	lis     r,(e)@highest;			\

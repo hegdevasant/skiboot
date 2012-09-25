@@ -11,7 +11,6 @@ NM=$(CROSS)nm
 OBJCOPY=$(CROSS)objcopy
 OBJDUMP=$(CROSS)objdump
 SIZE=$(CROSS)size
-LDRFLAGS=-melf64ppc
 LD_TEXT=0x0
 NM += --synthetic
 
@@ -35,11 +34,12 @@ CPPFLAGS += -D__SKIBOOT__ -nostdinc
 CPPFLAGS += -isystem $(shell $(CC) -print-file-name=include)
 CPPFLAGS += -DBITS_PER_LONG=64 -m64
 
-CFLAGS := -fno-strict-aliasing -fno-stack-protector
+CFLAGS := -fno-strict-aliasing -fno-stack-protector -pie
 CFLAGS += $(CWARNS) $(OPTS) $(DBG)
 
-LDFLAGS := -m64 -static -nostdlib -Wl,--gc-sections
+LDFLAGS := -m64 -static -nostdlib -Wl,--gc-sections -pie
 LDFLAGS += -Wl,-Ttext-segment,$(LD_TEXT) -Wl,-N -Wl,--build-id=none
+LDRFLAGS=-melf64ppc
 # Debug stuff
 #LDFLAGS += -Wl,-v -Wl,-Map,foomap 
 

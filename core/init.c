@@ -10,7 +10,6 @@
  *
  * Forced into data section as it will be used before BSS is initialized
  */
-unsigned int boot_cpu_count __force_data = 0;
 enum ipl_state ipl_state = ipl_initial;
 
 static bool state_control_msg(u32 cmd_sub_mod, struct fsp_msg *msg)

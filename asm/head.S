@@ -7,17 +7,32 @@
 	. = 0
 .global __head
 __head:
-	/* Various entry points used mostly for debugging */
-	b	__entry
-	. = 0x100
-	b	__entry
+	/* This entry point will be used when starting a runtime OPAL */
+	b	.
 
-	/* Main entry point */
+	/* This is our boot flag used for CPUs to sync, it has to be
+	 * at an easy to locate address (without relocation) since we
+	 * need to get at it very early, before we apply our relocs
+	 */
+	. = 0xf0
+__boot_flag:
+	.llong	0
+
+	/* Here will sit the exception handlers */
+	. = 0x100
+
+	/* Main entry point (to move elsewhere) */
 	.= 0x180
 .global __entry
 __entry:
+	/* Get our reloc offset into r30 */
+	bcl	20,31,$+4
+1:	mflr	%r30
+	subi	%r30,%r30,(1b - __head)
+
 	/* Get ourselves a TOC */
-	LOAD_IMM32(%r2,__toc_start)
+	LOAD_IMM32(%r2,__toc_start - __head)
+	add	%r2,%r2,%r30
 
 	/* Check our PIR, avoid threads */
 	mfspr	%r31,SPR_PIR
@@ -25,7 +40,8 @@ __entry:
 	bne	secondary_wait
 
 	/* Pick a boot CPU, cpu index in r31 */
-	LOAD_ADDR_FROM_TOC(%r3, boot_cpu_count)
+	LOAD_IMM32(%r3, __boot_flag - __head)
+	add	%r3,%r3,%r30
 1:	lwarx	%r4,0,%r3
 	addi	%r0,%r4,1
 	stwcx.	%r0,0,%r3
@@ -36,20 +52,33 @@ __entry:
 
 	smt_medium
 
-	/* We got a primary, get ready for C code: get a stack */
-	LOAD_ADDR_FROM_TOC(%r1, stack_top)
-	ld	%r1,0(%r1)
+	/* Get ready for C code: get a stack */
+	LOAD_IMM32(%r1,boot_stack - __head)
+	LOAD_IMM32(%r3,STACK_SIZE - 256)
+	add	%r1,%r1,%r30
+	add	%r1,%r1,%r3
+
+	/* Clear up initial frame */
 	li	%r3,0
 	std	%r3,0(%r1)
+	std	%r3,8(%r1)
 	std	%r3,16(%r1)
 
+	/* Relocate ourselves. We know we are running at our link
+	 * address and aren't moving our code around at this stage
+	 * so there is no impact on relative branches done by
+	 * secondary CPUs etc...
+	 */
+	bl	call_relocate
+
 	/* Clear BSS before we try to use that stack */
-	LOAD_IMM32(%r3, _sbss)
-	LOAD_IMM32(%r4, _ebss)
+	li	%r0,0
+	LOAD_ADDR_FROM_TOC(%r3, _sbss)
+	LOAD_ADDR_FROM_TOC(%r4, _ebss)
 	subf	%r4,%r3,%r4
 	srdi	%r4,%r4,3
 	mtctr	%r4
-1:	std	%r5,0(%r3)
+1:	std	%r0,0(%r3)
 	addi	%r3,%r3,8
 	bdnz	1b
 	bl	main_cpu_entry
@@ -91,6 +120,21 @@ secondary_wait:
 	std	%r0,0(%r1)
 	std	%r0,16(%r1)
 	bl	secondary_cpu_entry
+	b	.
+
+call_relocate:
+	mflr	%r14
+	LOAD_IMM32(%r4,__dynamic_start - __head)
+	LOAD_IMM32(%r5,__rela_dyn_start - __head)
+	add	%r4,%r4,%r30
+	add	%r5,%r5,%r30
+	mr	%r3,%r30
+	bl	relocate
+	cmpwi	%r3,0
+	beq	1f
+	mtlr	%r14
+	blr
+1:	/* Fatal relocate failure */
 	b	.
 
 	/* NACA */

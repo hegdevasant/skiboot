@@ -31,7 +31,29 @@ SECTIONS
 		*(.got)
 		*(.toc)
 	}
- 
+
+	/* Do I need to keep these ? */
+	.dynsym : { *(.dynsym)	}
+	.dynstr : { *(.dynstr)	}
+
+	/* Relocations */
+	.dynamic : {
+		__dynamic_start = .;
+		*(.dynamic)
+		__dynamic_end = .;
+	}
+
+	.rela.dyn : {
+		__rela_dyn_start = .;
+		*(.rela*)
+		__rela_dyn_end = .;
+	}
+
+	.hash   : { *(.hash)   }
+	.interp : { *(.interp) }
+	.dynsym : { *(.dynsym) }
+	.dynstr : { *(.dynstr) }
+
 	. = ALIGN(0x1000);
 	_sbss = .;
 	.bss : {
@@ -41,5 +63,8 @@ SECTIONS
 	_ebss = .;
 	_end = .;
 
-	.comment 0 : { *(.comments) }
+	/* Discards */
+	/DISCARD/ : {
+		*(.comment)
+	}
 }

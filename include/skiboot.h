@@ -35,7 +35,7 @@ enum ipl_state {
 extern enum ipl_state ipl_state;
 
 /* Boot stack top */
-extern void *stack_top;
+extern void *boot_stack_top;
 
 /* For use by debug code */
 extern void backtrace(void);

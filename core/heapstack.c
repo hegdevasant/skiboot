@@ -21,8 +21,8 @@ void *sbrk(int incr)
 }
 
 /* Initial stack */
-static char stack[STACK_SIZE] __attribute__ ((aligned(16)));
-void *stack_top = &stack[STACK_SIZE - 256];
+char boot_stack[STACK_SIZE] __attribute__ ((aligned(16)));
+void *boot_stack_top = &boot_stack[STACK_SIZE - 256];
 
 void backtrace(void)
 {
@@ -33,7 +33,7 @@ void backtrace(void)
 
 	/* XXX Handle SMP */
 	fprintf(stderr, "CPU %08lx Backtrace:\n", mfspr(SPR_PIR));
-	while((void *)sp > (void *)stack && (void *)sp < stack_top) {
+	while((void *)sp > (void *)boot_stack && (void *)sp < boot_stack_top) {
 		fprintf(stderr, " S: %016lx R: %016lx\n",
 			(unsigned long)sp, sp[2]);
 		sp = (unsigned long *)sp[0];
