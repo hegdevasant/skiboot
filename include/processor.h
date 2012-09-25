@@ -129,7 +129,8 @@
  * NOTE: oval isn't modified, the combined result is returned
  */
 #define PPC_SETFIELD(fname, oval, fval)			\
-	(((oval) & ~fname##_MASK) | (((fval) << fname##_LSH) & fname_##_MASK))
+	(((oval) & ~fname##_MASK) | \
+	 ((((typeof(oval))(fval)) << fname##_LSH) & fname##_MASK))
 
 
 /*
