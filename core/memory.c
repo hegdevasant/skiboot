@@ -42,12 +42,12 @@ static bool add_address_range(const struct HDIF_common_hdr *msarea,
 
 	new = malloc(sizeof(*new) + ramptr->count*sizeof(struct ram_area));
 	if (!new) {
-		prerror("Failed to allocate memory for %u ram areas\n",
+		prerror("MS VPD: Failed to allocate memory for %u ram areas\n",
 			ramptr->count);
 		return false;
 	}
 
-	printf("  Range 0x%llx - 0x%llx (chip %u)\n",
+	printf("MS VPD:  Range 0x%llx - 0x%llx (chip %u)\n",
 	       arange->start, arange->end, arange->chip);
 
 	new->msarea = msarea;
@@ -56,7 +56,7 @@ static bool add_address_range(const struct HDIF_common_hdr *msarea,
 	new->arange = arange;
 	new->attached = find_cpu_by_chip_id(arange->chip);
 	if (!new->attached) {
-		prerror("mem: could not find chip id %u\n", arange->chip);
+		prerror("MS VPD: could not find chip id %u\n", arange->chip);
 		return false;
 	}
 	list_head_init(&new->shared);
@@ -79,7 +79,7 @@ static bool add_address_range(const struct HDIF_common_hdr *msarea,
 		if (!CHECK_SPPTR(new->ram_areas[i].raid))
 			return false;
 		if (size < sizeof(*new->ram_areas[i].raid)) {
-			prerror("msarea %p ramarea %i id too small\n",
+			prerror("MS VPD: msarea %p ramarea %i id too small\n",
 				msarea, i);
 			return false;
 		}
@@ -88,13 +88,13 @@ static bool add_address_range(const struct HDIF_common_hdr *msarea,
 		if (!new->ram_areas[i].rasize)
 			return false;
 		if (size < sizeof(*new->ram_areas[i].rasize)) {
-			prerror("msarea %p ramarea %i size too small\n",
+			prerror("MS VPD: msarea %p ramarea %i size too small\n",
 				msarea, i);
 				return false;
 		}
 
 		/* If not installed and functional, don't include. */
-		printf("    DIMM %u %s%s %lluMB\n",
+		printf("MS VPD:    DIMM %u %s%s %lluMB\n",
 		       new->ram_areas[i].raid->id,
 		       new->ram_areas[i].raid->flags & RAM_AREA_INSTALLED
 		       ? "installed" : "not installed",
@@ -130,7 +130,7 @@ static void get_msareas(const struct HDIF_common_hdr *ms_vpd)
 	/* First childptr refers to msareas. */
 	msptr = HDIF_child_arr(ms_vpd, MSVPD_CHILD_MS_AREAS);
 	if (!CHECK_SPPTR(msptr)) {
-		prerror("ms_vpd: no children at %p\n", ms_vpd);
+		prerror("MS VPD: no children at %p\n", ms_vpd);
 		return;
 	}
 
@@ -151,12 +151,12 @@ static void get_msareas(const struct HDIF_common_hdr *ms_vpd)
 		if (!CHECK_SPPTR(id))
 			return;
 		if (size < sizeof(*id)) {
-			prerror("ms_vpd %p msarea #%i id size too small!\n",
+			prerror("MS VPD: %p msarea #%i id size too small!\n",
 				ms_vpd, i);
 			return;
 		}
 
-		printf("ms_vpd %p, area %i: %s %s %s\n",
+		printf("MS VPD: %p, area %i: %s %s %s\n",
 		       ms_vpd, i,
 		       id->flags & MS_AREA_INSTALLED ?
 		       "installed" : "not installed",
@@ -174,13 +174,13 @@ static void get_msareas(const struct HDIF_common_hdr *ms_vpd)
 			continue;
 
 		if (size < sizeof(*arr)) {
-			prerror("ms_vpd %p msarea #%i arr size too small!\n",
+			prerror("MS VPD: %p msarea #%i arr size too small!\n",
 				ms_vpd, i);
 			return;
 		}
 
 		if (arr->eactsz < sizeof(*arange)) {
-			prerror("ms_vpd %p msarea #%i arange size too small!\n",
+			prerror("MS VPD: %p msarea #%i arange size too small!\n",
 				ms_vpd, i);
 			return;
 		}
