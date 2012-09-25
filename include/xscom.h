@@ -18,7 +18,7 @@
  */
  #define PIR2GCID(pir) ({ 				\
 	uint32_t _pir = pir;				\
-	((_pir >> 4) & 0x38) | ((_pir >> 5) & 0x7); })
+	((_pir >> 4) & 0x38) | ((_pir >> 5) & 0x3); })
 
 
 /* Targetted SCOM access */
