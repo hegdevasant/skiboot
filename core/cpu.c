@@ -1,12 +1,101 @@
 #include <skiboot.h>
-#include <processor.h>
 #include <spira.h>
 #include <cpu.h>
+#include <fsp.h>
 
 struct cpu_thread *cpu_threads;
 unsigned int cpu_threads_count;
+struct cpu_thread *boot_cpu;
 
 unsigned long cpu_secondary_start __force_data = 0;
+
+struct cpu_job {
+	struct list_node	link;
+	void			(*func)(void *data);
+	void			*data;
+	bool			complete;
+};
+
+struct cpu_job *cpu_queue_job(struct cpu_thread *cpu,
+			      void (*func)(void *data), void *data)
+{
+	struct cpu_job *job;
+
+	job = zalloc(sizeof(struct cpu_job));
+	if (!job)
+		return NULL;
+	job->func = func;
+	job->data = data;
+	job->complete = false;
+
+	if (cpu != this_cpu()) {
+		lock(&cpu->job_lock);
+		list_add_tail(&cpu->job_queue, &job->link);
+		unlock(&cpu->job_lock);
+	} else {
+		func(data);
+		job->complete = true;
+	}
+
+	/* XXX Add poking of CPU with interrupt */
+
+	return job;
+}
+
+bool cpu_poll_job(struct cpu_job *job)
+{
+	sync();
+	return job->complete;
+}
+
+void cpu_wait_job(struct cpu_job *job, bool free_it)
+{
+	if (!job)
+		return;
+
+	while(!job->complete) {
+		/* Handle mbox if master CPU */
+		if (this_cpu() == boot_cpu)
+			fsp_poll();
+		else
+			smt_low();
+		sync();
+	}
+	smt_medium();
+
+	if (free_it)
+		free(job);
+}
+
+void cpu_free_job(struct cpu_job *job)
+{
+	if (!job)
+		return;
+
+	assert(job->complete);
+	free(job);
+}
+
+void cpu_process_jobs(void)
+{
+	struct cpu_thread *cpu = this_cpu();
+	struct cpu_job *job;
+
+	lock(&cpu->job_lock);
+	while (true) {
+		if (list_empty(&cpu->job_queue))
+			break;
+		smt_medium();
+		job = list_pop(&cpu->job_queue, struct cpu_job, link);
+		if (!job)
+			break;
+		unlock(&cpu->job_lock);
+		job->func(job->data);
+		lock(&cpu->job_lock);
+		job->complete = true;
+	}
+	unlock(&cpu->job_lock);
+}
 
 u32 num_cpu_threads(void)
 {
@@ -79,7 +168,10 @@ bool __cpu_parse(void)
 	for (i = 0; i < num_cpu_threads(); i++) {
 		u32 size, state;
 		struct cpu_thread *t = &cpu_threads[i];
-		bool boot_cpu;
+		bool is_boot_cpu;
+
+		init_lock(&t->job_lock);
+		list_head_init(&t->job_queue);
 
 		t->timebase = HDIF_get_idata(paca, 3, &size);
 		if (!t->timebase || size < sizeof(*t->timebase)) {
@@ -96,7 +188,7 @@ bool __cpu_parse(void)
 			return false;
 		}
 		t->pir = t->id->pir;
-		boot_cpu = t->pir == boot_pir;
+		is_boot_cpu = t->pir == boot_pir;
 
 		t->cache = HDIF_get_idata(paca, 4, &size);
 		if (!t->cache || size < sizeof(*t->cache)) {
@@ -111,7 +203,7 @@ bool __cpu_parse(void)
 		       t->id->verify_exists_flags & CPU_ID_PACA_RESERVED
 		       ? "**RESERVED**" : cpu_state(t->id->verify_exists_flags),
 		       t->id->verify_exists_flags & CPU_ID_SECONDARY_THREAD
-		       ? "[secondary] " : (boot_cpu ? "[boot] " : ""),
+		       ? "[secondary] " : (is_boot_cpu ? "[boot] " : ""),
 		       ((t->id->verify_exists_flags
 			 & CPU_ID_NUM_SECONDARY_THREAD_MASK)
 			>> CPU_ID_NUM_SECONDARY_THREAD_SHIFT) + 1);
@@ -134,7 +226,7 @@ bool __cpu_parse(void)
 		}
 
 		/* Mark boot CPU */
-		if (boot_cpu) {
+		if (is_boot_cpu) {
 			if (t->state != cpu_state_available) {
 				prerror("CPU: Boot CPU unavailable !\n");
 				op_display(OP_FATAL, OP_MOD_CPU, 4);
@@ -142,6 +234,7 @@ bool __cpu_parse(void)
 			t->state = cpu_state_boot;
 			t->stack = boot_stack_top;
 			mtspr(SPR_HSPRG0, (uint64_t)t);
+			boot_cpu = t;
 		}
 
 		paca = (void *)paca + spira.ntuples.paca.alloc_len;

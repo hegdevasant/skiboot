@@ -1,6 +1,10 @@
 #ifndef __CPU_H
 #define __CPU_H
+
 #include <hdif.h>
+#include <processor.h>
+#include <ccan/list/list.h>
+#include <lock.h>
 
 /* This is the array of all threads. */
 extern struct cpu_thread *cpu_threads;
@@ -81,10 +85,15 @@ enum cpu_thread_state {
 	cpu_state_idle,			/* Secondary called in */
 };
 
+struct cpu_job;
+
 struct cpu_thread {
 	uint32_t		pir;
 	enum cpu_thread_state	state;
 	void			*stack;
+
+	struct lock		job_lock;
+	struct list_head	job_queue;
 
 	/* SPIRA structures */
 	const struct HDIF_cpu_id *id;
@@ -98,6 +107,9 @@ struct cpu_thread {
  */
 extern unsigned long cpu_secondary_start;
 
+/* Boot CPU, set after cpu_parse() */
+extern struct cpu_thread *boot_cpu;
+
 /* This populates cpu_threads array. */
 extern void cpu_parse(void);
 
@@ -110,5 +122,30 @@ extern void cpu_callin(struct cpu_thread *cpu);
 extern u32 num_cpu_threads(void);
 
 struct cpu_thread *find_cpu_by_processor_chip_id(u32 id);
+
+/* Return the caller CPU (only after cpu_bringup) */
+static inline struct cpu_thread *this_cpu(void)
+{
+	return (struct cpu_thread *)mfspr(SPR_HSPRG0);
+}
+
+/* Allocate & queue a job on target CPU */
+extern struct cpu_job *cpu_queue_job(struct cpu_thread *cpu,
+				     void (*func)(void *data), void *data);
+
+/* Poll job status, returns true if completed */
+extern bool cpu_poll_job(struct cpu_job *job);
+
+/* Synchronously wait for a job to complete, this will
+ * continue handling the FSP mailbox if called from the
+ * boot CPU. Set free_it to free it automatically.
+ */
+extern void cpu_wait_job(struct cpu_job *job, bool free_it);
+
+/* Free a CPU job, only call on a completed job */
+extern void cpu_free_job(struct cpu_job *job);
+
+/* Called by init to process jobs */
+extern void cpu_process_jobs(void);
 
 #endif /* __CPU_H */

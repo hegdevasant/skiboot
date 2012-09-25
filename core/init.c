@@ -129,8 +129,10 @@ void main_cpu_entry(void)
 	op_display(OP_LOG, OP_MOD_INIT, 0x9999);
 
 	/* Nothing to do */
-	while(true)
+	while(true) {
+		cpu_process_jobs();
 		fsp_poll();
+	}
 }
 
 void secondary_cpu_entry(struct cpu_thread *cpu)
@@ -141,6 +143,8 @@ void secondary_cpu_entry(struct cpu_thread *cpu)
 	cpu_callin(cpu);
 
 	/* Wait for work to do */
-	while(true)
-		smt_very_low();
+	while(true) {
+		cpu_process_jobs();
+		smt_low();
+	}
 }
