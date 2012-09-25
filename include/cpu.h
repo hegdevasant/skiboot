@@ -121,7 +121,9 @@ extern void cpu_callin(struct cpu_thread *cpu);
 
 extern u32 num_cpu_threads(void);
 
-struct cpu_thread *find_cpu_by_processor_chip_id(u32 id);
+extern struct cpu_thread *find_cpu_by_chip_id(u32 id);
+
+extern struct cpu_thread *find_cpu_by_pir(u32 pir);
 
 /* Return the caller CPU (only after cpu_bringup) */
 static inline struct cpu_thread *this_cpu(void)

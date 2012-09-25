@@ -1,3 +1,7 @@
+/*
+ * TODO: Index array by PIR to be able to catch them easily
+ * from assembly such as machine checks etc...
+ */
 #include <skiboot.h>
 #include <spira.h>
 #include <cpu.h>
@@ -117,7 +121,7 @@ static const char *cpu_state(u32 flags)
 	abort();
 }
 
-struct cpu_thread *find_cpu_by_processor_chip_id(u32 id)
+struct cpu_thread *find_cpu_by_chip_id(u32 id)
 {
 	unsigned int i;
 
@@ -127,6 +131,19 @@ struct cpu_thread *find_cpu_by_processor_chip_id(u32 id)
 		if (t->id->verify_exists_flags & CPU_ID_SECONDARY_THREAD)
 			continue;
 		if (t->id->processor_chip_id == id)
+			return t;
+	}
+	return NULL;
+}
+
+struct cpu_thread *find_cpu_by_pir(u32 pir)
+{
+	unsigned int i;
+
+	for (i = 0; i < num_cpu_threads(); i++) {
+		struct cpu_thread *t = &cpu_threads[i];
+
+		if (t->pir == pir)
 			return t;
 	}
 	return NULL;
