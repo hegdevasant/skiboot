@@ -27,7 +27,8 @@ static char *act;
 /* Pointers to start and end of heap: */
 static char *heap_start, *heap_end;
 
-static struct lock malloc_lock;
+/* XXX This is skiboot specific.. probably should be in the core */
+static struct lock malloc_lock = LOCK_UNLOCKED;
 
 #ifdef DEBUG_MALLOC
 #define ASSERT_MPTR(_ptr)  					\

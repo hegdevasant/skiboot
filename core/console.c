@@ -12,7 +12,7 @@ static size_t con_in;
 static size_t con_out;
 static struct con_ops *con_driver;
 
-struct lock con_lock;
+struct lock con_lock = LOCK_UNLOCKED;
 
 #ifdef MAMBO_CONSOLE
 static void mambo_write(const char *buf, size_t count)

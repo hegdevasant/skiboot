@@ -13,6 +13,9 @@ struct lock {
 	unsigned long lock_val;
 };
 
+/* Initializer */
+#define LOCK_UNLOCKED	{ .lock_val = 0 };
+
 /* Note vs. libc and locking:
  *
  * The libc only uses locks to protect the malloc pool. The core
@@ -31,9 +34,18 @@ struct lock {
  * FSP operations are locked using an FSP lock, so all processors
  * can safely call the FSP API
  *
+ * Note about ordering:
+ *
+ * lock() is a full memory barrier. unlock() is a lwsync
+ *
  */
 
 extern bool bust_locks;
+
+static inline void init_lock(struct lock *l)
+{
+	l->lock_val = 0;
+}
 
 extern bool try_lock(struct lock *l);
 extern void lock(struct lock *l);

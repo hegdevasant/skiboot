@@ -44,7 +44,7 @@ static struct fsp *active_fsp;
 static u16 fsp_curseq = 0x8000;
 static u64 *fsp_tce_table;
 static u32 fsp_inbound_off;
-static struct lock fsp_lock;
+static struct lock fsp_lock = LOCK_UNLOCKED;
 
 struct fsp_cmdclass {
 	int timeout;
