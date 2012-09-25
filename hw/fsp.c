@@ -355,6 +355,9 @@ int fsp_queue_msg(struct fsp_msg *msg, void (*comp)(struct fsp_msg *msg))
 	u16 seq;
 	int rc = 0;
 
+	if (!active_fsp)
+		return -1;
+
 	/* Recursive locking */
 	need_unlock = lock_recursive(&fsp_lock);
 
@@ -641,6 +644,9 @@ void fsp_poll(void)
 {
 	struct fsp *fsp = fsp_get_active();
 	u32 ctl;
+
+	if (!fsp)
+		return;
 
 	lock(&fsp_lock);
 
