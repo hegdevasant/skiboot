@@ -16,7 +16,7 @@
 #include "unistd.h"
 
 
-int fputs(FILE *stream, const char *str)
+int fputs(const char *str, FILE *stream)
 {
 	int ret;
 

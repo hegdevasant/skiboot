@@ -13,8 +13,7 @@
 #include "stdio.h"
 #include "unistd.h"
 
-int
-putc(int ch, FILE *stream)
+int fputc(int ch, FILE *stream)
 {
 	unsigned char outchar = ch;
 

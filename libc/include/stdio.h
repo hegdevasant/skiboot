@@ -50,10 +50,11 @@ int vsnprintf(char *str, size_t size, const char *format, va_list);
 void setbuf(FILE *stream, char *buf);
 int setvbuf(FILE *stream, char *buf, int mode , size_t size);
 
-int putc(int ch, FILE *stream);
+int fputc(int ch, FILE *stream);
+#define putc(ch, stream)	fputc(ch, stream)
 int putchar(int ch);
 int puts(const char *str);
-int fputs(FILE *stream, const char *str);
+int fputs(const char *str, FILE *stream);
 
 int scanf(const char *format, ...)  __attribute__((format (scanf, 1, 2)));
 int fscanf(FILE *stream, const char *format, ...) __attribute__((format (scanf, 2, 3)));

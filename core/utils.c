@@ -14,7 +14,7 @@ void abort(void)
 
 	op_display(OP_FATAL, OP_MOD_CORE, 0x6666);
 	
-	fputs(stderr, "Aborting!\n");
+	fputs("Aborting!\n", stderr);
 	backtrace();
 	for (;;)
 		fsp_poll();

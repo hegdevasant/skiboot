@@ -15,8 +15,8 @@
 
 void assert_fail(const char *msg)
 {
-	fputs(stderr, "Assert fail:");
-	fputs(stderr, msg);
-	fputs(stderr, "\n");
+	fputs("Assert fail:", stderr);
+	fputs(msg, stderr);
+	fputs("\n", stderr);
 	abort();
 }
