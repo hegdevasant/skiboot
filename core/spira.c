@@ -44,9 +44,6 @@ struct spira spira = {
 	},
 };
 
-#define SPIRA_HEAP_BASE		0x04000000UL
-#define SPIRA_HEAP_SIZE		0x00400000
-
 bool spira_check_ptr(const void *ptr, const char *file, unsigned int line)
 {
 	if (!ptr)
