@@ -2,6 +2,10 @@
 #include <asm-offsets.h>
 #include <processor.h>
 
+#define EXCEPTION(nr)	\
+	.= nr;		\
+	b .;
+
 	.section ".head","ax"
 	/* Keep that gap empty */
 	. = 0
@@ -18,13 +22,57 @@ __head:
 __boot_flag:
 	.llong	0
 
-	/* Here will sit the exception handlers */
-	. = 0x100
+	/* Here will sit the reset handler */
+	EXCEPTION(0x100)
 
 	/* Main entry point (to move elsewhere) */
 	.= 0x180
 .global __entry
 __entry:
+	b	__entry2
+
+	/* Exception stubs */
+	EXCEPTION(0x200)
+	EXCEPTION(0x300)
+	EXCEPTION(0x380)
+	EXCEPTION(0x400)
+	EXCEPTION(0x480)
+	EXCEPTION(0x500)
+	EXCEPTION(0x600)
+	EXCEPTION(0x700)
+	EXCEPTION(0x800)
+	EXCEPTION(0x900)
+	EXCEPTION(0x980)
+	EXCEPTION(0xa00)
+	EXCEPTION(0xb00)
+	EXCEPTION(0xc00)
+	EXCEPTION(0xd00)
+	EXCEPTION(0xe00)
+	EXCEPTION(0xe20)
+	EXCEPTION(0xe40)
+	EXCEPTION(0xe50)
+	EXCEPTION(0xe60)
+	EXCEPTION(0xf00)
+	EXCEPTION(0xf20)
+	EXCEPTION(0xf40)
+	EXCEPTION(0x1000)
+	EXCEPTION(0x1100)
+	EXCEPTION(0x1200)
+	EXCEPTION(0x1300)
+	EXCEPTION(0x1400)
+	EXCEPTION(0x1500)
+	EXCEPTION(0x1600)
+	EXCEPTION(0x1700)
+	EXCEPTION(0x1800)
+	EXCEPTION(0x1900)
+	EXCEPTION(0x1a00)
+	EXCEPTION(0x1b00)
+	EXCEPTION(0x1c00)
+	EXCEPTION(0x1d00)
+	EXCEPTION(0x1e00)
+	EXCEPTION(0x1f00)
+
+__entry2:
 	/* Get our reloc offset into r30 */
 	bcl	20,31,$+4
 1:	mflr	%r30
@@ -84,7 +132,7 @@ __entry:
 	bl	main_cpu_entry
 	b	.
 
-	/* Secondary CPUs wait here . r31 is PIR */
+	/* Secondary CPUs wait here r31 is PIR */
 secondary_wait:	
 
 	/* Wait for cpu_secondary_start to be set */
