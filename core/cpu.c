@@ -48,7 +48,7 @@ struct cpu_job *cpu_queue_job(struct cpu_thread *cpu,
 
 bool cpu_poll_job(struct cpu_job *job)
 {
-	sync();
+	lwsync();
 	return job->complete;
 }
 
@@ -63,8 +63,9 @@ void cpu_wait_job(struct cpu_job *job, bool free_it)
 			fsp_poll();
 		else
 			smt_low();
-		sync();
+		lwsync();
 	}
+	lwsync();
 	smt_medium();
 
 	if (free_it)
