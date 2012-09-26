@@ -29,6 +29,13 @@
 #define MSR_RI		PPC_BIT(62)	/* Recoverable Interrupt */
 #define MSR_LE		PPC_BIT(63)	/* Little Endian */
 
+/* PIR
+ *
+ * XXX This will break on P8, will do for now
+ */
+#define SPR_PIR_THREAD_MASK	0x3
+
+
 /* SPR register definitions */
 #define SPR_TBRL	0x10c	/* RO: Timebase low */
 #define SPR_TBRU	0x10d	/* RO: Timebase high */

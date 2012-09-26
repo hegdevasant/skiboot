@@ -149,6 +149,43 @@ struct cpu_thread *find_cpu_by_pir(u32 pir)
 	return NULL;
 }
 
+struct cpu_thread *first_cpu(void)
+{
+	return &cpu_threads[0];
+}
+
+struct cpu_thread *next_cpu(struct cpu_thread *cpu)
+{
+	unsigned int index = cpu - cpu_threads;
+
+	if (index >= cpu_threads_count)
+		return NULL;
+	return &cpu_threads[index + 1];
+}
+
+struct cpu_thread *next_available_cpu(struct cpu_thread *cpu)
+{
+	do {
+		cpu = next_cpu(cpu);
+	} while(cpu && cpu->state != cpu_state_boot &&
+		cpu->state != cpu_state_idle);
+	return cpu;
+}
+
+void cpu_disable_all_threads(struct cpu_thread *cpu)
+{
+	unsigned int i;
+
+	for (i = 0; i < num_cpu_threads(); i++) {
+		struct cpu_thread *t = &cpu_threads[i];
+
+		if (((t->pir ^ cpu->pir) & SPR_PIR_THREAD_MASK) == 0)
+			t->state = cpu_state_disabled;
+	}
+
+	/* XXX Do something to actually stop the core */
+}
+
 bool __cpu_parse(void)
 {
 	struct HDIF_common_hdr *paca;

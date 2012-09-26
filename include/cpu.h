@@ -83,6 +83,7 @@ enum cpu_thread_state {
 	cpu_state_available,		/* Assumed to spin in asm entry */
 	cpu_state_boot,			/* Our boot CPU */
 	cpu_state_idle,			/* Secondary called in */
+	cpu_state_disabled,		/* Disabled by us due to error */
 };
 
 struct cpu_job;
@@ -125,11 +126,25 @@ extern struct cpu_thread *find_cpu_by_chip_id(u32 id);
 
 extern struct cpu_thread *find_cpu_by_pir(u32 pir);
 
+/* Iterator */
+extern struct cpu_thread *first_cpu(void);
+extern struct cpu_thread *next_cpu(struct cpu_thread *cpu);
+extern struct cpu_thread *next_available_cpu(struct cpu_thread *cpu);
+
+#define for_each_cpu(cpu)	\
+	for (cpu = first_cpu(); cpu; cpu = next_cpu(cpu))
+
+#define for_each_available_cpu(cpu)	\
+	for (cpu = first_cpu(); cpu; cpu = next_available_cpu(cpu))
+
 /* Return the caller CPU (only after cpu_bringup) */
 static inline struct cpu_thread *this_cpu(void)
 {
 	return (struct cpu_thread *)mfspr(SPR_HSPRG0);
 }
+
+/* Called when some error condition requires disabling a core */
+void cpu_disable_all_threads(struct cpu_thread *cpu);
 
 /* Allocate & queue a job on target CPU */
 extern struct cpu_job *cpu_queue_job(struct cpu_thread *cpu,
