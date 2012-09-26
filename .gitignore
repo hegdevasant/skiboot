@@ -1,0 +1,13 @@
+*~
+*.o
+*.d
+*.rej
+skiboot-nosection.elf
+skiboot.elf
+skiboot.lds
+skiboot.lid
+skiboot.map
+TAGS
+tags
+asm/asm-offsets.s
+include/asm-offsets.h
