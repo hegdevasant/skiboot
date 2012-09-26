@@ -31,6 +31,9 @@ enum op_module {
  * 'BA010002' : Unlocking not-owned lock
  * 'BA006666' : Abort
  * 'BA050000' : Failed ChipTOD init/sync
+ * 'BA050001' : Failed to find a CPU on the master chip
+ * 'BA050002' : Master chip sync failed
+ * 'EA05xxx2' : Slave sync failed (xxx = PIR)
  * 'BA060000' : Invalid SPPACA
  * 'BA060001' : Failed to allocate CPU array
  * 'BA060002' : Bad (or not found) CPU timebase data
