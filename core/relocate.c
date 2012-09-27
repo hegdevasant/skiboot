@@ -53,7 +53,7 @@ int relocate(uint64_t offset, struct elf64_dyn *dyn, struct elf64_rela *rela)
 		return false;
 
 	/* Perform relocations */
-	for (i = 0; i < dt_relacount; i++) {
+	for (i = 0; i < dt_relacount; i++, rela++) {
 		uint64_t *t;
 
 		if (ELF64_R_TYPE(rela->r_info) != R_PPC64_RELATIVE)
