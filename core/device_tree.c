@@ -104,6 +104,7 @@ void create_dtb(void)
 		dt_property_cell("#size-cells", 2);
 
 		add_cpu_nodes();
+		add_memory_nodes();
 		dt_end_node();
 
 		save_err(fdt_finish(fdt));

@@ -1,6 +1,8 @@
 #include <spira.h>
 #include <memory.h>
 #include <cpu.h>
+#include <device_tree.h>
+#include <ccan/str/str.h>
 
 struct list_head address_ranges = LIST_HEAD_INIT(address_ranges);
 
@@ -259,5 +261,31 @@ void memory_parse(void)
 	if (!__memory_parse()) {
 		prerror("MS VPD: Failed memory init !\n");
 		abort();
+	}
+}
+
+/* Clean the stray high bit which the FSP inserts: we only have 52 bits real */
+static u64 cleanup_addr(u64 addr)
+{
+	return addr & ((1ULL << 52) - 1);
+}
+
+void add_memory_nodes(void)
+{
+	struct address_range *i;
+
+	list_for_each(&address_ranges, i, list) {
+		u64 reg[2];
+		char name[sizeof("memory@") + STR_MAX_CHARS(reg[0])];
+
+		/* reg contains start and length */
+		reg[0] = cleanup_addr(i->arange->start);
+		reg[1] = cleanup_addr(i->arange->end) - reg[0];
+
+		sprintf(name, "memory@%llx", reg[0]);
+		dt_begin_node(name);
+		dt_property_string("device-type", "memory");
+		dt_property("reg", reg, sizeof(reg));
+		dt_end_node();
 	}
 }
