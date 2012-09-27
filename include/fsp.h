@@ -279,6 +279,7 @@
 #define FSP_CMD_CONTINUE_IPL	0x0ce7000 /* FSP->HV: HV has control */
 #define FSP_CMD_CONTINUE_ACK	0x0ce5700 /* HV->FSP: HV acks CONTINUE IPL */
 #define FSP_CMD_HV_FUNCTNAL	0x1ce5707 /* HV->FSP: Set HV functional state */
+#define FSP_CMD_FSP_FUNCTNAL	0x0ce5708 /* FSP->HV: FSP functional state */
 #define FSP_CMD_HV_QUERY_CAPS	0x1ce0400 /* HV->FSP: Query capabilities */
 #define FSP_RSP_HV_QUERY_CAPS	0x1ce8400
 #define FSP_CMD_SP_QUERY_CAPS	0x0ce0501 /* FSP->HV */

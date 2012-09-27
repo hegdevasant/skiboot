@@ -30,7 +30,8 @@ enum ipl_state {
 	ipl_opl_sent		= 0x00000001,
 	ipl_got_continue	= 0x00000002,
 	ipl_got_new_role	= 0x00000004,
-	ipl_got_caps		= 0x00000008
+	ipl_got_caps		= 0x00000008,
+	ipl_got_fsp_functional	= 0x00000010
 };
 extern enum ipl_state ipl_state;
 

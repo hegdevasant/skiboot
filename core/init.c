@@ -49,7 +49,11 @@ static bool state_control_msg(u32 cmd_sub_mod, struct fsp_msg *msg)
 		fsp_sync_msg(fsp_mkmsg(FSP_RSP_SP_QUERY_CAPS, 4,
 				       0x3ff80000, 0, 0, 0), true);
 		ipl_state |= ipl_got_caps;
-		return true;		
+		return true;
+	case FSP_CMD_FSP_FUNCTNAL:
+		printf("INIT: Got FSP Functional\n");
+		ipl_state |= ipl_got_fsp_functional;
+		return true;
 	}
 	return false;
 }
@@ -72,14 +76,28 @@ static void start_fsp_state_control(void)
 	/* Send continue ACK */
 	fsp_sync_msg(fsp_mkmsg(FSP_CMD_CONTINUE_ACK, 0), true);
 
+	/* Wait for various FSP messages */
 	printf("INIT: Waiting for FSP to advertize new role...\n");
 	while(!(ipl_state & ipl_got_new_role))
 		fsp_poll();
-
 	printf("INIT: Waiting for FSP to request capabilities...\n");
 	while(!(ipl_state & ipl_got_caps))
 		fsp_poll();
+
+	/* Tell FSP we are in standby */
+	printf("INIT: Sending HV Functional: Standby...\n");
+	fsp_sync_msg(fsp_mkmsg(FSP_CMD_HV_FUNCTNAL, 1, 0x01000000), true);
+
+	/* Wait for FSP functional */
+	printf("INIT: Waiting for FSP functional\n");
+	while(!(ipl_state & ipl_got_fsp_functional))
+		fsp_poll();
+
+	/* Tell FSP we are in running state */
+	printf("INIT: Sending HV Functional: Runtime...\n");
+	fsp_sync_msg(fsp_mkmsg(FSP_CMD_HV_FUNCTNAL, 1, 0x02000000), true);
 }
+
 
 void main_cpu_entry(void)
 {
@@ -98,37 +116,30 @@ void main_cpu_entry(void)
 
 	op_display(OP_LOG, OP_MOD_INIT, 0x0000);
 
-	op_display(OP_LOG, OP_MOD_INIT, 0x0001);
-
-	/* Tell FSP we are in standby (XXX use running ?) */
-	fsp_sync_msg(fsp_mkmsg(FSP_CMD_HV_FUNCTNAL, 1, 0x01000000), true);
-
-	op_display(OP_LOG, OP_MOD_INIT, 0x0002);
-
 	/* Initialize XSCOM */
 	xscom_init();
 
-	op_display(OP_LOG, OP_MOD_INIT, 0x0003);
+	op_display(OP_LOG, OP_MOD_INIT, 0x0001);
 
 	/* Finish initializing the console */
 	fsp_console_init();
 
-	op_display(OP_LOG, OP_MOD_INIT, 0x0004);
+	op_display(OP_LOG, OP_MOD_INIT, 0x0002);
 
 	/* Parse the PACA/PCIA */
 	cpu_parse();
 
-	op_display(OP_LOG, OP_MOD_INIT, 0x0005);
+	op_display(OP_LOG, OP_MOD_INIT, 0x0003);
 
 	/* Call in secondary CPUs */
 	cpu_bringup();
 
-	op_display(OP_LOG, OP_MOD_INIT, 0x0006);
+	op_display(OP_LOG, OP_MOD_INIT, 0x0004);
 
 	/* Enable timebase synchronization */
 	chiptod_init();
 
-	op_display(OP_LOG, OP_MOD_INIT, 0x0007);
+	op_display(OP_LOG, OP_MOD_INIT, 0x0005);
 
 	/* Parse the memory layout. */
 	memory_parse();
