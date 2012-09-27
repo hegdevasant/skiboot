@@ -198,7 +198,9 @@ secondary_wait:
 	cmpdi	%r0,0
 	beq	1b
 
-	/* Lookup our PIR in the cpu_threads array */
+	/* Lookup our PIR in the cpu_threads array, and setup
+	 * our per-cpu pointer in r13
+	 */
 	smt_medium
 	LOAD_ADDR_FROM_TOC(%r3, cpu_threads)
 	LOAD_ADDR_FROM_TOC(%r5, cpu_max_pir)
@@ -207,13 +209,10 @@ secondary_wait:
 	lwz	%r5,0(%r5)
 	cmpw	%r31,%r5
 	bgt	secondary_not_found
-	add	%r3,%r3,%r4
-
-	/* Got our cpu_thread, stick a copy of it in HSPRG0 */
-	mtspr	SPR_HSPRG0,%r3
+	add	%r13,%r3,%r4
 
 	/* Get our stack and jump to C */
-	ld	%r1,CPUTHREAD_STACK(%r3)
+	ld	%r1,CPUTHREAD_STACK(%r13)
 	li	%r0,0
 	std	%r0,0(%r1)
 	std	%r0,16(%r1)

@@ -156,8 +156,10 @@ void main_cpu_entry(void)
 	}
 }
 
-void secondary_cpu_entry(struct cpu_thread *cpu)
+void secondary_cpu_entry(void)
 {
+	struct cpu_thread *cpu = this_cpu();
+
 	printf("INIT: CPU PIR 0x%04x called in\n", cpu->pir);
 
 	/* Secondary CPU called in */

@@ -314,8 +314,7 @@ bool __cpu_parse(void)
 			}
 			t->state = cpu_state_boot;
 			t->stack = boot_stack_top;
-			mtspr(SPR_HSPRG0, (uint64_t)t);
-			boot_cpu = t;
+			__this_cpu = boot_cpu = t;
 		}
 
 		paca = (void *)paca + spira.ntuples.paca.alloc_len;

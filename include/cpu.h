@@ -137,10 +137,11 @@ extern struct cpu_thread *next_available_cpu(struct cpu_thread *cpu);
 #define for_each_available_cpu(cpu)	\
 	for (cpu = first_cpu(); cpu; cpu = next_available_cpu(cpu))
 
-/* Return the caller CPU (only after cpu_bringup) */
+/* Return the caller CPU (only after cpu_parse) */
+register struct cpu_thread *__this_cpu asm("r13");
 static inline struct cpu_thread *this_cpu(void)
 {
-	return (struct cpu_thread *)mfspr(SPR_HSPRG0);
+	return __this_cpu;
 }
 
 /* Called when some error condition requires disabling a core */
