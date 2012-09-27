@@ -34,13 +34,6 @@ enum op_module {
  * 'BA050001' : Failed to find a CPU on the master chip
  * 'BA050002' : Master chip sync failed
  * 'EA05xxx2' : Slave sync failed (xxx = PIR)
- * 'BA060000' : Invalid SPPACA
- * 'BA060001' : Failed to allocate CPU array
- * 'BA060002' : Bad (or not found) CPU timebase data
- * 'BA060003' : Bad (or not found) CPU id data
- * 'BA060004' : Primary CPU marked unavailable
- * 'BA060005' : Bad (or not found) CPU cache data
- * 'BA060006' : CPU PIR out of range
  * 'BA070000' : Cannot find MS VPD or invalid
  * 'BA070001' : MS VPD wrong size
  * 'BA070002' : MS VPD doesn't have an MSAC

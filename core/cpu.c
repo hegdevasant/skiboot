@@ -218,14 +218,12 @@ bool __cpu_parse(void)
 	if (!HDIF_check(paca, "SPPACA")) {
 		/* FIXME: PACA is deprecated in favor of PCIA */
 		prerror("Invalid PACA (PCIA = %p)\n", spira.ntuples.pcia.addr);
-		op_display(OP_FATAL, OP_MOD_CPU, 0);
 		return false;
 	}
 
 	if (spira.ntuples.paca.act_len < sizeof(*paca)) {
 		prerror("PACA: invalid size %u\n",
 			spira.ntuples.paca.act_len);
-		op_display(OP_FATAL, OP_MOD_CPU, 0);
 		return false;
 	}
 
@@ -234,7 +232,6 @@ bool __cpu_parse(void)
 	cpu_threads = zalloc(sizeof(struct cpu_thread) * (cpu_max_pir + 1));
 	if (!cpu_threads) {
 		prerror("PACA: could not allocate CPU array\n");
-		op_display(OP_FATAL, OP_MOD_CPU, 1);
 		return false;
 	}
 
@@ -267,7 +264,6 @@ bool __cpu_parse(void)
 		if (!t->timebase || size < sizeof(*t->timebase)) {
 			prerror("CPU[%i]: bad timebase size %u @ %p\n",
 				i, size, t->timebase);
-			op_display(OP_FATAL, OP_MOD_CPU, 2);
 			return false;
 		}
 
@@ -275,7 +271,6 @@ bool __cpu_parse(void)
 		if (!t->cache || size < sizeof(*t->cache)) {
 			prerror("CPU[%i]: bad cache size %u @ %p\n",
 				i, size, t->cache);
-			op_display(OP_FATAL, OP_MOD_CPU, 5);
 			return false;
 		}
 
@@ -310,7 +305,7 @@ bool __cpu_parse(void)
 		if (is_boot_cpu) {
 			if (t->state != cpu_state_available) {
 				prerror("CPU: Boot CPU unavailable !\n");
-				op_display(OP_FATAL, OP_MOD_CPU, 4);
+				return false;
 			}
 			t->state = cpu_state_boot;
 			t->stack = boot_stack_top;
@@ -321,6 +316,15 @@ bool __cpu_parse(void)
 	}
 	return true;
 }	
+
+
+void cpu_parse(void)
+{
+	if (!__cpu_parse()) {
+		prerror("CPU: Initial CPU parsing failed\n");
+		abort();
+	}
+}
 
 void add_cpu_nodes(void)
 {
@@ -409,19 +413,13 @@ void add_interrupt_nodes(void)
 	}
 }
 
-void cpu_parse(void)
-{
-	if (!__cpu_parse()) {
-		prerror("CPU: Initial CPU parsing failed\n");
-		abort();
-	}
-}
-
 void cpu_bringup(void)
 {
 	struct cpu_thread *t;
 
 	printf("CPU: Allocating secondary CPU stacks\n");
+
+	op_display(OP_LOG, OP_MOD_CPU, 0x0000);
 
 	/* Alloc all stacks for functional CPUs and count available ones */
 	for_each_cpu(t) {
@@ -438,10 +436,14 @@ void cpu_bringup(void)
 		t->stack = stack + STACK_SIZE - 256;
 	}
 
+	op_display(OP_LOG, OP_MOD_CPU, 0x0001);
+
 	/* Tell everybody to chime in ! */	
 	printf("CPU: Calling in all processors...\n");
 	cpu_secondary_start = 1;
 	sync();
+
+	op_display(OP_LOG, OP_MOD_CPU, 0x0002);
 
 	for_each_cpu(t) {
 		if (t->state != cpu_state_available &&
@@ -454,6 +456,8 @@ void cpu_bringup(void)
 			sync();
 		}
 	}
+
+	op_display(OP_LOG, OP_MOD_CPU, 0x0003);
 }
 
 void cpu_callin(struct cpu_thread *cpu)

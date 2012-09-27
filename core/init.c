@@ -103,6 +103,12 @@ void main_cpu_entry(void)
 {
 	printf("SkiBoot starting...\n");
 
+	/* First we Parse the PACA/PCIA and create the per-CPU
+	 * structures. These are going to be needed everywhere
+	 * (locks etc...) so this needs to be done first
+	 */
+	cpu_parse();
+
 	/* Early initializations of the FSP interface */
 	fsp_init();
 
@@ -125,9 +131,6 @@ void main_cpu_entry(void)
 	fsp_console_init();
 
 	op_display(OP_LOG, OP_MOD_INIT, 0x0002);
-
-	/* Parse the PACA/PCIA */
-	cpu_parse();
 
 	op_display(OP_LOG, OP_MOD_INIT, 0x0003);
 
