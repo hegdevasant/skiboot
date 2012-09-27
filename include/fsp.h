@@ -400,7 +400,11 @@ struct fsp_msg {
 	struct list_node	link;
 };
 
+/* Initialize the FSP mailbox driver */
 extern void fsp_init(void);
+
+/* Perform the OPL sequence */
+extern void fsp_opl(void);
 
 /* Allocate and populate an fsp_msg structure
  *

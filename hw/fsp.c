@@ -2,6 +2,8 @@
  * Service Processor handling code
  *
  * TODO: - Handle redundant FSPs
+ *       - Monitor PSI link state
+ *         -> handle link errors, switch links, etc...
  */
 #include <stdarg.h>
 #include <processor.h>
@@ -466,6 +468,59 @@ static void  fsp_alloc_inbound(struct fsp_msg *msg)
 				3, 0, tce_token, act_len), fsp_freemsg);
 }
 
+static bool fsp_local_command(u32 cmd_sub_mod, struct fsp_msg *msg)
+{
+	switch(cmd_sub_mod) {
+	case FSP_CMD_CONTINUE_IPL:
+		/* We get a CONTINUE_IPL as a response to OPL */
+		printf("FSP: Got CONTINUE_IPL !\n");
+		ipl_state |= ipl_got_continue;
+		return true;
+
+	case FSP_CMD_HV_STATE_CHG:
+		printf("FSP: Got HV state change request to %d\n",
+		       msg->data.bytes[0]);
+
+		/* Send response synchronously for now, we might want to
+		 * deal with that sort of stuff asynchronously if/when
+		 * we add support for auto-freeing of messages
+		 */
+		fsp_sync_msg(fsp_mkmsg(FSP_RSP_HV_STATE_CHG, 0), true);
+		return true;
+
+	case FSP_CMD_SP_NEW_ROLE:
+		/* FSP is assuming a new role */
+		printf("FSP: FSP assuming new role\n");
+		fsp_sync_msg(fsp_mkmsg(FSP_RSP_SP_NEW_ROLE, 0), true);
+		ipl_state |= ipl_got_new_role;
+		return true;
+
+	case FSP_CMD_SP_QUERY_CAPS:
+		printf("FSP: FSP query capabilities\n");
+		/* XXX Do something saner. For now do a synchronous
+	         * response and hard code our capabilities
+		 */
+		fsp_sync_msg(fsp_mkmsg(FSP_RSP_SP_QUERY_CAPS, 4,
+				       0x3ff80000, 0, 0, 0), true);
+		ipl_state |= ipl_got_caps;
+		return true;
+	case FSP_CMD_FSP_FUNCTNAL:
+		printf("FSP: Got FSP Functional\n");
+		ipl_state |= ipl_got_fsp_functional;
+		return true;
+	case FSP_CMD_ALLOC_INBOUND:
+		fsp_alloc_inbound(msg);
+		return true;
+	case FSP_CMD_SP_RELOAD_COMP:
+		printf("FSP: SP says Reset/Reload complete\n");
+		printf("     There is %s FSP dump\n",
+		       (msg->data.bytes[3] & 0x20) ? "an" : "no");
+		/* XXX Handle FSP dumps ... one day maybe */
+		return true;
+	}
+	return false;
+}
+
 /* This is called without the FSP lock */
 static void fsp_handle_command(struct fsp_msg *msg)
 {
@@ -484,24 +539,18 @@ static void fsp_handle_command(struct fsp_msg *msg)
 	cmd_sub_mod |= (msg->word1 >> 8) & 0xff;
 	
 	/* Some commands are handled locally */
-	switch(cmd_sub_mod) {
-	case FSP_CMD_ALLOC_INBOUND:
-		fsp_alloc_inbound(msg);
+	if (fsp_local_command(cmd_sub_mod, msg))
 		goto free;
-	case FSP_CMD_SP_RELOAD_COMP:
-		printf("FSP: SP says Reset/Reload complete\n");
-		printf("     There is %s FSP dump\n",
-		       (msg->data.bytes[3] & 0x20) ? "an" : "no");
-		/* XXX Handle FSP dumps ... one day maybe */
-		goto free;
-	}
 
+	/* The rest go to clients */
 	list_for_each_safe(&cmdclass->clientq, client, next, link) {
 		if (client->message(cmd_sub_mod, msg))
 			goto free;
 	}
 
 	prerror("FSP: Unhandled message %06x\n", cmd_sub_mod);
+
+	/* XXX TODO: Responses */
  free:
 	fsp_freemsg(msg);
 }
@@ -976,5 +1025,38 @@ void fsp_init(void)
 	}
 	if (!active_fsp)
 		prerror("FSP: No active FSP !\n");
+}
+
+void fsp_opl(void)
+{
+	/* Send OPL */
+	ipl_state |= ipl_opl_sent;
+	fsp_sync_msg(fsp_mkmsg(FSP_CMD_OPL, 0), true);
+	while(!(ipl_state & ipl_got_continue))
+		fsp_poll();
+
+	/* Send continue ACK */
+	fsp_sync_msg(fsp_mkmsg(FSP_CMD_CONTINUE_ACK, 0), true);
+
+	/* Wait for various FSP messages */
+	printf("INIT: Waiting for FSP to advertize new role...\n");
+	while(!(ipl_state & ipl_got_new_role))
+		fsp_poll();
+	printf("INIT: Waiting for FSP to request capabilities...\n");
+	while(!(ipl_state & ipl_got_caps))
+		fsp_poll();
+
+	/* Tell FSP we are in standby */
+	printf("INIT: Sending HV Functional: Standby...\n");
+	fsp_sync_msg(fsp_mkmsg(FSP_CMD_HV_FUNCTNAL, 1, 0x01000000), true);
+
+	/* Wait for FSP functional */
+	printf("INIT: Waiting for FSP functional\n");
+	while(!(ipl_state & ipl_got_fsp_functional))
+		fsp_poll();
+
+	/* Tell FSP we are in running state */
+	printf("INIT: Sending HV Functional: Runtime...\n");
+	fsp_sync_msg(fsp_mkmsg(FSP_CMD_HV_FUNCTNAL, 1, 0x02000000), true);
 }
 
