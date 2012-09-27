@@ -31,7 +31,7 @@ struct HDIF_cpu_id {
 	u32 process_interrupt_line;
 	u32 reserved1;
 	u32 hardware_module_id;
-	u32 ibase;
+	u64 ibase;
 	u32 deprecated1;
 	u32 physical_thread_id;
 	u32 deprecated2;
