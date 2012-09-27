@@ -69,9 +69,6 @@ static void *__malloc(size_t size)
 	header = act;
 	data = act + sizeof(struct chunk);
 
-	ASSERT_MPTR(header);
-	ASSERT_MPTR(data);
-
 	/* Check if there is space left in the uninitialized part of the heap */
 	if (act + blksize > heap_end) {
 		//search at begin of heap
