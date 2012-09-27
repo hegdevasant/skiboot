@@ -201,21 +201,15 @@ secondary_wait:
 	/* Lookup our PIR in the cpu_threads array */
 	smt_medium
 	LOAD_ADDR_FROM_TOC(%r3, cpu_threads)
-	LOAD_ADDR_FROM_TOC(%r4, cpu_threads_count)
+	LOAD_ADDR_FROM_TOC(%r5, cpu_max_pir)
+	mulli	%r4,%r31,CPUTHREAD_SIZE
 	ld	%r3,0(%r3)
-	lwz	%r4,0(%r4)
-	mtctr	%r4
-1:	lwz	%r5,CPUTHREAD_PIR(%r3)
-	cmpw	%r5,%r31
-	beq	2f
-	addi	%r3,%r3,CPUTHREAD_SIZE
-	bdnz	1b
+	lwz	%r5,0(%r5)
+	cmpw	%r31,%r5
+	bgt	secondary_not_found
+	add	%r3,%r3,%r4
 
-	/* Not found... what to do ? set some global error ? */
-	smt_very_low
-	b	.
-
-2:	/* Got our cpu_thread, stick a copy of it in HSPRG0 */
+	/* Got our cpu_thread, stick a copy of it in HSPRG0 */
 	mtspr	SPR_HSPRG0,%r3
 
 	/* Get our stack and jump to C */
@@ -224,6 +218,11 @@ secondary_wait:
 	std	%r0,0(%r1)
 	std	%r0,16(%r1)
 	bl	secondary_cpu_entry
+	b	.
+
+	/* Not found... what to do ? set some global error ? */
+secondary_not_found:
+	smt_very_low
 	b	.
 
 call_relocate:

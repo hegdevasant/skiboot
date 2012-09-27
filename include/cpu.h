@@ -79,7 +79,8 @@ struct HDIF_cpu_cache {
  */
 
 enum cpu_thread_state {
-	cpu_state_unknown	= 0,	/* At boot time */
+	cpu_state_no_cpu	= 0,	/* Nothing there */
+	cpu_state_unknown,		/* In PACA, not called in yet */
 	cpu_state_unavailable,		/* Not available */
 	cpu_state_available,		/* Assumed to spin in asm entry */
 	cpu_state_boot,			/* Our boot CPU */
@@ -120,8 +121,6 @@ extern void cpu_bringup(void);
 
 /* This is called by secondaries as they call in */
 extern void cpu_callin(struct cpu_thread *cpu);
-
-extern u32 num_cpu_threads(void);
 
 extern struct cpu_thread *find_cpu_by_chip_id(u32 id);
 

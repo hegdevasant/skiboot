@@ -40,6 +40,7 @@ enum op_module {
  * 'BA060003' : Bad (or not found) CPU id data
  * 'BA060004' : Primary CPU marked unavailable
  * 'BA060005' : Bad (or not found) CPU cache data
+ * 'BA060006' : CPU PIR out of range
  * 'BA070000' : Cannot find MS VPD or invalid
  * 'BA070001' : MS VPD wrong size
  * 'BA070002' : MS VPD doesn't have an MSAC

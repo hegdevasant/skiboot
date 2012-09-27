@@ -10,7 +10,7 @@
 #include <ccan/str/str.h>
 
 struct cpu_thread *cpu_threads;
-unsigned int cpu_threads_count;
+unsigned int cpu_max_pir;
 struct cpu_thread *boot_cpu;
 
 unsigned long cpu_secondary_start __force_data = 0;
@@ -104,11 +104,6 @@ void cpu_process_jobs(void)
 	unlock(&cpu->job_lock);
 }
 
-u32 num_cpu_threads(void)
-{
-	return cpu_threads_count;
-}
-
 static const char *cpu_state(u32 flags)
 {
 	switch ((flags & CPU_ID_VERIFY_MASK) >> CPU_ID_VERIFY_SHIFT) {
@@ -128,7 +123,7 @@ struct cpu_thread *find_cpu_by_chip_id(u32 id)
 {
 	unsigned int i;
 
-	for (i = 0; i < num_cpu_threads(); i++) {
+	for (i = 0; i <= cpu_max_pir; i++) {
 		struct cpu_thread *t = &cpu_threads[i];
 
 		if (t->id->verify_exists_flags & CPU_ID_SECONDARY_THREAD)
@@ -143,7 +138,7 @@ struct cpu_thread *find_cpu_by_pir(u32 pir)
 {
 	unsigned int i;
 
-	for (i = 0; i < num_cpu_threads(); i++) {
+	for (i = 0; i <= cpu_max_pir; i++) {
 		struct cpu_thread *t = &cpu_threads[i];
 
 		if (t->pir == pir)
@@ -161,7 +156,7 @@ struct cpu_thread *next_cpu(struct cpu_thread *cpu)
 {
 	unsigned int index = cpu - cpu_threads;
 
-	if (index >= cpu_threads_count)
+	if (index >= cpu_max_pir)
 		return NULL;
 	return &cpu_threads[index + 1];
 }
@@ -179,7 +174,7 @@ void cpu_disable_all_threads(struct cpu_thread *cpu)
 {
 	unsigned int i;
 
-	for (i = 0; i < num_cpu_threads(); i++) {
+	for (i = 0; i <= cpu_max_pir; i++) {
 		struct cpu_thread *t = &cpu_threads[i];
 
 		if (((t->pir ^ cpu->pir) & SPR_PIR_THREAD_MASK) == 0)
@@ -189,11 +184,35 @@ void cpu_disable_all_threads(struct cpu_thread *cpu)
 	/* XXX Do something to actually stop the core */
 }
 
+static void cpu_find_max_pir(void)
+{
+	const void *paca;
+	unsigned int count, i;
+
+	paca = spira.ntuples.paca.addr;
+
+	/* Iterate all PACAs to locate the highest PIR value */
+	count = spira.ntuples.paca.act_cnt;
+	for (i = 0; i < count; i++, paca += spira.ntuples.paca.alloc_len) {
+		const struct HDIF_cpu_id *id;
+		unsigned int size;
+
+		id = HDIF_get_idata(paca, 2, &size);
+		if (!CHECK_SPPTR(id) || size < sizeof(*id))
+			continue;
+		if (id->pir > SPR_PIR_MASK)
+			continue;
+		if (id->pir > cpu_max_pir)
+			cpu_max_pir = id->pir;
+	}
+	printf("CPU: Max PIR set to 0x%04x\n", cpu_max_pir);
+}
+
 bool __cpu_parse(void)
 {
 	struct HDIF_common_hdr *paca;
-	unsigned int i;
 	uint32_t boot_pir = mfspr(SPR_PIR);
+	unsigned int i;
 
 	paca = spira.ntuples.paca.addr;
 	if (!HDIF_check(paca, "SPPACA")) {
@@ -210,25 +229,39 @@ bool __cpu_parse(void)
 		return false;
 	}
 
-	cpu_threads_count = spira.ntuples.paca.act_cnt;
+	cpu_find_max_pir();
 
-	printf("CPU: Found %u CPUS\n", num_cpu_threads());
-
-	cpu_threads = zalloc(cpu_threads_count * sizeof(*cpu_threads));
+	cpu_threads = zalloc(sizeof(struct cpu_thread) * (cpu_max_pir + 1));
 	if (!cpu_threads) {
-		prerror("PACA: could not allocate for %u cpus\n",
-			num_cpu_threads());
+		prerror("PACA: could not allocate CPU array\n");
 		op_display(OP_FATAL, OP_MOD_CPU, 1);
 		return false;
 	}
 
-	for (i = 0; i < num_cpu_threads(); i++) {
+	for (i = 0; i < spira.ntuples.paca.act_cnt; i++) {
+		const struct HDIF_cpu_id *id;
+		struct cpu_thread *t;
 		u32 size, state;
-		struct cpu_thread *t = &cpu_threads[i];
 		bool is_boot_cpu;
 
+		id = HDIF_get_idata(paca, 2, &size);
+		if (!id || size < sizeof(*id)) {
+			prerror("CPU[%i]: bad id size %u @ %p\n",
+				i, size, id);
+			return false;
+		}
+		if (id->pir > cpu_max_pir) {
+			prerror("CPU[%i]: PIR 0x%04x out of range\n",
+				i, id->pir);
+			return false;
+		}
+
+		t = &cpu_threads[id->pir];
 		init_lock(&t->job_lock);
 		list_head_init(&t->job_queue);
+		t->id = id;
+		t->pir = id->pir;
+		is_boot_cpu = t->pir == boot_pir;
 
 		t->timebase = HDIF_get_idata(paca, 3, &size);
 		if (!t->timebase || size < sizeof(*t->timebase)) {
@@ -237,15 +270,6 @@ bool __cpu_parse(void)
 			op_display(OP_FATAL, OP_MOD_CPU, 2);
 			return false;
 		}
-		t->id = HDIF_get_idata(paca, 2, &size);
-		if (!t->id || size < sizeof(*t->id)) {
-			prerror("CPU[%i]: bad id size %u @ %p\n",
-				i, size, t->id);
-			op_display(OP_FATAL, OP_MOD_CPU, 3);
-			return false;
-		}
-		t->pir = t->id->pir;
-		is_boot_cpu = t->pir == boot_pir;
 
 		t->cache = HDIF_get_idata(paca, 4, &size);
 		if (!t->cache || size < sizeof(*t->cache)) {
@@ -301,21 +325,21 @@ bool __cpu_parse(void)
 
 void add_cpu_nodes(void)
 {
-	int i;
+	struct cpu_thread *t;
 
 	dt_begin_node("cpus");
 	dt_property_cell("#address-cells", 2);
 	dt_property_cell("#size-cells", 1);
 
-	for (i = 0; i < num_cpu_threads(); i++) {
+	for_each_available_cpu(t) {
 		char name[sizeof("PowerPC,POWER7@") + STR_MAX_CHARS(u32)];
-		struct cpu_thread *t = &cpu_threads[i];
 
 		if (t->id->verify_exists_flags & CPU_ID_SECONDARY_THREAD)
 			continue;
 
 		/* FIXME: Don't hardcode this! */
-		sprintf(name, "PowerPC,POWER7@%u", t->id->process_interrupt_line);
+		sprintf(name, "PowerPC,POWER7@%u",
+			t->id->process_interrupt_line);
 		dt_begin_node(name);
 		*strchr(name, '@') = '\0';
 		dt_property_string("name", name);
@@ -325,13 +349,16 @@ void add_cpu_nodes(void)
 				 t->cache->dcache_block_size);
 		dt_property_cell("i-cache-block-size",
 				 t->cache->icache_block_size);
-		dt_property_cell("d-cache-size", t->cache->l1_dcache_size_kb*1024);
-		dt_property_cell("i-cache-size", t->cache->icache_size_kb*1024);
+		dt_property_cell("d-cache-size",
+				 t->cache->l1_dcache_size_kb*1024);
+		dt_property_cell("i-cache-size",
+				 t->cache->icache_size_kb*1024);
 
 		if (t->cache->icache_line_size != t->cache->icache_block_size)
 			dt_property_cell("i-cache-line-size",
 					 t->cache->icache_line_size);
-		if (t->cache->l1_dcache_line_size != t->cache->dcache_block_size)
+		if (t->cache->l1_dcache_line_size !=
+		    t->cache->dcache_block_size)
 			dt_property_cell("d-cache-line-size",
 					 t->cache->l1_dcache_line_size);
 
@@ -353,15 +380,17 @@ static u64 cleanup_addr(u64 addr)
 
 void add_interrupt_nodes(void)
 {
-	unsigned int i;
 	struct cpu_thread *t;
 	char name[sizeof("interrupt-controller@")
 		  + STR_MAX_CHARS(t->id->ibase)];
 
-	for (i = 0; i < num_cpu_threads(); i++) {
-		struct cpu_thread *t = &cpu_threads[i];
+	for_each_available_cpu(t) {
 		u32 irange[2];
 		u64 reg[2];
+
+		if (t->state != cpu_state_idle &&
+		    t->state != cpu_state_boot)
+			continue;
 
 		/* One page is enough for a handful of regs. */
 		reg[0] = cleanup_addr(t->id->ibase);
@@ -371,8 +400,8 @@ void add_interrupt_nodes(void)
 		dt_begin_node(name);
 		dt_property_string("compatible", "ibm,ppc-xics");
 
-		irange[0] = i; /* Index */
-		irange[1] = 1; /* num servers */
+		irange[0] = t->id->process_interrupt_line; /* Index */
+		irange[1] = 1;				   /* num servers */
 		dt_property("ibm,interrupt-server-ranges",
 			    irange, sizeof(irange));
 
@@ -391,13 +420,12 @@ void cpu_parse(void)
 
 void cpu_bringup(void)
 {
-	unsigned int i;
+	struct cpu_thread *t;
 
 	printf("CPU: Allocating secondary CPU stacks\n");
 
 	/* Alloc all stacks for functional CPUs and count available ones */
-	for (i = 0; i < num_cpu_threads(); i++) {
-		struct cpu_thread *t = &cpu_threads[i];
+	for_each_cpu(t) {
 		void *stack;
 
 		if (t->state != cpu_state_available)
@@ -416,9 +444,7 @@ void cpu_bringup(void)
 	cpu_secondary_start = 1;
 	sync();
 
-	for (i = 0; i < num_cpu_threads(); i++) {
-		struct cpu_thread *t = &cpu_threads[i];
-		
+	for_each_cpu(t) {
 		if (t->state != cpu_state_available &&
 		    t->state != cpu_state_idle)
 			continue;
