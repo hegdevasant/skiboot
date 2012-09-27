@@ -166,4 +166,5 @@ extern void cpu_free_job(struct cpu_job *job);
 /* Called by init to process jobs */
 extern void cpu_process_jobs(void);
 
+extern void add_cpu_nodes(void);
 #endif /* __CPU_H */
