@@ -1,8 +1,6 @@
 /*
  * XXX TODO:
  *
- *  - Handle XSCOM errors (might need fixing the XSCOM API)
- *  - Handle timeouts in synchro procedures
  *  - Handle RAS issues
  *  - Check the setting of the low bits speed in TFMR
  */
@@ -156,7 +154,10 @@ static bool chiptod_poll_running(void)
 			prerror("CHIPTOD: Running check fail timeout\n");
 			return false;
 		}
-		xscom_readme(TOD_CHIPTOD_FSM, &tval);
+		if (xscom_readme(TOD_CHIPTOD_FSM, &tval) != 0) {
+			prerror("CHIPTOD: XSCOM error polling run\n");
+			return false;
+		}
 	} while(!(tval & 0x0800000000000000UL));
 
 	return true;
@@ -175,13 +176,19 @@ static bool chiptod_to_tb(void)
 	tval = (this_cpu()->pir >> 2) & 0x7;	/* Get core ID */
 	tval |= 0x8;				/* Add b'1000 */
 	tval <<= 32;				/* Move to top half */
-	xscom_writeme(TOD_PIB_MASTER, tval);
+	if (xscom_writeme(TOD_PIB_MASTER, tval) != 0) {
+		prerror("CHIPTOD: XSCOM error writing PIB MASTER\n");
+		return false;
+	}
 
 	tfmr = mfspr(SPR_TFMR);
 	tfmr |= SPR_TFMR_MOVE_CHIP_TOD_TO_TB;
 	mtspr(SPR_TFMR, tfmr);
 
-	xscom_writeme(TOD_CHIPTOD_TO_TB, (1ULL << 63));
+	if (xscom_writeme(TOD_CHIPTOD_TO_TB, (1ULL << 63)) != 0) {
+		prerror("CHIPTOD: XSCOM error writing CHIPTOD_TO_TB\n");
+		return false;
+	}
 
 	timeout = 0;
 	do {
@@ -233,7 +240,11 @@ static void chiptod_sync_master(void *data)
 	DBG("SYNC MASTER Step 2 TFMR=0x%016lx\n", mfspr(SPR_TFMR));
 
 	/* Chip TOD step checkers enable */
-	xscom_writeme(TOD_TTYPE_2, (1UL << 63));
+	if (xscom_writeme(TOD_TTYPE_2, (1UL << 63)) != 0) {
+		prerror("CHIPTOD: XSCOM error enabling steppers\n");
+		goto error;
+	}
+
 	DBG("SYNC MASTER Step 3 TFMR=0x%016lx\n", mfspr(SPR_TFMR));
 
 	/* Chip TOD interrupt check */
@@ -242,13 +253,22 @@ static void chiptod_sync_master(void *data)
 	DBG("SYNC MASTER Step 4 TFMR=0x%016lx\n", mfspr(SPR_TFMR));
 
 	/* Switch local chiptod to "Not Set" state */
-	xscom_writeme(TOD_LOAD_TOD_MOD, (1UL << 63));
+	if (xscom_writeme(TOD_LOAD_TOD_MOD, (1UL << 63)) != 0) {
+		prerror("CHIPTOD: XSCOM error sending LOAD_TOD_MOD\n");
+		goto error;
+	}
 
 	/* Switch all chiptod to "Not Set" state */
-	xscom_writeme(TOD_TTYPE_5, (1UL << 63));
+	if (xscom_writeme(TOD_TTYPE_5, (1UL << 63)) != 0) {
+		prerror("CHIPTOD: XSCOM error sending TTYPE_5\n");
+		goto error;
+	}
 
 	/* Chip TOD load value */
-	xscom_writeme(TOD_CHIPTOD_LOAD_TB, INIT_TB);
+	if (xscom_writeme(TOD_CHIPTOD_LOAD_TB, INIT_TB) != 0) {
+		prerror("CHIPTOD: XSCOM error setting init TB\n");
+		goto error;
+	}
 
 	DBG("SYNC MASTER Step 5 TFMR=0x%016lx\n", mfspr(SPR_TFMR));
 
@@ -262,7 +282,10 @@ static void chiptod_sync_master(void *data)
 	DBG("SYNC MASTER Step 7 TFMR=0x%016lx\n", mfspr(SPR_TFMR));
 
 	/* Send local chip TOD to all chips TOD */
-	xscom_writeme(TOD_TTYPE_4, (1ULL << 63));
+	if (xscom_writeme(TOD_TTYPE_4, (1ULL << 63)) != 0) {
+		prerror("CHIPTOD: XSCOM error sending TTYPE_4\n");
+		goto error;
+	}
 
 	if (!chiptod_wait_2sync())
 		goto error;
