@@ -105,6 +105,7 @@ void create_dtb(void)
 
 		add_cpu_nodes();
 		add_memory_nodes();
+		add_interrupt_nodes();
 		dt_end_node();
 
 		save_err(fdt_finish(fdt));
