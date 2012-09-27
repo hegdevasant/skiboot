@@ -59,6 +59,7 @@ struct HDIF_cpu_cache {
 	u32 l2_line_size;
 	u32 l3_dcache_size_kb;
 	u32 l3_line_size;
+	u32 dcache_block_size;
 	u32 icache_block_size;
 	u32 dcache_assoc_sets;
 	u32 icache_assoc_sets;
