@@ -11,7 +11,7 @@ try_lock:
 	ld	%r0,0(%r3)
 	andi.	%r10,%r0,1
 	bne	2f
-	mfspr	%r9,SPR_PIR
+	lwz	%r9,CPUTHREAD_PIR(%r13)
 1:	ldarx	%r0,0,%r3
 	andi.	%r10,%r0,1
 	bne-	2f

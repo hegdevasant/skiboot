@@ -59,4 +59,7 @@ extern void unlock(struct lock *l);
  */
 extern bool lock_recursive(struct lock *l);
 
+/* Called after per-cpu data structures are available */
+extern void init_locks(void);
+
 #endif /* __LOCK_H */

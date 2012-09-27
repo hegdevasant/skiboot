@@ -1,8 +1,13 @@
 #include <skiboot.h>
 #include <lock.h>
 #include <assert.h>
+#include <cpu.h>
 
-bool bust_locks;
+/* Set to bust locks. Note, this is initialized to true because our
+ * lock debugging code is not going to work until we have the per
+ * CPU data initialized
+ */
+bool bust_locks = true;
 
 #ifdef DEBUG_LOCKS
 
@@ -17,7 +22,7 @@ static void lock_error(struct lock *l, const char *reason, uint16_t err)
 
 void lock_check(struct lock *l)
 {
-	if ((l->lock_val & 1) && (l->lock_val >> 32) == mfspr(SPR_PIR))
+	if ((l->lock_val & 1) && (l->lock_val >> 32) == this_cpu()->pir)
 		lock_error(l, "Invalid recursive lock", 0);
 }
 
@@ -26,7 +31,7 @@ void unlock_check(struct lock *l)
 	if (!(l->lock_val & 1))
 		lock_error(l, "Unlocking unlocked lock", 1);
 
-	if ((l->lock_val >> 32) != mfspr(SPR_PIR))
+	if ((l->lock_val >> 32) != this_cpu()->pir)
 		lock_error(l, "Unlocked non-owned lock", 2);
 }
 
@@ -67,10 +72,14 @@ bool lock_recursive(struct lock *l)
 		return false;
 
 	if ((l->lock_val & 1) &&
-	    (l->lock_val >> 32) == mfspr(SPR_PIR))
+	    (l->lock_val >> 32) == this_cpu()->pir)
 		return false;
 
 	lock(l);
 	return true;
 }
 
+void init_locks(void)
+{
+	bust_locks = false;
+}

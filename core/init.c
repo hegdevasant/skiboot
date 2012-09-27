@@ -24,6 +24,9 @@ void main_cpu_entry(void)
 	 */
 	cpu_parse();
 
+	/* Now locks can be used */
+	init_locks();
+
 	/* Early initializations of the FSP interface */
 	fsp_init();
 
