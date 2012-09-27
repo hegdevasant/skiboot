@@ -31,7 +31,7 @@ struct HDIF_cpu_id {
 	u32 process_interrupt_line;
 	u32 reserved1;
 	u32 hardware_module_id;
-	u32 ibase;
+	u64 ibase;
 	u32 deprecated1;
 	u32 physical_thread_id;
 	u32 deprecated2;
@@ -59,6 +59,7 @@ struct HDIF_cpu_cache {
 	u32 l2_line_size;
 	u32 l3_dcache_size_kb;
 	u32 l3_line_size;
+	u32 dcache_block_size;
 	u32 icache_block_size;
 	u32 dcache_assoc_sets;
 	u32 icache_assoc_sets;
@@ -165,4 +166,6 @@ extern void cpu_free_job(struct cpu_job *job);
 /* Called by init to process jobs */
 extern void cpu_process_jobs(void);
 
+extern void add_cpu_nodes(void);
+extern void add_interrupt_nodes(void);
 #endif /* __CPU_H */

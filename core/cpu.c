@@ -6,6 +6,8 @@
 #include <spira.h>
 #include <cpu.h>
 #include <fsp.h>
+#include <device_tree.h>
+#include <ccan/str/str.h>
 
 struct cpu_thread *cpu_threads;
 unsigned int cpu_threads_count;
@@ -296,6 +298,88 @@ bool __cpu_parse(void)
 	}
 	return true;
 }	
+
+void add_cpu_nodes(void)
+{
+	int i;
+
+	dt_begin_node("cpus");
+	dt_property_cell("#address-cells", 2);
+	dt_property_cell("#size-cells", 1);
+
+	for (i = 0; i < num_cpu_threads(); i++) {
+		char name[sizeof("PowerPC,POWER7@") + STR_MAX_CHARS(u32)];
+		struct cpu_thread *t = &cpu_threads[i];
+
+		if (t->id->verify_exists_flags & CPU_ID_SECONDARY_THREAD)
+			continue;
+
+		/* FIXME: Don't hardcode this! */
+		sprintf(name, "PowerPC,POWER7@%u", t->id->process_interrupt_line);
+		dt_begin_node(name);
+		*strchr(name, '@') = '\0';
+		dt_property_string("name", name);
+		dt_property_string("device-type", "cpu");
+		dt_property_cell("reg", t->id->process_interrupt_line);
+		dt_property_cell("d-cache-block-size",
+				 t->cache->dcache_block_size);
+		dt_property_cell("i-cache-block-size",
+				 t->cache->icache_block_size);
+		dt_property_cell("d-cache-size", t->cache->l1_dcache_size_kb*1024);
+		dt_property_cell("i-cache-size", t->cache->icache_size_kb*1024);
+
+		if (t->cache->icache_line_size != t->cache->icache_block_size)
+			dt_property_cell("i-cache-line-size",
+					 t->cache->icache_line_size);
+		if (t->cache->l1_dcache_line_size != t->cache->dcache_block_size)
+			dt_property_cell("d-cache-line-size",
+					 t->cache->l1_dcache_line_size);
+
+		dt_property_cell("clock-frequency",
+				 t->timebase->actual_clock_speed);
+
+		/* FIXME: Hardcoding is bad. */
+		dt_property_cell("timebase-frequency", 512000);
+		dt_end_node();
+	}
+	dt_end_node();
+}
+
+/* Clean the stray high bit which the FSP inserts: we only have 52 bits real */
+static u64 cleanup_addr(u64 addr)
+{
+	return addr & ((1ULL << 52) - 1);
+}
+
+void add_interrupt_nodes(void)
+{
+	unsigned int i;
+	struct cpu_thread *t;
+	char name[sizeof("interrupt-controller@")
+		  + STR_MAX_CHARS(t->id->ibase)];
+
+	for (i = 0; i < num_cpu_threads(); i++) {
+		struct cpu_thread *t = &cpu_threads[i];
+		u32 irange[2];
+		u64 reg[2];
+
+		/* One page is enough for a handful of regs. */
+		reg[0] = cleanup_addr(t->id->ibase);
+		reg[1] = 4096;
+
+		sprintf(name, "interrupt-controller@%llx", reg[0]);
+		dt_begin_node(name);
+		dt_property_string("compatible", "ibm,ppc-xics");
+
+		irange[0] = i; /* Index */
+		irange[1] = 1; /* num servers */
+		dt_property("ibm,interrupt-server-ranges",
+			    irange, sizeof(irange));
+
+		dt_property("reg", reg, sizeof(reg));
+		dt_end_node();
+	}
+}
 
 void cpu_parse(void)
 {

@@ -29,4 +29,5 @@
 #define 	LONG_MAX	(ULONG_MAX/2)
 #define 	LONG_MIN	((-LONG_MAX)-1)
 
+#define		CHAR_BIT	8
 #endif

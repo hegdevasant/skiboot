@@ -5,6 +5,7 @@
 #include <cpu.h>
 #include <processor.h>
 #include <xscom.h>
+#include <device_tree.h>
 
 /*
  * Boot semaphore, incremented by each CPU calling in
@@ -133,6 +134,9 @@ void main_cpu_entry(void)
 	memory_parse();
 
 	op_display(OP_LOG, OP_MOD_INIT, 0x9999);
+
+	/* Create the device tree blob to boot OS. */
+	create_dtb();
 
 	/* Nothing to do */
 	while(true) {
