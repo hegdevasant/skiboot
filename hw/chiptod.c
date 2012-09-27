@@ -172,7 +172,7 @@ static bool chiptod_to_tb(void)
 	 * Note: BML updates TOD reg. 0x27[24:31] as follow, this is
 	 * not part of the documented procedure in the pervasive spec
 	 */
-	tval = (mfspr(SPR_PIR) >> 2) & 0x7;	/* Get core ID */
+	tval = (this_cpu()->pir >> 2) & 0x7;	/* Get core ID */
 	tval |= 0x8;				/* Add b'1000 */
 	tval <<= 32;				/* Move to top half */
 	xscom_writeme(TOD_PIB_MASTER, tval);
