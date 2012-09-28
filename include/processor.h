@@ -34,7 +34,7 @@
  * XXX This will break on P8, will do for now
  */
 #define SPR_PIR_THREAD_MASK	0x0003	/* Mask of thread bits */
-#define SPR_PIR_MASK		0x003f	/* Mask of implemented bits */
+#define SPR_PIR_MASK		0x03ff	/* Mask of implemented bits */
 
 /* SPR register definitions */
 #define SPR_TBRL	0x10c	/* RO: Timebase low */
