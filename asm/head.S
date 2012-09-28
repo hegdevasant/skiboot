@@ -1,6 +1,8 @@
 #include <asm-utils.h>
 #include <asm-offsets.h>
 #include <processor.h>
+#include <opal.h>
+#include <stack.h>
 
 #define EXCEPTION(nr)	\
 	.= nr;		\
@@ -19,25 +21,23 @@ __head:
 	 * need to get at it very early, before we apply our relocs
 	 */
 	. = 0xf0
-__boot_sem:
+boot_sem:
 	.llong	0
 
 	/* And this is a boot flag used to kick secondaries into the
 	 * main code.
 	 */
-__boot_flag:
+boot_flag:
 	.llong	0
 
-	/* Here will sit the reset handler */
+	/* Exception stubs */
 	EXCEPTION(0x100)
 
-	/* Main entry point (to move elsewhere) */
+	/* Entry point set by the FSP */
 	.= 0x180
-.global __entry
-__entry:
-	b	__entry2
+	b	boot_entry
 
-	/* Exception stubs */
+	/* More exception stubs */
 	EXCEPTION(0x200)
 	EXCEPTION(0x300)
 	EXCEPTION(0x380)
@@ -78,7 +78,24 @@ __entry:
 	EXCEPTION(0x1e00)
 	EXCEPTION(0x1f00)
 
-__entry2:
+	.= 0x2000
+	/* This is the OPAL branch table. It's populated at boot time
+	 * with function pointers to the various OPAL functions from
+	 * the content of the .opal_table section, indexed by Token.
+	 */
+.global opal_branch_table
+opal_branch_table:
+	.space	8 * (OPAL_LAST + 1)
+
+/*
+ *
+ * Boot time entry point from FSP
+ *
+ * All CPUs come here
+ *
+ */
+.global boot_entry
+boot_entry:
 	/* Get our reloc offset into r30 */
 	bcl	20,31,$+4
 1:	mflr	%r30
@@ -92,13 +109,17 @@ __entry2:
 	LOAD_IMM64(%r29, SKIBOOT_BASE)
 	add	%r2,%r2,%r29
 
+	/* Fixup our MSR (remove TA) */
+	LOAD_IMM64(%r3, (MSR_HV | MSR_SF))
+	mtmsrd	%r3,0
+
 	/* Check our PIR, avoid threads */
 	mfspr	%r31,SPR_PIR
 	andi.	%r0,%r31,3
 	bne	secondary_wait
 
 	/* Pick a boot CPU, cpu index in r31 */
-	LOAD_IMM32(%r3, __boot_sem - __head)
+	LOAD_IMM32(%r3, boot_sem - __head)
 	add	%r3,%r3,%r30
 1:	lwarx	%r4,0,%r3
 	addi	%r0,%r4,1
@@ -153,7 +174,7 @@ __entry2:
 	bl	call_relocate
 
 	/* Tell secondaries to move to second stage (relocated) spin loop */
-	LOAD_IMM32(%r3, __boot_flag - __head)
+	LOAD_IMM32(%r3, boot_flag - __head)
 	add	%r3,%r3,%r28
 	li	%r0,1
 	std	%r0,0(%r3)
@@ -174,9 +195,9 @@ __entry2:
 	/* Secondary CPUs wait here r31 is PIR */
 secondary_wait:	
 	/* The primary might be in the middle of relocating us,
-	 * so first we spin on the __boot_flag
+	 * so first we spin on the boot_flag
 	 */
-	LOAD_IMM32(%r3, __boot_flag - __head)
+	LOAD_IMM32(%r3, boot_flag - __head)
 	add	%r3,%r3,%r30
 1:	smt_very_low
 	ld	%r0,0(%r3)
@@ -286,3 +307,117 @@ hv_lid_load_table:
 	.long	0x10
 	.long	0
 	.long	0
+
+	/* This is an array of stack pointer for each CPU indexed by
+	 * PIR so they can be quickly retrieved at a small offset
+	 * from __head
+	 */
+.global cpu_stacks
+cpu_stacks:
+	.space	8 * (SPR_PIR_MASK + 1)
+
+
+
+/*
+ *
+ * OPAL entry point from operating system
+ *
+ * Register usage:
+ *
+ *       r0: Token
+ *       r2: OPAL Base
+ *  r3..r11: Args
+ *      r12: Scratch
+ * r13..r31: Preserved
+ *
+ */
+	.balign	0x10
+.global opal_entry
+opal_entry:
+	/* Get our per CPU stack, save PIR into CTR */
+	mfspr	%r12,SPR_PIR
+	mtctr	%r12
+	sldi	%r12,%r12,3
+	add	%r12,%r12,%r2
+	ld	%r12,(cpu_stacks - __head)(%r12)
+	stdu	%r12,-STACK_FRAMESIZE(%r12)
+
+	/* Save caller r1, establish new r1 */
+	std	%r1,STACK_GPR1(%r12)
+	mr	%r1,%r12
+
+	/* May save arguments for tracing */
+#ifdef OPAL_TRACE_ENTRY
+	std	%r3,STACK_GPR3(%r1)
+	std	%r4,STACK_GPR4(%r1)
+	std	%r5,STACK_GPR5(%r1)
+	std	%r6,STACK_GPR6(%r1)
+	std	%r7,STACK_GPR7(%r1)
+	std	%r8,STACK_GPR8(%r1)
+	std	%r9,STACK_GPR9(%r1)
+	std	%r10,STACK_GPR10(%r1)
+	std	%r11,STACK_GPR11(%r1)
+#endif
+	/* Save Token (r0), LR and r13 */
+	mflr	%r12
+	std	%r0,STACK_GPR0(%r1)
+	std	%r13,STACK_GPR13(%r1)
+	std	%r12,STACK_LR(%r1)
+
+	/* Restore PIR, get the CPU thread */
+	mfctr	%r13
+	mulli	%r13,%r13,CPUTHREAD_SIZE
+	add	%r13,%r13,%r2
+	addis	%r13,%r13,(cpu_threads - __head)@ha
+	addi	%r13,%r13,(cpu_threads - __head)@l
+
+	/* Mark the stack frame */
+	li	%r12,STACK_ENTRY_OPAL_API	
+	std	%r12,STACK_TYPE(%r1)
+
+	/* Get our TOC */
+	addis	%r2,%r2,(__toc_start - __head)@ha
+	addi	%r2,%r2,(__toc_start - __head)@l
+
+#ifdef OPAL_TRACE_ENTRY
+	mr	%r3,%r1
+	bl	opal_trace_entry
+	ld	%r0,STACK_GPR0(%r1)
+	ld	%r3,STACK_GPR3(%r1)
+	ld	%r4,STACK_GPR4(%r1)
+	ld	%r5,STACK_GPR5(%r1)
+	ld	%r6,STACK_GPR6(%r1)
+	ld	%r7,STACK_GPR7(%r1)
+	ld	%r8,STACK_GPR8(%r1)
+	ld	%r9,STACK_GPR9(%r1)
+	ld	%r10,STACK_GPR10(%r1)
+	ld	%r11,STACK_GPR11(%r1)
+#endif /* OPAL_TRACE_ENTRY */
+
+	/* Convert our token into a table entry and get the
+	 * function pointer. Also check the token.
+	 */
+	cmpldi	%r0,OPAL_LAST
+	bgt-	2f
+	sldi	%r0,%r0,3
+	LOAD_ADDR_FROM_TOC(%r12, opal_branch_table)
+	ldx	%r0,%r12,%r0
+	cmpldi	%r0,0
+	beq-	2f
+	mtctr	%r0
+
+	/* Jump ! */
+	bctrl
+
+1:	ld	%r12,STACK_LR(%r1)
+	mtlr	%r12
+	ld	%r13,STACK_GPR13(%r1)
+	ld	%r1,STACK_GPR1(%r1)
+	blr
+
+2:	/* Bad token */
+	ld	%r3,STACK_GPR0(%r1)
+	bl	opal_bad_token
+	b	1b
+
+

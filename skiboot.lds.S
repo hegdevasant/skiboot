@@ -1,4 +1,4 @@
-ENTRY(__entry);
+ENTRY(boot_entry);
 SECTIONS
 {
 	. = 0;
@@ -20,16 +20,23 @@ SECTIONS
 		*(.branch_lt)
 	}
  
-	. = ALIGN(0x1000);
-
+	. = ALIGN(0x10);
 	.opd : {
 		*(.opd)
 	}
   
+	. = ALIGN(0x10);
 	.got : {
 		__toc_start = . + 0x8000;
 		*(.got)
 		*(.toc)
+	}
+
+	. = ALIGN(0x10);
+	.opal_table : {
+		__opal_table_start = .;
+		KEEP(*(.opal_table))
+		__opal_table_end = .;
 	}
 
 	/* Do I need to keep these ? */
@@ -37,12 +44,14 @@ SECTIONS
 	.dynstr : { *(.dynstr)	}
 
 	/* Relocations */
+	. = ALIGN(0x10);
 	.dynamic : {
 		__dynamic_start = .;
 		*(.dynamic)
 		__dynamic_end = .;
 	}
 
+	. = ALIGN(0x10);
 	.rela.dyn : {
 		__rela_dyn_start = .;
 		*(.rela*)

@@ -9,6 +9,9 @@
 /* Enable malloc debugging */
 #define DEBUG_MALLOC		1
 
+/* Enable OPAL entry point tracing */
+#define OPAL_TRACE_ENTRY	1
+
 /* Boot stack size set to 64K as well */
 #define STACK_SIZE		0x10000
 

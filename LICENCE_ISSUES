@@ -5,4 +5,7 @@
                  it might be from older kernels, is that even copyrightable ?
                  check with ossc (it's just one big regexp)
 - asm-helper macros : more/less "inspired" from Linux variants
+- opal.h : OPAL API definition (copyrightable ?). Copied from Linux,
+           but entirely written by IBM (myself) and had no commit or
+           contribution by anybody else
 

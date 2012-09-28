@@ -6,6 +6,7 @@
 #include <processor.h>
 #include <xscom.h>
 #include <device_tree.h>
+#include <opal.h>
 
 /*
  * Boot semaphore, incremented by each CPU calling in
@@ -69,6 +70,9 @@ void main_cpu_entry(void)
 
 	/* Create the device tree blob to boot OS. */
 	create_dtb();
+
+	/* Create the OPAL call table */
+	opal_table_init();
 
 	/* Nothing to do */
 	while(true) {
