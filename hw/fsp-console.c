@@ -7,6 +7,7 @@
 #include <io.h>
 #include <fsp.h>
 #include <console.h>
+#include <opal.h>
 
 struct fsp_serbuf_hdr {
 	u16	partition_id;
@@ -100,6 +101,8 @@ static size_t fsp_write_vserial(struct fsp_serial *fs, const char *buf, size_t l
 		else
 			fs->out_poke = true;
 	}
+	opal_update_pending(OPAL_EVENT_CONSOLE_OUTPUT,
+			    OPAL_EVENT_CONSOLE_OUTPUT);
 	return len;
 }
 
@@ -387,3 +390,101 @@ void fsp_console_init(void)
 	op_display(OP_LOG, OP_MOD_FSPCON, 0x0005);
 }
 
+
+static int64_t opal_console_write(int64_t term_number, int64_t *length,
+				  const uint8_t *buffer)
+{
+	struct fsp_serial *fs;
+	size_t written, requested;
+
+	if (term_number < 0 || term_number >= MAX_SERIAL)
+		return OPAL_PARAMETER;
+	fs = &fsp_serials[term_number];
+	if (!fs->available || fs->log_port)
+		return OPAL_PARAMETER;
+	if (!fs->open)
+		return OPAL_CLOSED;
+	/* Clamp to a reasonable size */
+	requested = *length;
+	if (requested > 0x1000)
+		requested = 0x1000;
+	lock(&con_lock);
+	written = fsp_write_vserial(fs, buffer, requested);
+	*length = written;
+	unlock(&con_lock);
+
+	return written ? OPAL_SUCCESS : OPAL_BUSY_EVENT;
+}
+opal_call(OPAL_CONSOLE_WRITE, opal_console_write);
+
+static int64_t opal_console_write_buffer_space(int64_t term_number,
+					       int64_t *length)
+{
+	struct fsp_serial *fs;
+	struct fsp_serbuf_hdr *sb;
+
+	if (term_number < 0 || term_number >= MAX_SERIAL)
+		return OPAL_PARAMETER;
+	fs = &fsp_serials[term_number];
+	if (!fs->available || fs->log_port)
+		return OPAL_PARAMETER;
+	if (!fs->open)
+		return OPAL_CLOSED;
+	sb = fs->out_buf;
+
+	lock(&con_lock);
+	*length = (sb->next_in + SER_BUF_DATA_SIZE - sb->next_out - 1)
+		% SER_BUF_DATA_SIZE;
+	unlock(&con_lock);
+
+	return OPAL_SUCCESS;
+}
+opal_call(OPAL_CONSOLE_WRITE_BUFFER_SPACE, opal_console_write_buffer_space);
+
+
+static int64_t opal_console_read(int64_t term_number, int64_t *length,
+				 uint8_t *buffer __unused)
+{
+	struct fsp_serial *fs;
+	//struct fsp_serbuf_hdr *sb;
+
+	if (term_number < 0 || term_number >= MAX_SERIAL)
+		return OPAL_PARAMETER;
+	fs = &fsp_serials[term_number];
+	if (!fs->available || fs->log_port)
+		return OPAL_PARAMETER;
+	if (!fs->open)
+		return OPAL_CLOSED;
+
+	/* XXX FIXME: Add input */
+	//sb = fs->in_buf;
+	*length = 0;
+
+	return OPAL_SUCCESS;
+}
+opal_call(OPAL_CONSOLE_READ, opal_console_read);
+
+void fsp_console_poll(void)
+{
+	fsp_poll();
+
+	/* We don't get messages for out buffer being consumed, so we
+	 * need to poll
+	 */
+	if (opal_pending_events & OPAL_EVENT_CONSOLE_OUTPUT) {
+		unsigned int i;
+		bool pending = false;
+
+		for (i = 0; i < MAX_SERIAL && !pending; i++) {
+			struct fsp_serial *fs = &fsp_serials[i];
+			struct fsp_serbuf_hdr *sb = fs->out_buf;
+
+			if (fs->log_port || !fs->open)
+				continue;
+			if (sb->next_out != sb->next_in)
+				pending = true;
+		}
+		if (!pending)
+			opal_update_pending(OPAL_EVENT_CONSOLE_OUTPUT, 0);
+	}
+}

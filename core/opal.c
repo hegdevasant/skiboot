@@ -1,6 +1,11 @@
 #include <skiboot.h>
 #include <opal.h>
 #include <stack.h>
+#include <lock.h>
+#include <fsp.h>
+
+/* Pending events to signal via opal_poll_events */
+uint64_t opal_pending_events;
 
 void opal_table_init(void)
 {
@@ -47,3 +52,24 @@ static uint64_t opal_test_func(uint64_t arg)
 	return 0xfeedf00d;
 }
 opal_call(OPAL_TEST, opal_test_func);
+
+void opal_update_pending(uint64_t evt_mask, uint64_t evt_values)
+{
+	static struct lock evt_lock = LOCK_UNLOCKED;
+
+	/* XXX FIXME: Use atomics instead */
+	lock(&evt_lock);
+	opal_pending_events = (opal_pending_events & !evt_mask) | evt_values;
+	unlock(&evt_lock);
+}
+
+
+static int64_t opal_poll_events(uint64_t *outstanding_event_mask)
+{
+	fsp_console_poll();
+	*outstanding_event_mask = opal_pending_events;
+
+	return OPAL_SUCCESS;
+}
+opal_call(OPAL_POLL_EVENTS, opal_poll_events);
+

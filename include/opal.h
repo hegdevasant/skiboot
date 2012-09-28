@@ -406,7 +406,7 @@ typedef struct oppanel_line {
 	uint64_t 	line_len;
 } oppanel_line_t;
 
-/****** Generate an entrypoint ******/
+/****** Internal **********/
 
 /* An opal table entry */
 struct opal_table_entry {
@@ -422,7 +422,10 @@ static struct opal_table_entry __e_##__func __used __section(".opal_table") = \
 extern struct opal_table_entry __opal_table_start;
 extern struct opal_table_entry __opal_table_end;
 
+extern uint64_t opal_pending_events;
+
 extern void opal_table_init(void);
+extern void opal_update_pending(uint64_t evt_mask, uint64_t evt_values);
 
 #endif /* __ASSEMBLY__ */
 #endif /* __OPAL_H */
