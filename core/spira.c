@@ -3,7 +3,11 @@
 /* Processor Initialization structure, contains
  * the initial NIA and MSR values for the entry
  * point
+ *
+ * Note: It appears to be ignoring the entry point
+ *       and always going to 0x180
  */
+
 static struct proc_init_data proc_init_data = {
 	.hdr = HDIF_SIMPLE_HDR("PROCIN", 1, struct proc_init_data),
 	.regs_ptr = {
@@ -34,6 +38,7 @@ struct spira spira = {
 		.proc_init = {
 			.addr  		= &proc_init_data,
 			.alloc_cnt	= 1,
+			.act_cnt	= 1,
 			.alloc_len	= sizeof(struct proc_init_data),
 		},
 		.heap = {

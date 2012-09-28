@@ -238,7 +238,12 @@ call_relocate:
 1:	/* Fatal relocate failure */
 	b	.
 
-	/* NACA */
+
+/*
+ *
+ * NACA structure, accessed by the FPS to find the SPIRA
+ *
+ */
 	. = 0x4000
 .global naca
 naca:
@@ -267,7 +272,7 @@ naca:
 	.space	4
 	.byte	0			/* 0x01b5 : default state for SW attn */
 	.space	1
-	.byte	0x01			/* 0x01b7 : PCIA format */
+	.byte	0x00			/* 0x01b7 : PCIA format */
 	.space	0xe48
 
 	.balign	0x10
