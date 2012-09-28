@@ -7,8 +7,6 @@
 #include <lock.h>
 
 /* This is the array of all threads. */
-extern struct cpu_thread *cpu_threads;
-
 struct HDIF_cpu_id {
 	u32 pir;
 	u32 fru_id;

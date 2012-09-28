@@ -205,7 +205,6 @@ secondary_wait:
 	LOAD_ADDR_FROM_TOC(%r3, cpu_threads)
 	LOAD_ADDR_FROM_TOC(%r5, cpu_max_pir)
 	mulli	%r4,%r31,CPUTHREAD_SIZE
-	ld	%r3,0(%r3)
 	lwz	%r5,0(%r5)
 	cmpw	%r31,%r5
 	bgt	secondary_not_found

@@ -9,7 +9,11 @@
 #include <device_tree.h>
 #include <ccan/str/str.h>
 
-struct cpu_thread *cpu_threads;
+/* The cpu_threads array is static and indexed by PIR in
+ * order to speed up lookup from asm entry points
+ */
+struct cpu_thread cpu_threads[SPR_PIR_MASK + 1];
+extern void *cpu_stacks[];
 unsigned int cpu_max_pir;
 struct cpu_thread *boot_cpu;
 
@@ -229,12 +233,6 @@ bool __cpu_parse(void)
 
 	cpu_find_max_pir();
 
-	cpu_threads = zalloc(sizeof(struct cpu_thread) * (cpu_max_pir + 1));
-	if (!cpu_threads) {
-		prerror("PACA: could not allocate CPU array\n");
-		return false;
-	}
-
 	for (i = 0; i < spira.ntuples.paca.act_cnt; i++) {
 		const struct HDIF_cpu_id *id;
 		struct cpu_thread *t;
@@ -309,6 +307,7 @@ bool __cpu_parse(void)
 			}
 			t->state = cpu_state_boot;
 			t->stack = boot_stack_top;
+			cpu_stacks[t->pir] = t->stack;
 			__this_cpu = boot_cpu = t;
 		}
 
@@ -433,7 +432,7 @@ void cpu_bringup(void)
 			t->state = cpu_state_unavailable;
 			break;
 		}
-		t->stack = stack + STACK_SIZE - 256;
+		cpu_stacks[t->pir] = t->stack = stack + STACK_SIZE - 256;
 	}
 
 	op_display(OP_LOG, OP_MOD_CPU, 0x0001);
