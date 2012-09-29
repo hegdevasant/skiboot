@@ -1,4 +1,5 @@
 #include <skiboot.h>
+#include <stdarg.h>
 #include <libfdt.h>
 #include <cpu.h>
 #include <memory.h>
@@ -26,6 +27,15 @@ void dt_property_string(const char *name, const char *value)
 void dt_property_cell(const char *name, u32 cell)
 {
 	save_err(fdt_property_cell(fdt, name, cell));
+}
+
+void dt_property_cells(const char *name, int count, ...)
+{
+	va_list args;
+
+	va_start(args, count);
+	save_err(fdt_property_cells_v(fdt, name, count, args));
+	va_end(args);
 }
 
 void dt_property(const char *name, const void *val, size_t size)
