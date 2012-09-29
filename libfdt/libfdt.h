@@ -882,6 +882,9 @@ static inline int fdt_property_cell(void *fdt, const char *name, uint32_t val)
 }
 #define fdt_property_string(fdt, name, str) \
 	fdt_property(fdt, name, str, strlen(str)+1)
+int fdt_property_cells_v(void *fdt, unsigned const char *name, int count,
+			 va_list args);
+int fdt_property_cells(void *fdt, unsigned const char *name, int count, ...);
 int fdt_end_node(void *fdt);
 int fdt_finish(void *fdt);
 

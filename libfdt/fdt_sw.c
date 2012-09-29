@@ -210,6 +210,30 @@ int fdt_property(void *fdt, const char *name, const void *val, int len)
 	return 0;
 }
 
+int fdt_property_cells_v(void *fdt, unsigned const char *name, int count,
+			 va_list args)
+{
+	uint32_t buffer[count];
+	int i;
+
+	for (i = 0; i < count; i++)
+		buffer[i] = cpu_to_fdt32(va_arg(args, uint32_t));
+
+	return fdt_property(fdt, name, buffer, sizeof(buffer));
+}
+
+int fdt_property_cells(void *fdt, unsigned const char *name, int count, ...)
+{
+	va_list args;
+	int ret;
+
+	va_start(args, count);
+	ret = fdt_property_cells_v(fdt, name, count, args);
+	va_end(args);
+
+	return ret;
+}
+
 int fdt_finish(void *fdt)
 {
 	char *p = (char *)fdt;

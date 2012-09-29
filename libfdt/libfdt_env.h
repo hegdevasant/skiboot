@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+#include <stdarg.h>
 
 #define _B(n)	((unsigned long long)((uint8_t *)&x)[n])
 static inline uint32_t fdt32_to_cpu(uint32_t x)
