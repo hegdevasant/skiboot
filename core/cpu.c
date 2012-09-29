@@ -328,6 +328,15 @@ void cpu_parse(void)
 void add_cpu_nodes(void)
 {
 	struct cpu_thread *t;
+	static const uint32_t p7_sps[] = {
+		0x0c, 0x000, 1, 0x0c, 0x0000,
+		0x18, 0x100, 1,	0x18, 0x0000,
+		0x14, 0x111, 1, 0x14, 0x0002,
+		0x22, 0x120, 1, 0x22, 0x0003,
+	};
+	static const uint32_t p7_pss[] = {
+		0x1c, 0x28, 0xffffffff, 0xffffffff
+	};
 
 	dt_begin_node("cpus");
 	dt_property_cell("#address-cells", 2);
@@ -335,18 +344,28 @@ void add_cpu_nodes(void)
 
 	for_each_available_cpu(t) {
 		char name[sizeof("PowerPC,POWER7@") + STR_MAX_CHARS(u32)];
+		uint32_t no = t->id->process_interrupt_line;
 
 		if (t->id->verify_exists_flags & CPU_ID_SECONDARY_THREAD)
 			continue;
 
 		/* FIXME: Don't hardcode this! */
-		sprintf(name, "PowerPC,POWER7@%u",
-			t->id->process_interrupt_line);
+		sprintf(name, "PowerPC,POWER7@%u", no);
 		dt_begin_node(name);
 		*strchr(name, '@') = '\0';
 		dt_property_string("name", name);
 		dt_property_string("device-type", "cpu");
-		dt_property_cell("reg", t->id->process_interrupt_line);
+		dt_property_string("status", "okay");
+		dt_property_cell("reg", no);
+		dt_property("ibm,segment-page-sizes", p7_sps, sizeof(p7_sps));
+		dt_property("ibm,processor-segment-sizes", p7_pss,
+			    sizeof(p7_pss));
+		/* XXX FIXME: Don't hardcode... */
+		dt_property_cells("ibm,ppc-interrupt-server#s", 4,
+				  no, no + 1, no + 2, no + 3);
+		dt_property_cell("ibm,slb-size", 0x20);
+		dt_property_cell("ibm,vmx", 0x2);
+
 		dt_property_cell("d-cache-block-size",
 				 t->cache->dcache_block_size);
 		dt_property_cell("i-cache-block-size",
@@ -363,7 +382,6 @@ void add_cpu_nodes(void)
 		    t->cache->dcache_block_size)
 			dt_property_cell("d-cache-line-size",
 					 t->cache->l1_dcache_line_size);
-
 		dt_property_cell("clock-frequency",
 				 t->timebase->actual_clock_speed);
 
