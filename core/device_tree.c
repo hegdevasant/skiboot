@@ -110,6 +110,7 @@ void create_dtb(void)
 		dt_begin_node("device-tree");
 		dt_property_string("name", "device-tree");
 		dt_property_string("model", "FIXME");
+		dt_property_string("compatible", "ibm,powernv");
 		dt_property_cell("#address-cells", 2);
 		dt_property_cell("#size-cells", 2);
 
