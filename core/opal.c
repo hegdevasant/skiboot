@@ -53,7 +53,7 @@ static uint64_t opal_test_func(uint64_t arg)
 }
 opal_call(OPAL_TEST, opal_test_func);
 
-void opal_update_pending(uint64_t evt_mask, uint64_t evt_values)
+void opal_update_pending_evt(uint64_t evt_mask, uint64_t evt_values)
 {
 	static struct lock evt_lock = LOCK_UNLOCKED;
 

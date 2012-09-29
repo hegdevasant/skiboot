@@ -425,7 +425,7 @@ extern struct opal_table_entry __opal_table_end;
 extern uint64_t opal_pending_events;
 
 extern void opal_table_init(void);
-extern void opal_update_pending(uint64_t evt_mask, uint64_t evt_values);
+extern void opal_update_pending_evt(uint64_t evt_mask, uint64_t evt_values);
 
 #endif /* __ASSEMBLY__ */
 #endif /* __OPAL_H */

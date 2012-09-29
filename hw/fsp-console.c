@@ -101,8 +101,8 @@ static size_t fsp_write_vserial(struct fsp_serial *fs, const char *buf, size_t l
 		else
 			fs->out_poke = true;
 	}
-	opal_update_pending(OPAL_EVENT_CONSOLE_OUTPUT,
-			    OPAL_EVENT_CONSOLE_OUTPUT);
+	opal_update_pending_evt(OPAL_EVENT_CONSOLE_OUTPUT,
+				OPAL_EVENT_CONSOLE_OUTPUT);
 	return len;
 }
 
@@ -485,6 +485,6 @@ void fsp_console_poll(void)
 				pending = true;
 		}
 		if (!pending)
-			opal_update_pending(OPAL_EVENT_CONSOLE_OUTPUT, 0);
+			opal_update_pending_evt(OPAL_EVENT_CONSOLE_OUTPUT, 0);
 	}
 }
