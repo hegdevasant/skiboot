@@ -1,8 +1,11 @@
 #include <skiboot.h>
 #include <stdarg.h>
 #include <libfdt.h>
+#include <device_tree.h>
 #include <cpu.h>
 #include <memory.h>
+#include <opal.h>
+#include <interrupts.h>
 
 static int fdt_error;
 static void *fdt;
@@ -14,9 +17,13 @@ static void save_err(int err)
 		fdt_error = err;
 }
 
-void dt_begin_node(const char *name)
+uint32_t dt_begin_node(const char *name)
 {
 	save_err(fdt_begin_node(fdt, name));
+
+	dt_property_cell("linux,phandle", ++lphandle);
+
+	return lphandle;
 }
 
 void dt_property_string(const char *name, const char *value)
@@ -45,7 +52,6 @@ void dt_property(const char *name, const void *val, size_t size)
 
 void dt_end_node(void)
 {
-	dt_property_cell("linux,phandle", ++lphandle);
 	save_err(fdt_end_node(fdt));
 }
 
@@ -114,9 +120,14 @@ void create_dtb(void)
 		dt_property_cell("#address-cells", 2);
 		dt_property_cell("#size-cells", 2);
 
+		/* The ICS node must come before anything that wants to
+		 * reference its phandle (ie, anything with interrupt-parent
+		 * or interrupt-map properties
+		 */
+		add_ics_node();
 		add_cpu_nodes();
 		add_memory_nodes();
-		add_interrupt_nodes();
+		add_icp_nodes();
 		dt_end_node();
 
 		save_err(fdt_finish(fdt));

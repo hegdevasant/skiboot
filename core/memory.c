@@ -264,12 +264,6 @@ void memory_parse(void)
 	}
 }
 
-/* Clean the stray high bit which the FSP inserts: we only have 52 bits real */
-static u64 cleanup_addr(u64 addr)
-{
-	return addr & ((1ULL << 52) - 1);
-}
-
 void add_memory_nodes(void)
 {
 	struct address_range *i;

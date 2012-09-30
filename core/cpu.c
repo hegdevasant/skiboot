@@ -392,44 +392,6 @@ void add_cpu_nodes(void)
 	dt_end_node();
 }
 
-/* Clean the stray high bit which the FSP inserts: we only have 52 bits real */
-static u64 cleanup_addr(u64 addr)
-{
-	return addr & ((1ULL << 52) - 1);
-}
-
-void add_interrupt_nodes(void)
-{
-	struct cpu_thread *t;
-	char name[sizeof("interrupt-controller@")
-		  + STR_MAX_CHARS(t->id->ibase)];
-
-	for_each_available_cpu(t) {
-		u32 irange[2];
-		u64 reg[2];
-
-		if (t->state != cpu_state_idle &&
-		    t->state != cpu_state_boot)
-			continue;
-
-		/* One page is enough for a handful of regs. */
-		reg[0] = cleanup_addr(t->id->ibase);
-		reg[1] = 4096;
-
-		sprintf(name, "interrupt-controller@%llx", reg[0]);
-		dt_begin_node(name);
-		dt_property_string("compatible", "ibm,ppc-xics");
-
-		irange[0] = t->id->process_interrupt_line; /* Index */
-		irange[1] = 1;				   /* num servers */
-		dt_property("ibm,interrupt-server-ranges",
-			    irange, sizeof(irange));
-
-		dt_property("reg", reg, sizeof(reg));
-		dt_end_node();
-	}
-}
-
 void cpu_bringup(void)
 {
 	struct cpu_thread *t;
