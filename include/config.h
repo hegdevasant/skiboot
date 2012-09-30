@@ -10,10 +10,10 @@
 #define DEBUG_MALLOC		1
 
 /* Enable OPAL entry point tracing */
-#define OPAL_TRACE_ENTRY	1
+//#define OPAL_TRACE_ENTRY	1
 
 /* Enable tracing of event state change */
-#define OPAL_TRACE_EVT_CHG	1
+//#define OPAL_TRACE_EVT_CHG	1
 
 /* Enable various levels of OPAL_console debug */
 //#define OPAL_DEBUG_CONSOLE_IO	1
