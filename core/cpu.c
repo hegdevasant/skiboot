@@ -169,8 +169,8 @@ struct cpu_thread *next_available_cpu(struct cpu_thread *cpu)
 {
 	do {
 		cpu = next_cpu(cpu);
-	} while(cpu && cpu->state != cpu_state_boot &&
-		cpu->state != cpu_state_idle);
+	} while(cpu && cpu->state != cpu_state_active);
+
 	return cpu;
 }
 
@@ -293,7 +293,7 @@ bool __cpu_parse(void)
 		switch(state) {
 		case CPU_ID_VERIFY_USABLE_NO_FAILURES:
 		case CPU_ID_VERIFY_USABLE_FAILURES:
-			t->state = cpu_state_available;
+			t->state = cpu_state_present;
 			break;
 		default:
 			t->state = cpu_state_unavailable;
@@ -301,11 +301,11 @@ bool __cpu_parse(void)
 
 		/* Mark boot CPU */
 		if (is_boot_cpu) {
-			if (t->state != cpu_state_available) {
+			if (t->state != cpu_state_present) {
 				prerror("CPU: Boot CPU unavailable !\n");
 				return false;
 			}
-			t->state = cpu_state_boot;
+			t->state = cpu_state_active;
 			t->stack = boot_stack_top;
 			cpu_stacks[t->pir] = t->stack;
 			__this_cpu = boot_cpu = t;
@@ -442,7 +442,7 @@ void cpu_bringup(void)
 	for_each_cpu(t) {
 		void *stack;
 
-		if (t->state != cpu_state_available)
+		if (t->state != cpu_state_present)
 			continue;
 		stack = memalign(16, STACK_SIZE);
 		if (!stack) {
@@ -463,12 +463,12 @@ void cpu_bringup(void)
 	op_display(OP_LOG, OP_MOD_CPU, 0x0002);
 
 	for_each_cpu(t) {
-		if (t->state != cpu_state_available &&
-		    t->state != cpu_state_idle)
+		if (t->state != cpu_state_present &&
+		    t->state != cpu_state_active)
 			continue;
 
 		/* Add a callin timeout ? */
-		while (t->state != cpu_state_idle) {
+		while (t->state != cpu_state_active) {
 			smt_very_low();
 			sync();
 		}
@@ -479,5 +479,5 @@ void cpu_bringup(void)
 
 void cpu_callin(struct cpu_thread *cpu)
 {
-	cpu->state = cpu_state_idle;
+	cpu->state = cpu_state_active;
 }

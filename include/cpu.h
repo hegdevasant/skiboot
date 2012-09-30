@@ -80,9 +80,8 @@ enum cpu_thread_state {
 	cpu_state_no_cpu	= 0,	/* Nothing there */
 	cpu_state_unknown,		/* In PACA, not called in yet */
 	cpu_state_unavailable,		/* Not available */
-	cpu_state_available,		/* Assumed to spin in asm entry */
-	cpu_state_boot,			/* Our boot CPU */
-	cpu_state_idle,			/* Secondary called in */
+	cpu_state_present,		/* Assumed to spin in asm entry */
+	cpu_state_active,		/* Secondary called in */
 	cpu_state_disabled,		/* Disabled by us due to error */
 };
 
