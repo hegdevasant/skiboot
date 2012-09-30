@@ -80,15 +80,18 @@ static void inmem_write(const char *buf, size_t count)
 
 ssize_t write(int fd __unused, const void *buf, size_t count)
 {
-
-	lock(&con_lock);
+	/* We use recursive locking here as we can get called
+	 * from fairly deep debug path
+	 */
+	bool need_unlock = lock_recursive(&con_lock);
 
 	mambo_write(buf, count);
 	inmem_write(buf, count);
 
 	__flush_console();
 
-	unlock(&con_lock);
+	if (need_unlock)
+		unlock(&con_lock);
 
 	return count;
 }
