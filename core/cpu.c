@@ -386,7 +386,7 @@ void add_cpu_nodes(void)
 				 t->timebase->actual_clock_speed);
 
 		/* FIXME: Hardcoding is bad. */
-		dt_property_cell("timebase-frequency", 512000);
+		dt_property_cell("timebase-frequency", 512000000);
 		dt_end_node();
 	}
 	dt_end_node();
