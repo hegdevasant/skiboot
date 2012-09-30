@@ -82,7 +82,6 @@ static size_t fsp_write_vserial(struct fsp_serial *fs, const char *buf,
 	if (!fs->open)
 		return 0;
 
-	sync();
 	space = (sb->next_out + SER_BUF_DATA_SIZE - old_nin - 1)
 		% SER_BUF_DATA_SIZE;
 	if (space < len)
