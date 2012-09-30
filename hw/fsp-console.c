@@ -617,3 +617,14 @@ void add_opal_console_nodes(void)
 	dt_end_node();
 }
 
+void add_stdout_path(void)
+{
+	/* XXX FIXME: For now we set T1 as default if it exist and is open */
+	if (fsp_serials[1].open)
+		dt_property_string("linux,stdout-path",
+				   "/ibm,opal/consoles/serial@1");
+	else 
+		dt_property_string("linux,stdout-path",
+				   "/ibm,opal/consoles/serial@0");
+}
+

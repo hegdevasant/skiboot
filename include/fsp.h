@@ -503,5 +503,6 @@ extern void fsp_console_preinit(void);
 extern void fsp_console_init(void);
 extern void fsp_console_poll(void);
 extern void add_opal_console_nodes(void);
+extern void add_stdout_path(void);
 
 #endif /* __FSP_H */

@@ -6,6 +6,7 @@
 #include <memory.h>
 #include <opal.h>
 #include <interrupts.h>
+#include <fsp.h>
 
 static int fdt_error;
 static void *fdt;
@@ -95,6 +96,13 @@ static void dump_fdt(void)
 	}
 }
 
+static void add_chosen_node(void)
+{
+	dt_begin_node("chosen");
+	add_stdout_path();
+	dt_end_node();
+}
+
 void *create_dtb(void)
 {
 	size_t len = 0x10000;
@@ -129,7 +137,7 @@ void *create_dtb(void)
 		add_memory_nodes();
 		add_icp_nodes();
 		add_opal_nodes();
-		//add_chosen_node();
+		add_chosen_node();
 		dt_end_node();
 
 		save_err(fdt_finish(fdt));
