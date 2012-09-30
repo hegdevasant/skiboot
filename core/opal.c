@@ -52,7 +52,7 @@ void add_opal_nodes(void)
 
 	base = SKIBOOT_BASE;
 	size = SKIBOOT_SIZE;
-	entry = (uint64_t)&boot_entry - base;
+	entry = (uint64_t)&boot_entry;
 
 	dt_begin_node("ibm,opal");
 	dt_property_cell("#address-cells", 0);

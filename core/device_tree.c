@@ -113,7 +113,7 @@ void create_dtb(void)
 						  SKIBOOT_SIZE));
 		save_err(fdt_finish_reservemap(fdt));
 
-		dt_begin_node("");
+		dt_begin_node("device-tree");
 		dt_property_string("name", "device-tree");
 		dt_property_string("model", "FIXME");
 		dt_property_string("compatible", "ibm,powernv");
