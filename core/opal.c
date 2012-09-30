@@ -76,10 +76,16 @@ void add_opal_nodes(void)
 void opal_update_pending_evt(uint64_t evt_mask, uint64_t evt_values)
 {
 	static struct lock evt_lock = LOCK_UNLOCKED;
+	uint64_t new_evts;
 
-	/* XXX FIXME: Use atomics instead */
+	/* XXX FIXME: Use atomics instead ??? Or caller locks (con_lock ?) */
 	lock(&evt_lock);
-	opal_pending_events = (opal_pending_events & !evt_mask) | evt_values;
+	new_evts = (opal_pending_events & ~evt_mask) | evt_values;
+#ifdef OPAL_TRACE_EVT_CHG
+	printf("OPAL: Evt change: 0x%016llx -> 0x%016llx\n",
+	       opal_pending_events, new_evts);
+#endif
+	opal_pending_events = new_evts;
 	unlock(&evt_lock);
 }
 

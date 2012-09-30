@@ -12,6 +12,9 @@
 /* Enable OPAL entry point tracing */
 #define OPAL_TRACE_ENTRY	1
 
+/* Enable tracing of event state change */
+#define OPAL_TRACE_EVT_CHG	1
+
 /* Boot stack size set to 64K as well */
 #define STACK_SIZE		0x10000
 
