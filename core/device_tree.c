@@ -97,8 +97,7 @@ static void dump_fdt(void)
 
 void create_dtb(void)
 {
-	extern char _end[];
-	size_t len = 10000;
+	size_t len = 0x10000;
 
 	do {
 		lphandle = 0;
@@ -110,10 +109,11 @@ void create_dtb(void)
 		}
 
 		fdt_create(fdt, len);
-		save_err(fdt_add_reservemap_entry(fdt, 0, (long long)_end));
+		save_err(fdt_add_reservemap_entry(fdt, SKIBOOT_BASE,
+						  SKIBOOT_SIZE));
 		save_err(fdt_finish_reservemap(fdt));
 
-		dt_begin_node("device-tree");
+		dt_begin_node("");
 		dt_property_string("name", "device-tree");
 		dt_property_string("model", "FIXME");
 		dt_property_string("compatible", "ibm,powernv");

@@ -55,7 +55,7 @@
 #define HEAP_SIZE		0x01000000
 
 /* This is our total size, currenly 40M XXX we can reduce that a lot ! */
-#define SKIBOOT_SIZE		0x28000000
+#define SKIBOOT_SIZE		0x02800000
 
 #endif /* __CONFIG_H */
 
