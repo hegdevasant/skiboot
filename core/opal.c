@@ -48,11 +48,11 @@ void opal_trace_entry(struct stack_frame *eframe)
 void add_opal_nodes(void)
 {
 	uint64_t base, entry, size;
-	extern uint32_t boot_entry;
+	extern uint32_t opal_entry;
 
 	base = SKIBOOT_BASE;
 	size = SKIBOOT_SIZE;
-	entry = (uint64_t)&boot_entry;
+	entry = (uint64_t)&opal_entry;
 
 	dt_begin_node("ibm,opal");
 	dt_property_cell("#address-cells", 0);
