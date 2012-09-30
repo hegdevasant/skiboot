@@ -14,7 +14,7 @@ struct lock {
 };
 
 /* Initializer */
-#define LOCK_UNLOCKED	{ .lock_val = 0 };
+#define LOCK_UNLOCKED	{ .lock_val = 0 }
 
 /* Note vs. libc and locking:
  *
