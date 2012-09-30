@@ -60,5 +60,9 @@
 /* This is our total size, currenly 40M XXX we can reduce that a lot ! */
 #define SKIBOOT_SIZE		0x02800000
 
+/* Address at which we load the kernel LID. Currently +1M */
+#define KERNEL_LOAD_BASE	0x00100000
+#define KERNEL_LOAD_SIZE	0x20000000
+
 #endif /* __CONFIG_H */
 

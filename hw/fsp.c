@@ -4,6 +4,7 @@
  * TODO: - Handle redundant FSPs
  *       - Monitor PSI link state
  *         -> handle link errors, switch links, etc...
+ *       - Handle reset/reload
  */
 #include <stdarg.h>
 #include <processor.h>
@@ -1058,5 +1059,72 @@ void fsp_opl(void)
 	/* Tell FSP we are in running state */
 	printf("INIT: Sending HV Functional: Runtime...\n");
 	fsp_sync_msg(fsp_mkmsg(FSP_CMD_HV_FUNCTNAL, 1, 0x02000000), true);
+}
+
+int fsp_fetch_data(uint8_t flags, uint16_t id, uint32_t sub_id,
+		   uint32_t offset, void *buffer, uint32_t *length)
+{
+	uint32_t total, remaining = *length;
+	uint64_t baddr;
+	uint64_t balign, boff, bsize;
+	struct fsp_msg *msg;
+
+	*length = total = 0;
+
+	printf("FSP: Fetch data id: %02x sid: %08x to %p (0x%x bytes)\n",
+	       id, sub_id, buffer, remaining);
+
+	while(remaining) {
+		uint32_t chunk, taddr, woffset, wlen;
+		uint8_t rc;
+
+		/* Calculate alignment squew */
+		baddr = (uint64_t)buffer;
+		balign = baddr & ~0xffful;
+		boff = baddr & 0xffful;
+
+		/* Get a chunk */
+		chunk = remaining;
+		if (chunk > (PSI_DMA_FETCH_SIZE - boff))
+			chunk = PSI_DMA_FETCH_SIZE - boff;
+		bsize = ((boff + chunk) + 0xfff) & ~0xffful;
+
+		printf("FSP:  0x%08x bytes balign=%llx boff=%llx bsize=%llx\n",
+		       chunk, balign, boff, bsize);
+		fsp_tce_map(PSI_DMA_FETCH, (void *)balign, bsize);
+		taddr = PSI_DMA_FETCH + boff;
+		msg = fsp_mkmsg(FSP_CMD_FETCH_SP_DATA, 6,
+				flags << 16 | id, sub_id, offset,
+				0, taddr, chunk);
+		rc = fsp_sync_msg(msg, false);
+		fsp_tce_unmap(PSI_DMA_FETCH, bsize);
+
+		woffset = msg->resp->data.words[1];
+		wlen = msg->resp->data.words[2];
+		printf("FSP:   -> rc=0x%02x off: %08x twritten: %08x\n",
+		       rc, woffset, wlen);
+		fsp_freemsg(msg);
+
+		/* XXX Is flash busy (0x3f) a reason for retry ? */
+		if (rc != 0 && rc != 2)
+			return -EIO;
+
+		remaining -= wlen;
+		total += wlen;
+		buffer += wlen;
+		offset += wlen;
+
+		/* The doc seems to indicate that we get rc=2 if there's
+		 * more data and rc=0 if we reached the end of file, but
+		 * it looks like I always get rc=0, so let's consider
+		 * an EOF if we got less than what we asked
+		 */
+		if (wlen < chunk)
+			break;
+	}
+
+	*length = total;
+
+	return 0;
 }
 

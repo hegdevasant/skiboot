@@ -7,6 +7,7 @@
 #include <xscom.h>
 #include <device_tree.h>
 #include <opal.h>
+#include <elf.h>
 
 /*
  * Boot semaphore, incremented by each CPU calling in
@@ -14,6 +15,69 @@
  * Forced into data section as it will be used before BSS is initialized
  */
 enum ipl_state ipl_state = ipl_initial;
+
+static uint64_t kernel_entry;
+static uint64_t kernel_top;
+static void *fdt;
+
+/* LID numbers. For now we hijack some of pHyp's own until i figure
+ * out the whole business with the MasterLID
+ */
+#define KERNEL_LID	0x80a00701
+
+static bool load_kernel(void)
+{
+	uint32_t ksize;
+	struct elf64_hdr *kh = (void *)KERNEL_LOAD_BASE;
+	struct elf64_phdr *ph;
+	unsigned int i;
+
+	ksize = KERNEL_LOAD_SIZE;
+	fsp_fetch_data(0, FSP_DATASET_NONSP_LID, KERNEL_LID,
+		       0, (void *)KERNEL_LOAD_BASE, &ksize);
+
+	printf("INIT: Kernel loaded, size: %d bytes\n", ksize);
+
+	/* Check it's a ppc64 ELF */
+	if (kh->ei_ident != ELF_IDENT		||
+	    kh->ei_class != ELF_CLASS_64	||
+	    kh->ei_data != ELF_DATA_MSB		||
+	    kh->e_machine != ELF_MACH_PPC64) {
+		prerror("INIT: Kernel doesn't look like an ppc64 ELF\n");
+		return false;
+	}
+
+	/* Look for a loadable program header that has our entry in it
+	 *
+	 * Note that we execute the kernel in-place, we don't actually
+	 * obey the load informations in the headers. This is expected
+	 * to work for the Linux Kernel because it's a fairly dumb ELF
+	 * but it will not work for any ELF binary.
+	 */
+	ph = (struct elf64_phdr *)(KERNEL_LOAD_BASE + kh->e_phoff);
+	for (i = 0; i < kh->e_phnum; i++, ph++) {
+		if (ph->p_type != ELF_PTYPE_LOAD)
+			continue;
+		if (ph->p_vaddr > kh->e_entry ||
+		    (ph->p_vaddr + ph->p_memsz) < kh->e_entry)
+			continue;
+
+		/* Get our entry */
+		kernel_entry = kh->e_entry - ph->p_vaddr + ph->p_offset;
+		break;
+	}
+
+	if (!kernel_entry) {
+		prerror("INIT: Failed to find kernel entry !\n");
+		return false;
+	}
+	kernel_entry += KERNEL_LOAD_BASE;
+	kernel_top = KERNEL_LOAD_BASE + ksize;
+
+	printf("INIT: Kernel entry at 0x%llx\n", kernel_entry);
+
+	return true;
+}
 
 void main_cpu_entry(void)
 {
@@ -66,19 +130,32 @@ void main_cpu_entry(void)
 	/* Parse the memory layout. */
 	memory_parse();
 
-	op_display(OP_LOG, OP_MOD_INIT, 0x9999);
-
-	/* Create the device tree blob to boot OS. */
-	create_dtb();
+	op_display(OP_LOG, OP_MOD_INIT, 0x0006);
 
 	/* Create the OPAL call table */
 	opal_table_init();
 
-	/* Nothing to do */
-	while(true) {
-		cpu_process_jobs();
-		fsp_poll();
+	op_display(OP_LOG, OP_MOD_INIT, 0x0007);
+
+	/* Load kernel LID */
+	if (!load_kernel()) {
+		op_display(OP_FATAL, OP_MOD_INIT, 1);
+		abort();
 	}
+
+	op_display(OP_LOG, OP_MOD_INIT, 0x0008);
+
+	/* Create the device tree blob to boot OS. */
+	fdt = create_dtb();
+	if (!fdt) {
+		op_display(OP_FATAL, OP_MOD_INIT, 2);
+		abort();
+	}
+
+	op_display(OP_LOG, OP_MOD_INIT, 0x0009);
+
+	/* Start the kernel */
+	start_kernel(kernel_entry, fdt);
 }
 
 void secondary_cpu_entry(void)

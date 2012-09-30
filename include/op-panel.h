@@ -26,9 +26,11 @@ enum op_module {
 
 /* Common codes:
  *
- * 'BA010000' : Locking already owned lock
- * 'BA010001' : Unlocking unlocked lock
- * 'BA010002' : Unlocking not-owned lock
+ * 'BA010001' : Failed to load a kernel
+ * 'BA010002' : Failed to create a device-tree
+ * 'BA020000' : Locking already owned lock
+ * 'BA020001' : Unlocking unlocked lock
+ * 'BA020002' : Unlocking not-owned lock
  * 'BA006666' : Abort
  * 'BA050000' : Failed ChipTOD init/sync
  * 'BA050001' : Failed to find a CPU on the master chip

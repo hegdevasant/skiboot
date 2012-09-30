@@ -1,30 +1,10 @@
-#include <stdint.h>
 #include <stdbool.h>
+#include <elf.h>
 
 /* WARNING: This code is used to self-relocate, it cannot have any
  * global reference nor TOC reference. It's also called before BSS
  * is cleared.
  */
-
-struct elf64_dyn {
-	int64_t	 d_tag;
-#define DT_NULL	 	0
-#define DT_RELA	 	7
-#define DT_RELASZ	8
-#define DT_RELAENT	9
-#define DT_RELACOUNT	0x6ffffff9
-	uint64_t d_val;
-};
-
-struct elf64_rela {
-	uint64_t	r_offset;
-	uint64_t	r_info;
-#define ELF64_R_TYPE(info)		((info) & 0xffffffffu)
-	int64_t		r_addend;
-};
-
-/* relocs we support */
-#define R_PPC64_RELATIVE	22
 
 /* Note: This code is simplified according to the assumptions
  *       that our link address is 0 and we are running at the

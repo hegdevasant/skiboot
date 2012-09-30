@@ -11,6 +11,7 @@
 #define __unused		__attribute__((unused))
 #define __used			__attribute__((used))
 #define __section(x)		__attribute__((__section__(x)))
+#define __noreturn		__attribute__((noreturn))
 
 #if 0 /* Provided by gcc stddef.h */
 #define offsetof(type,m)	__builtin_offsetof(type,m)

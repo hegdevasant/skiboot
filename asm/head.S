@@ -421,3 +421,18 @@ opal_entry:
 	b	1b
 
 
+.global start_kernel
+start_kernel:
+	sync
+	icbi	0,%r3
+	isync
+	mtctr	%r3
+	mr	%r3,%r4
+	LOAD_IMM64(%r8,SKIBOOT_BASE);
+	LOAD_IMM32(%r10, opal_entry - __head)
+	add	%r9,%r8,%r10
+	li	%r4,0
+	li	%r5,0
+	li	%r6,0
+	li	%r7,0
+	bctr

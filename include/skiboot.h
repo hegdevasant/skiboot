@@ -44,5 +44,8 @@ extern void backtrace(void);
 /* Convert a 4-bit number to a hex char */
 extern char tohex(uint8_t nibble);
 
+/* Start the kernel */
+extern void start_kernel(uint64_t entry, void* fdt) __noreturn;
+
 #endif /* __SKIBOOT_H */
 

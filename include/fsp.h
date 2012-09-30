@@ -286,6 +286,23 @@
 #define FSP_RSP_SP_QUERY_CAPS	0x0ce8500
 
 /*
+ * Class 0xD4
+ */
+#define FSP_CMD_FETCH_SP_DATA	0x1d40101 /* HV->FSP: Fetch & DMA data */
+
+/* Data set IDs for SP data commands */
+#define FSP_DATASET_SP_DUMP	0x01
+#define FSP_DATASET_HW_DUMP	0x02
+#define FSP_DATASET_ERRLOG	0x03	/* error log entry */
+#define FSP_DATASET_MASTER_LID	0x04
+#define FSP_DATASET_NONSP_LID	0x05
+#define FSP_DATASET_ELID_RDATA	0x06
+#define FSP_DATASET_BLADE_PARM	0x07
+#define FSP_DATASET_LOC_PORTMAP	0x08
+#define FSP_DATASET_SYSIND_CAP	0x09
+#define FSP_DATASET_FSP_RSRCDMP	0x0a
+
+/*
  * Class 0xD5
  */
 #define FSP_CMD_ALLOC_INBOUND	0x0d50400 /* FSP->HV: Allocate inbound buf. */
@@ -336,6 +353,7 @@
  *
  *   - 4x256K serial areas (each divided in 2: in and out buffers)
  *   - 1M region for inbound buffers
+ *   - 2M region for generic data fetches
  */
 #define PSI_DMA_SER0_BASE	0x00000000
 #define PSI_DMA_SER0_SIZE	0x00040000
@@ -347,6 +365,8 @@
 #define PSI_DMA_SER3_SIZE	0x00040000
 #define PSI_DMA_INBOUND_BUF	0x00100000
 #define PSI_DMA_INBOUND_SIZE	0x00100000
+#define PSI_DMA_FETCH		0x00200000
+#define PSI_DMA_FETCH_SIZE	0x00200000
 
 
 /*
@@ -473,6 +493,10 @@ extern void fsp_unregister_client(struct fsp_client *client, u8 msgclass);
 /* FSP TCE map/unmap functions */
 extern void fsp_tce_map(u32 offset, void *addr, u32 size);
 extern void fsp_tce_unmap(u32 offset, u32 size);
+
+/* Data fetch helper */
+extern int fsp_fetch_data(uint8_t flags, uint16_t id, uint32_t sub_id,
+			  uint32_t offset, void *buffer, uint32_t *length);
 
 /* FSP console stuff */
 extern void fsp_console_preinit(void);

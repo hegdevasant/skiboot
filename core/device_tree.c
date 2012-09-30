@@ -95,7 +95,7 @@ static void dump_fdt(void)
 	}
 }
 
-void create_dtb(void)
+void *create_dtb(void)
 {
 	size_t len = 0x10000;
 
@@ -105,7 +105,7 @@ void create_dtb(void)
 		fdt = malloc(len);
 		if (!fdt) {
 			prerror("dtb: could not malloc %lu\n", (long)len);
-			return;
+			return NULL;
 		}
 
 		fdt_create(fdt, len);
@@ -143,6 +143,9 @@ void create_dtb(void)
 
 	dump_fdt();
 
-	if (fdt_error)
+	if (fdt_error) {
 		prerror("dtb: error %s\n", fdt_strerror(fdt_error));
+		return NULL;
+	}
+	return fdt;
 }
