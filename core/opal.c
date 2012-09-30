@@ -12,12 +12,13 @@ void opal_table_init(void)
 {
 	struct opal_table_entry *s = &__opal_table_start;
 	struct opal_table_entry *e = &__opal_table_end;
-	extern void *opal_branch_table[];
+	extern uint64_t opal_branch_table[];
 
 	printf("OPAL table: %p .. %p, branch table: %p\n",
 	       s, e, opal_branch_table);
 	while(s < e) {
-		opal_branch_table[s->token] = s->func;
+		uint64_t *func = s->func;
+		opal_branch_table[s->token] = *func;
 		s++;
 	}
 }
