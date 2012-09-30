@@ -101,7 +101,12 @@ opal_call(OPAL_TEST, opal_test_func);
 
 static int64_t opal_poll_events(uint64_t *outstanding_event_mask)
 {
+	/* Poll the FSP */
+	fsp_poll();
+
+	/* Poll the console buffers */
 	fsp_console_poll();
+
 	*outstanding_event_mask = opal_pending_events;
 
 	return OPAL_SUCCESS;

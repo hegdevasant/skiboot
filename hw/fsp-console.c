@@ -72,7 +72,8 @@ static void fsp_pokemsg_reclaim(struct fsp_msg *msg)
  * since fsp_queue_msg() supports recursive locking. That would
  * limit the number of atomic ops on the console path.
  */
-static size_t fsp_write_vserial(struct fsp_serial *fs, const char *buf, size_t len)
+static size_t fsp_write_vserial(struct fsp_serial *fs, const char *buf,
+				size_t len)
 {
 	struct fsp_serbuf_hdr *sb = fs->out_buf;
 	u16 old_nin = sb->next_in;
@@ -82,7 +83,7 @@ static size_t fsp_write_vserial(struct fsp_serial *fs, const char *buf, size_t l
 		return 0;
 
 	sync();
-	space = (old_nin + SER_BUF_DATA_SIZE - sb->next_out - 1)
+	space = (sb->next_out + SER_BUF_DATA_SIZE - old_nin - 1)
 		% SER_BUF_DATA_SIZE;
 	if (space < len)
 		len = space;
@@ -90,6 +91,8 @@ static size_t fsp_write_vserial(struct fsp_serial *fs, const char *buf, size_t l
 		return 0;
 
 	chunk = SER_BUF_DATA_SIZE - old_nin;
+	if (chunk > len)
+		chunk = len;
 	memcpy(&sb->data[old_nin], buf, chunk);
 	if (chunk < len)
 		memcpy(&sb->data[0], buf + chunk, len - chunk);
@@ -265,10 +268,27 @@ static bool fsp_con_msg_hmc(u32 cmd_sub_mod, struct fsp_msg *msg)
 	return false;
 }
 
-static bool fsp_con_msg_vt(u32 cmd_sub_mod __unused,
-			   struct fsp_msg *msg __unused)
+static bool fsp_con_msg_vt(u32 cmd_sub_mod, struct fsp_msg *msg)
 {
-	/* We just swallow incoming messages */
+	u16 sess_id = msg->data.words[1] & 0xffff;
+
+	if (cmd_sub_mod == FSP_CMD_VSERIAL_IN && sess_id < MAX_SERIAL) {
+		struct fsp_serial *fs = &fsp_serials[sess_id];
+
+		if (!fs->open)
+			return true;
+
+		/* FSP is signaling some incoming data. We take the console
+		 * lock to avoid racing with a simultaneous read, though we
+		 * might want to consider to simplify all that locking into
+		 * one single lock that covers the console and the pending
+		 * events.
+		 */
+		lock(&con_lock);
+		opal_update_pending_evt(OPAL_EVENT_CONSOLE_INPUT,
+					OPAL_EVENT_CONSOLE_INPUT);
+		unlock(&con_lock);
+	}
 	return true;
 }
 
@@ -403,14 +423,27 @@ static int64_t opal_console_write(int64_t term_number, int64_t *length,
 	fs = &fsp_serials[term_number];
 	if (!fs->available || fs->log_port)
 		return OPAL_PARAMETER;
-	if (!fs->open)
+	lock(&con_lock);
+	if (!fs->open) {
+		unlock(&con_lock);
 		return OPAL_CLOSED;
+	}
 	/* Clamp to a reasonable size */
 	requested = *length;
 	if (requested > 0x1000)
 		requested = 0x1000;
-	lock(&con_lock);
 	written = fsp_write_vserial(fs, buffer, requested);
+
+#ifdef OPAL_DEBUG_CONSOLE_IO
+	printf("OPAL: console write req=%ld written=%ld ni=%d no=%d\n",
+	       requested, written, fs->out_buf->next_in, fs->out_buf->next_out);
+	printf("      %02x %02x %02x %02x "
+	       "%02x \'%c\' %02x \'%c\' %02x \'%c\'.%02x \'%c\'..\n",
+	       buffer[0], buffer[1], buffer[2], buffer[3],
+	       buffer[4], buffer[4], buffer[5], buffer[5],
+	       buffer[6], buffer[6], buffer[7], buffer[7]);
+#endif /* OPAL_DEBUG_CONSOLE_IO */
+
 	*length = written;
 	unlock(&con_lock);
 
@@ -429,12 +462,13 @@ static int64_t opal_console_write_buffer_space(int64_t term_number,
 	fs = &fsp_serials[term_number];
 	if (!fs->available || fs->log_port)
 		return OPAL_PARAMETER;
-	if (!fs->open)
-		return OPAL_CLOSED;
-	sb = fs->out_buf;
-
 	lock(&con_lock);
-	*length = (sb->next_in + SER_BUF_DATA_SIZE - sb->next_out - 1)
+	if (!fs->open) {
+		unlock(&con_lock);
+		return OPAL_CLOSED;
+	}
+	sb = fs->out_buf;
+	*length = (sb->next_out + SER_BUF_DATA_SIZE - sb->next_in - 1)
 		% SER_BUF_DATA_SIZE;
 	unlock(&con_lock);
 
@@ -447,19 +481,61 @@ static int64_t opal_console_read(int64_t term_number, int64_t *length,
 				 uint8_t *buffer __unused)
 {
 	struct fsp_serial *fs;
-	//struct fsp_serbuf_hdr *sb;
+	struct fsp_serbuf_hdr *sb;
+	bool pending = false;
+	uint32_t old_nin, n, i, chunk, req = *length;
 
 	if (term_number < 0 || term_number >= MAX_SERIAL)
 		return OPAL_PARAMETER;
 	fs = &fsp_serials[term_number];
 	if (!fs->available || fs->log_port)
 		return OPAL_PARAMETER;
-	if (!fs->open)
+	lock(&con_lock);
+	if (!fs->open) {
+		unlock(&con_lock);
 		return OPAL_CLOSED;
+	}
+	sb = fs->in_buf;
+	old_nin = sb->next_in;
+	lwsync();
+	n = (old_nin + SER_BUF_DATA_SIZE - sb->next_out)
+		% SER_BUF_DATA_SIZE;
+	if (n > req) {
+		pending = true;
+		n = req;
+	}
+	*length = n;
 
-	/* XXX FIXME: Add input */
-	//sb = fs->in_buf;
-	*length = 0;
+	chunk = SER_BUF_DATA_SIZE - sb->next_out;
+	if (chunk > n)
+		chunk = n;
+	memcpy(buffer, &sb->data[sb->next_out], chunk);
+	if (chunk < n)
+		memcpy(buffer + chunk, &sb->data[0], n - chunk);
+	sb->next_out = (sb->next_out + n) % SER_BUF_DATA_SIZE;
+
+#ifdef OPAL_DEBUG_CONSOLE_IO
+	printf("OPAL: console read req=%d read=%d ni=%d no=%d\n",
+	       req, n, sb->next_in, sb->next_out);
+	printf("      %02x %02x %02x %02x %02x %02x %02x %02x ...\n",
+	       buffer[0], buffer[1], buffer[2], buffer[3],
+	       buffer[4], buffer[5], buffer[6], buffer[7]);
+#endif /* OPAL_DEBUG_CONSOLE_IO */
+
+	/* Might clear the input pending flag */
+	for (i = 0; i < MAX_SERIAL && !pending; i++) {
+		struct fsp_serial *fs = &fsp_serials[i];
+		struct fsp_serbuf_hdr *sb = fs->in_buf;
+
+		if (fs->log_port || !fs->open)
+			continue;
+		if (sb->next_out != sb->next_in)
+			pending = true;
+	}
+	if (!pending)
+		opal_update_pending_evt(OPAL_EVENT_CONSOLE_INPUT, 0);
+
+	unlock(&con_lock);
 
 	return OPAL_SUCCESS;
 }
@@ -467,7 +543,9 @@ opal_call(OPAL_CONSOLE_READ, opal_console_read);
 
 void fsp_console_poll(void)
 {
-	fsp_poll();
+#ifdef OPAL_DEBUG_CONSOLE_POLL
+       	static int debug;
+#endif
 
 	/* We don't get messages for out buffer being consumed, so we
 	 * need to poll
@@ -476,17 +554,36 @@ void fsp_console_poll(void)
 		unsigned int i;
 		bool pending = false;
 
+		/* We take the console lock. This is somewhat inefficient
+		 * but it guarantees we aren't racing with a write, and
+		 * thus clearing an event improperly
+		 */
+		lock(&con_lock);
 		for (i = 0; i < MAX_SERIAL && !pending; i++) {
 			struct fsp_serial *fs = &fsp_serials[i];
 			struct fsp_serbuf_hdr *sb = fs->out_buf;
 
 			if (fs->log_port || !fs->open)
 				continue;
-			if (sb->next_out != sb->next_in)
+			if (sb->next_out != sb->next_in) {
+#ifdef OPAL_DEBUG_CONSOLE_POLL
+				if (debug < 5) {
+					printf("OPAL: %d still pending"
+					       " ni=%d no=%d\n",
+					       i, sb->next_in, sb->next_out);
+					debug++;
+				}
+#endif /* OPAL_DEBUG_CONSOLE_POLL */
 				pending = true;
+			}
 		}
-		if (!pending)
+		if (!pending) {
 			opal_update_pending_evt(OPAL_EVENT_CONSOLE_OUTPUT, 0);
+#ifdef OPAL_DEBUG_CONSOLE_POLL
+			debug = 0;
+#endif
+		}
+		unlock(&con_lock);
 	}
 }
 
