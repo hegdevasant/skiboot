@@ -128,6 +128,8 @@ void create_dtb(void)
 		add_cpu_nodes();
 		add_memory_nodes();
 		add_icp_nodes();
+		add_opal_nodes();
+		//add_chosen_node();
 		dt_end_node();
 
 		save_err(fdt_finish(fdt));

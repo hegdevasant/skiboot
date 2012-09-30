@@ -478,5 +478,6 @@ extern void fsp_tce_unmap(u32 offset, u32 size);
 extern void fsp_console_preinit(void);
 extern void fsp_console_init(void);
 extern void fsp_console_poll(void);
+extern void add_opal_console_nodes(void);
 
 #endif /* __FSP_H */

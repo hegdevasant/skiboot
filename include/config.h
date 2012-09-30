@@ -54,5 +54,8 @@
 #define HEAP_BASE		(SKIBOOT_BASE + 0x01800000)
 #define HEAP_SIZE		0x01000000
 
+/* This is our total size, currenly 40M XXX we can reduce that a lot ! */
+#define SKIBOOT_SIZE		0x28000000
+
 #endif /* __CONFIG_H */
 

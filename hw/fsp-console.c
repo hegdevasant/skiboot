@@ -8,6 +8,7 @@
 #include <fsp.h>
 #include <console.h>
 #include <opal.h>
+#include <device_tree.h>
 
 struct fsp_serbuf_hdr {
 	u16	partition_id;
@@ -488,3 +489,34 @@ void fsp_console_poll(void)
 			opal_update_pending_evt(OPAL_EVENT_CONSOLE_OUTPUT, 0);
 	}
 }
+
+void add_opal_console_nodes(void)
+{
+	unsigned int i;
+
+	dt_begin_node("consoles");
+	dt_property_cell("#address-cells", 1);
+	dt_property_cell("#size-cells", 0);
+	for (i = 0; i < MAX_SERIAL; i++) {
+		struct fsp_serial *fs = &fsp_serials[i];
+		char name[32];
+
+		if (fs->log_port || !fs->available)
+			continue;
+
+		snprintf(name, sizeof(name), "serial@%d", i);
+		dt_begin_node(name);
+		if (fs->rsrc_id == 0xffff)
+			dt_property_string("compatible",
+					   "ibm,opal-console-raw");
+		else
+			dt_property_string("compatible",
+					   "ibm,opal-console-hvsi");
+		dt_property_cell("#write-buffer-size", SER_BUF_DATA_SIZE);
+		dt_property_cell("reg", i);
+		dt_property_string("device_type", "serial");
+		dt_end_node();
+	}
+	dt_end_node();
+}
+

@@ -3,6 +3,7 @@
 #include <stack.h>
 #include <lock.h>
 #include <fsp.h>
+#include <device_tree.h>
 
 /* Pending events to signal via opal_poll_events */
 uint64_t opal_pending_events;
@@ -44,14 +45,33 @@ void opal_trace_entry(struct stack_frame *eframe)
 	       eframe->lr, eframe->gpr[1]);
 }
 
-/* Test function */
-static uint64_t opal_test_func(uint64_t arg)
+void add_opal_nodes(void)
 {
-	printf("OPAL: Test function called with arg 0x%llx\n", arg);
+	uint64_t base, entry, size;
+	extern uint32_t boot_entry;
 
-	return 0xfeedf00d;
+	base = SKIBOOT_BASE;
+	size = SKIBOOT_SIZE;
+	entry = (uint64_t)&boot_entry - base;
+
+	dt_begin_node("ibm,opal");
+	dt_property_cell("#address-cells", 0);
+	dt_property_cell("#size-cells", 0);
+	dt_property_string("compatible", "ibm,opal-v2");
+	dt_property_cells("opal-base-address", 2, base >> 32,
+			  base & 0xffffffff);
+	dt_property_cells("opal-entry-address", 2, entry >> 32,
+			  entry & 0xffffffff);
+	dt_property_cells("opal-runtime-size", 2, size >> 32,
+			  size & 0xffffffff);
+	/* XXX add OPAL/FSP interrupt */
+	add_opal_console_nodes();
+	//add_opal_nvram_node();
+	//add_opal_oppanel_node();
+	//add_opal_firmware_node();
+	//add_opal_errlog_node();
+	dt_end_node();
 }
-opal_call(OPAL_TEST, opal_test_func);
 
 void opal_update_pending_evt(uint64_t evt_mask, uint64_t evt_values)
 {
@@ -63,6 +83,14 @@ void opal_update_pending_evt(uint64_t evt_mask, uint64_t evt_values)
 	unlock(&evt_lock);
 }
 
+
+static uint64_t opal_test_func(uint64_t arg)
+{
+	printf("OPAL: Test function called with arg 0x%llx\n", arg);
+
+	return 0xfeedf00d;
+}
+opal_call(OPAL_TEST, opal_test_func);
 
 static int64_t opal_poll_events(uint64_t *outstanding_event_mask)
 {
