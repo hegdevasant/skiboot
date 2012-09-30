@@ -278,7 +278,7 @@ void add_memory_nodes(void)
 
 		sprintf(name, "memory@%llx", reg[0]);
 		dt_begin_node(name);
-		dt_property_string("device-type", "memory");
+		dt_property_string("device_type", "memory");
 		dt_property("reg", reg, sizeof(reg));
 		dt_end_node();
 	}

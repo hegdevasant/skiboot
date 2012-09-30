@@ -354,7 +354,7 @@ void add_cpu_nodes(void)
 		dt_begin_node(name);
 		*strchr(name, '@') = '\0';
 		dt_property_string("name", name);
-		dt_property_string("device-type", "cpu");
+		dt_property_string("device_type", "cpu");
 		dt_property_string("status", "okay");
 		dt_property_cell("reg", no);
 		dt_property("ibm,segment-page-sizes", p7_sps, sizeof(p7_sps));
