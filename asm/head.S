@@ -436,3 +436,11 @@ start_kernel:
 	li	%r6,0
 	li	%r7,0
 	bctr
+
+.global start_kernel_secondary
+start_kernel_secondary:
+	sync
+	isync
+	mtctr	%r3
+	mfspr	%r3,SPR_PIR
+	bctr

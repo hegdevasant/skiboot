@@ -155,6 +155,7 @@ void main_cpu_entry(void)
 	op_display(OP_LOG, OP_MOD_INIT, 0x0009);
 
 	/* Start the kernel */
+	cpu_give_self_os();
 	start_kernel(kernel_entry, fdt);
 }
 

@@ -46,6 +46,7 @@ extern char tohex(uint8_t nibble);
 
 /* Start the kernel */
 extern void start_kernel(uint64_t entry, void* fdt) __noreturn;
+extern void start_kernel_secondary(uint64_t entry) __noreturn;
 
 #endif /* __SKIBOOT_H */
 

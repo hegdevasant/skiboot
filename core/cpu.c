@@ -7,6 +7,7 @@
 #include <cpu.h>
 #include <fsp.h>
 #include <device_tree.h>
+#include <opal.h>
 #include <ccan/str/str.h>
 
 /* The cpu_threads array is static and indexed by PIR in
@@ -24,12 +25,20 @@ struct cpu_job {
 	void			(*func)(void *data);
 	void			*data;
 	bool			complete;
+	bool		        no_return;
 };
 
-struct cpu_job *cpu_queue_job(struct cpu_thread *cpu,
-			      void (*func)(void *data), void *data)
+struct cpu_job *__cpu_queue_job(struct cpu_thread *cpu,
+				void (*func)(void *data), void *data,
+				bool no_return)
 {
 	struct cpu_job *job;
+
+	if (cpu->state != cpu_state_active) {
+		prerror("CPU: Tried to queue job on unavailable CPU 0x%04x\n",
+			cpu->pir);
+		return NULL;
+	}
 
 	job = zalloc(sizeof(struct cpu_job));
 	if (!job)
@@ -37,6 +46,7 @@ struct cpu_job *cpu_queue_job(struct cpu_thread *cpu,
 	job->func = func;
 	job->data = data;
 	job->complete = false;
+	job->no_return = no_return;
 
 	if (cpu != this_cpu()) {
 		lock(&cpu->job_lock);
@@ -50,6 +60,12 @@ struct cpu_job *cpu_queue_job(struct cpu_thread *cpu,
 	/* XXX Add poking of CPU with interrupt */
 
 	return job;
+}
+
+struct cpu_job *cpu_queue_job(struct cpu_thread *cpu,
+			      void (*func)(void *data), void *data)
+{
+	return __cpu_queue_job(cpu, func, data, false);
 }
 
 bool cpu_poll_job(struct cpu_job *job)
@@ -91,6 +107,8 @@ void cpu_process_jobs(void)
 {
 	struct cpu_thread *cpu = this_cpu();
 	struct cpu_job *job;
+	void (*func)(void *);
+	void *data;
 
 	lock(&cpu->job_lock);
 	while (true) {
@@ -100,8 +118,12 @@ void cpu_process_jobs(void)
 		job = list_pop(&cpu->job_queue, struct cpu_job, link);
 		if (!job)
 			break;
+		func = job->func;
+		data = job->data;
 		unlock(&cpu->job_lock);
-		job->func(job->data);
+		if (job->no_return)
+			free(job);
+		func(data);
 		lock(&cpu->job_lock);
 		job->complete = true;
 	}
@@ -443,3 +465,40 @@ void cpu_callin(struct cpu_thread *cpu)
 {
 	cpu->state = cpu_state_active;
 }
+
+static void opal_start_thread_job(void *data)
+{
+	cpu_give_self_os();
+
+	/* We do not return, so let's mark the job as
+	 * complete
+	 */
+	start_kernel_secondary((uint64_t)data);
+}
+
+int64_t opal_start_cpu_thread(uint64_t pir, uint64_t start_address)
+{
+	struct cpu_thread *cpu;
+	struct cpu_job *job;
+
+	printf("OPAL: Start CPU 0x%04llx -> 0x%016llx\n", pir, start_address);
+
+	cpu = find_cpu_by_pir(pir);
+	if (!cpu) {
+		prerror("OPAL: Invalid CPU !\n");
+		return OPAL_PARAMETER;
+	}
+	if (cpu->state != cpu_state_active) {
+		prerror("OPAL: CPU not active in OPAL !\n");
+		return OPAL_PARAMETER;
+	}
+	job = __cpu_queue_job(cpu, opal_start_thread_job, (void *)start_address,
+			      true);
+	if (!job) {
+		prerror("OPAL: Failed to create CPU start job !\n");
+		return OPAL_INTERNAL_ERROR;
+	}
+	return OPAL_SUCCESS;
+}
+opal_call(OPAL_START_CPU, opal_start_cpu_thread);
+

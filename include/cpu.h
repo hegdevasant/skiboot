@@ -82,6 +82,7 @@ enum cpu_thread_state {
 	cpu_state_unavailable,		/* Not available */
 	cpu_state_present,		/* Assumed to spin in asm entry */
 	cpu_state_active,		/* Secondary called in */
+	cpu_state_os,			/* Under OS control */
 	cpu_state_disabled,		/* Disabled by us due to error */
 };
 
@@ -126,6 +127,13 @@ extern struct cpu_thread *find_cpu_by_pir(u32 pir);
 /* Iterator */
 extern struct cpu_thread *first_cpu(void);
 extern struct cpu_thread *next_cpu(struct cpu_thread *cpu);
+
+/* WARNING: CPUs that have been picked up by the OS are no longer
+ *          appearing as available and can not have jobs scheduled
+ *          on them. Essentially that means that after the OS is
+ *          fully started, all CPUs are seen as unavailable from
+ *          this API standpoint.
+ */
 extern struct cpu_thread *next_available_cpu(struct cpu_thread *cpu);
 
 #define for_each_cpu(cpu)	\
@@ -162,6 +170,11 @@ extern void cpu_free_job(struct cpu_job *job);
 
 /* Called by init to process jobs */
 extern void cpu_process_jobs(void);
+
+static inline void cpu_give_self_os(void)
+{
+	__this_cpu->state = cpu_state_os;
+}
 
 extern void add_cpu_nodes(void);
 #endif /* __CPU_H */
