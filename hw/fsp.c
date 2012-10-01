@@ -248,10 +248,12 @@ static bool fsp_post_msg(struct fsp *fsp, struct fsp_msg *msg)
 	if ((msg->word0 & 0xff) != 0xe1)
 		fsp_trace_msg(msg, "snd");
 
-	/* Sanity: XUP and SPPEND should both be clear */
-	ctl = fsp_rreg(fsp, FSP_MBX1_HCTL_REG);
-	DBG("    old ctl: %08x\n", ctl);
-	assert(!(ctl & (FSP_MBX_CTL_SPPEND | FSP_MBX_CTL_XUP)));
+	/* Note: We used to read HCTL here and only modify some of
+	 * the bits in it. This was bogus, because we would write back
+	 * the incoming bits as '1' and clear them, causing fsp_poll()
+	 * to then miss them. Let's just start with 0, which is how
+	 * I suppose the HW intends us to do.
+	 */
 
 	/* Set ourselves as busy */
 	fsp->pending = msg;
@@ -272,8 +274,7 @@ static bool fsp_post_msg(struct fsp *fsp, struct fsp_msg *msg)
 	fsp_wreg(fsp, FSP_MBX1_HHDR0_REG, (msg->dlen + 8) << 16);
 
 	/* Write the control register */
-	ctl = ctl & ~(FSP_MBX_CTL_HCHOST_MASK | FSP_MBX_CTL_DCHOST_MASK);
-	ctl |= 4 << FSP_MBX_CTL_HCHOST_SHIFT;
+	ctl = 4 << FSP_MBX_CTL_HCHOST_SHIFT;
 	ctl |= (msg->dlen + 8) << FSP_MBX_CTL_DCHOST_SHIFT;
 	ctl |= FSP_MBX_CTL_PTS | FSP_MBX_CTL_SPPEND;
 	DBG("    new ctl: %08x\n", ctl);
