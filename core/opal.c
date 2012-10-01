@@ -107,7 +107,8 @@ static int64_t opal_poll_events(uint64_t *outstanding_event_mask)
 	/* Poll the console buffers */
 	fsp_console_poll();
 
-	*outstanding_event_mask = opal_pending_events;
+	if (outstanding_event_mask)
+		*outstanding_event_mask = opal_pending_events;
 
 	return OPAL_SUCCESS;
 }
