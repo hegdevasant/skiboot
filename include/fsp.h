@@ -317,7 +317,15 @@
 /*
  * Class 0xD7
  */
-#define FSP_CMD_SURV_ACK	0x1d70000 /* FSP->HV */
+#define FSP_CMD_SURV_ACK	0x1d70000 /* ? */
+
+/*
+ * Class 0xD8
+ */
+#define FSP_CMD_READ_TOD	0x1d82000 /* HV->FSP */
+#define FSP_CMD_READ_TOD_EXT	0x1d82001 /* HV->FSP */
+#define FSP_CMD_WRITE_TOD	0x1d82100 /* HV->FSP */
+#define FSP_CMD_WRITE_TOD_EXT	0x1d82101 /* HV->FSP */
 
 /*
  * Class 0xE0
@@ -425,6 +433,21 @@ struct fsp_msg {
 	/* Internal queuing */
 	struct list_node	link;
 };
+
+/* This checks if a message is still "in progress" in the FSP driver */
+static inline bool fsp_msg_busy(struct fsp_msg *msg)
+{
+	switch(msg->state) {
+	case fsp_msg_unused:
+	case fsp_msg_done:
+	case fsp_msg_timeout:
+	case fsp_msg_response: /* A response is considered a completed msg */
+		return false;
+	default:
+		break;
+	}
+	return true;
+}
 
 /* Initialize the FSP mailbox driver */
 extern void fsp_init(void);

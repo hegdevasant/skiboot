@@ -768,9 +768,19 @@ int fsp_sync_msg(struct fsp_msg *msg, bool autofree)
 	if (rc)
 		goto bail;
 
-	/* XXX HANDLE TIMEOUTS */
-	while(msg->state != fsp_msg_done)
+	while(fsp_msg_busy(msg))
 		fsp_poll();
+
+	switch(msg->state) {
+	case fsp_msg_done:
+		rc = 0;
+		break;
+	case fsp_msg_timeout:
+		rc = -1; /* XXX to improve */
+		break;
+	default:
+		rc = -1; /* Should not happen... (assert ?) */
+	}
 
 	if (msg->resp)
 		rc = (msg->resp->word1 >> 8) & 0xff;
