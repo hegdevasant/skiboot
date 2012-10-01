@@ -288,7 +288,9 @@
 #define FSP_CMD_POWERDOWN_QUICK	0x1ce4d01 /* FSP->HV: Quick power down */
 #define FSP_CMD_POWERDOWN_PCIRS	0x1ce4d02 /* FSP->HV: PCI cfg reset power dwn */
 #define FSP_CMD_REBOOT		0x1ce4e00 /* FSP->HV: Standard IPL */
-
+#define FSP_CMD_PANELSTATUS	0x0ce5c00 /* FSP->HV */
+#define FSP_CMD_PANELSTATUS_EX1	0x0ce5c02 /* FSP->HV */
+#define FSP_CMD_PANELSTATUS_EX2	0x0ce5c03 /* FSP->HV */
 /*
  * Class 0xD4
  */

@@ -519,6 +519,11 @@ static bool fsp_local_command(u32 cmd_sub_mod, struct fsp_msg *msg)
 		       (msg->data.bytes[3] & 0x20) ? "an" : "no");
 		/* XXX Handle FSP dumps ... one day maybe */
 		return true;
+	case FSP_CMD_PANELSTATUS:
+	case FSP_CMD_PANELSTATUS_EX1:
+	case FSP_CMD_PANELSTATUS_EX2:
+		/* Panel status messages. We currently just ignore them */
+		return true;
 	}
 	return false;
 }
@@ -552,7 +557,11 @@ static void fsp_handle_command(struct fsp_msg *msg)
 
 	prerror("FSP: Unhandled message %06x\n", cmd_sub_mod);
 
-	/* XXX TODO: Responses */
+	/* We don't know whether the message expected some kind of
+	 * response, so we send one anyway
+	 */
+	fsp_queue_msg(fsp_mkmsg((cmd_sub_mod & 0xffff00) | 0x008000, 0),
+		      fsp_freemsg);
  free:
 	fsp_freemsg(msg);
 }
