@@ -114,3 +114,32 @@ static int64_t opal_poll_events(uint64_t *outstanding_event_mask)
 }
 opal_call(OPAL_POLL_EVENTS, opal_poll_events);
 
+static int64_t opal_cec_power_down(uint64_t request)
+{
+	/* Request is:
+	 *
+	 * 0 = normal
+	 * 1 = immediate
+	 * (we do not allow 2 for "pci cfg reset" just yet)
+	 */
+
+	if (request !=0 && request != 1)
+		return OPAL_PARAMETER;
+
+	if (fsp_queue_msg(fsp_mkmsg(FSP_CMD_POWERDOWN_NORM, 1, request),
+			  fsp_freemsg))
+		return OPAL_INTERNAL_ERROR;
+
+	return OPAL_SUCCESS;
+}
+opal_call(OPAL_CEC_POWER_DOWN, opal_cec_power_down);
+
+static int64_t opal_cec_reboot(void)
+{
+	if (fsp_queue_msg(fsp_mkmsg(FSP_CMD_REBOOT, 0), fsp_freemsg))
+		return OPAL_INTERNAL_ERROR;
+
+	return OPAL_SUCCESS;
+}
+opal_call(OPAL_CEC_REBOOT, opal_cec_reboot);
+

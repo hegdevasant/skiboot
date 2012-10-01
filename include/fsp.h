@@ -284,6 +284,10 @@
 #define FSP_RSP_HV_QUERY_CAPS	0x1ce8400
 #define FSP_CMD_SP_QUERY_CAPS	0x0ce0501 /* FSP->HV */
 #define FSP_RSP_SP_QUERY_CAPS	0x0ce8500
+#define FSP_CMD_POWERDOWN_NORM	0x1ce4d00 /* FSP->HV: Normal power down */
+#define FSP_CMD_POWERDOWN_QUICK	0x1ce4d01 /* FSP->HV: Quick power down */
+#define FSP_CMD_POWERDOWN_PCIRS	0x1ce4d02 /* FSP->HV: PCI cfg reset power dwn */
+#define FSP_CMD_REBOOT		0x1ce4e00 /* FSP->HV: Standard IPL */
 
 /*
  * Class 0xD4
