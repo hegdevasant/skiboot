@@ -95,6 +95,7 @@ static size_t fsp_write_vserial(struct fsp_serial *fs, const char *buf,
 	memcpy(&sb->data[old_nin], buf, chunk);
 	if (chunk < len)
 		memcpy(&sb->data[0], buf + chunk, len - chunk);
+	lwsync();
 	sb->next_in = (old_nin + len) % SER_BUF_DATA_SIZE;
 	sync();
 
