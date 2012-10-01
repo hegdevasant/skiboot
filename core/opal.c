@@ -4,6 +4,7 @@
 #include <lock.h>
 #include <fsp.h>
 #include <device_tree.h>
+#include <cpu.h>
 
 /* Pending events to signal via opal_poll_events */
 uint64_t opal_pending_events;
@@ -32,6 +33,11 @@ long opal_bad_token(uint64_t token)
 
 void opal_trace_entry(struct stack_frame *eframe)
 {
+	if (this_cpu()->pir != mfspr(SPR_PIR)) {
+		printf("CPU MISMATCH ! PIR=%04lx cpu @%p -> pir=%04x\n",
+		       mfspr(SPR_PIR), this_cpu(), this_cpu()->pir);
+		abort();
+	}
 	printf("OPAL: Entry, token %lld args:\n", eframe->gpr[0]);
 	printf("OPAL:  r3=%016llx\n", eframe->gpr[3]);
 	printf("OPAL:  r4=%016llx\n", eframe->gpr[4]);
