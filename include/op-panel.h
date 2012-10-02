@@ -40,9 +40,6 @@ enum op_module {
  * 'BA070001' : MS VPD wrong size
  * 'BA070002' : MS VPD doesn't have an MSAC
  * 'BA070003' : MS VPD doesn't have a total config
- * 'BA080000' : Cannot find MS VPD or invalid
- * 'EA080001' : Absent or bad PMBS in MS VPD, using default base
- * 'EA080002' : No XSCOM base in PMBS, using default
  */
 
 extern void op_display(enum op_severity, enum op_module, uint16_t code);

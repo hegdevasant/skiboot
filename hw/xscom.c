@@ -127,25 +127,20 @@ void xscom_init(void)
 
 	if (!ms_vpd || !HDIF_check(ms_vpd, MSVPD_HDIF_SIG)) {
 		prerror("XSCOM: Can't find MS VPD\n");
-		op_display(OP_FATAL, OP_MOD_XSCOM, 0x0000);
 		return;
 	}
 
 	pmbs = HDIF_get_idata(ms_vpd, MSVPD_IDATA_PMOVER_SYNCHRO, &size);
 	if (!CHECK_SPPTR(pmbs) || size < sizeof(*pmbs)) {
 		prerror("XSCOM: absent or bad PMBS size %u @ %p\n", size, pmbs);
-		op_display(OP_WARN, OP_MOD_XSCOM, 0x0001);
 		return;
 	}
 
 	if (!(pmbs->flags & MSVPD_PMS_FLAG_XSCOMBASE_VALID)) {
 		prerror("XSCOM: No XSCOM base in PMBS, using default\n");
-		op_display(OP_WARN, OP_MOD_XSCOM, 0x0002);
 		return;
 	}
 
 	xscom_base = pmbs->xscom_addr;
 	printf("XSCOM: Found base address: 0x%llx\n", xscom_base);
-
-	op_display(OP_LOG, OP_MOD_XSCOM, 0x0000);
 }

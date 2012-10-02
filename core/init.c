@@ -92,6 +92,9 @@ void main_cpu_entry(void)
 	/* Now locks can be used */
 	init_locks();
 
+	/* Initialize XSCOM */
+	xscom_init();
+
 	/* Early initializations of the FSP interface */
 	fsp_init();
 
@@ -105,37 +108,30 @@ void main_cpu_entry(void)
 
 	op_display(OP_LOG, OP_MOD_INIT, 0x0000);
 
-	/* Initialize XSCOM */
-	xscom_init();
-
-	op_display(OP_LOG, OP_MOD_INIT, 0x0001);
-
 	/* Finish initializing the console */
 	fsp_console_init();
 
-	op_display(OP_LOG, OP_MOD_INIT, 0x0002);
-
-	op_display(OP_LOG, OP_MOD_INIT, 0x0003);
+	op_display(OP_LOG, OP_MOD_INIT, 0x0001);
 
 	/* Call in secondary CPUs */
 	cpu_bringup();
 
-	op_display(OP_LOG, OP_MOD_INIT, 0x0004);
+	op_display(OP_LOG, OP_MOD_INIT, 0x0002);
 
 	/* Enable timebase synchronization */
 	chiptod_init();
 
-	op_display(OP_LOG, OP_MOD_INIT, 0x0005);
+	op_display(OP_LOG, OP_MOD_INIT, 0x0003);
 
 	/* Parse the memory layout. */
 	memory_parse();
 
-	op_display(OP_LOG, OP_MOD_INIT, 0x0006);
+	op_display(OP_LOG, OP_MOD_INIT, 0x0004);
 
 	/* Create the OPAL call table */
 	opal_table_init();
 
-	op_display(OP_LOG, OP_MOD_INIT, 0x0007);
+	op_display(OP_LOG, OP_MOD_INIT, 0x0005);
 
 	/* Load kernel LID */
 	if (!load_kernel()) {
@@ -143,7 +139,7 @@ void main_cpu_entry(void)
 		abort();
 	}
 
-	op_display(OP_LOG, OP_MOD_INIT, 0x0008);
+	op_display(OP_LOG, OP_MOD_INIT, 0x0006);
 
 	/* Create the device tree blob to boot OS. */
 	fdt = create_dtb();
@@ -152,7 +148,7 @@ void main_cpu_entry(void)
 		abort();
 	}
 
-	op_display(OP_LOG, OP_MOD_INIT, 0x0009);
+	op_display(OP_LOG, OP_MOD_INIT, 0x0007);
 
 	/* Start the kernel */
 	cpu_give_self_os();
