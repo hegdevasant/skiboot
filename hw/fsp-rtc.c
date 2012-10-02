@@ -74,19 +74,27 @@ static int64_t opal_rtc_decode_msg(struct fsp_msg *msg, uint32_t *y_m_d,
 
 	*y_m_d = msg->data.words[0];
 
-	/* The FSP returns
+	/* The FSP returns in BCD
 	 *
 	 *  |  hour  | minutes | secs  | reserved |
 	 *  | -------------------------------------
 	 *  |              microseconds           |
 	 *
 	 * The OPAL API is defined as returned a u64 of a
-	 * similar format except that microseconds is flush
-	 * with secs (the reserved bits are at the bottom).
+	 * similar format except that microseconds is milliseconds
+	 * in OPAL and is flush with seconds (the reserved bits are
+	 * at the bottom).
+	 *
+	 * We simply ignore the microseconds/milliseconds for now
+	 * as I don't quite undestand why the OPAL API defines that
+	 * it needs 6 digits for the milliseconds :-) I suspect the
+	 * doc got that wrong and it's supposed to be micro but
+	 * let's ignore it.
+	 *
+	 * Note that Linux doesn't use nor set the ms field anyway.
 	 */
 	tmp = (((uint64_t)msg->data.words[1]) & 0xffffff00) << 32;
 	tmp |= (uint64_t)msg->data.bytes[4] << 32;
-	tmp |= (msg->data.words[2] << 8) & 0xffffff00;
 	*h_m_s_m = tmp;
 
 	return OPAL_SUCCESS;
@@ -123,6 +131,7 @@ static int64_t opal_rtc_read(uint32_t *year_month_day,
 		rtc_read_msg = NULL;
 		opal_rtc_eval_events();
 
+
 		/* Check error state */
 		if (msg->state != fsp_msg_done) {
 			DBG(" -> request not in done state -> error !\n");
@@ -136,7 +145,7 @@ static int64_t opal_rtc_read(uint32_t *year_month_day,
 		goto bail;
 	}
 
-	DBG("Sending new request...\n");
+	DBG("Sending new read request...\n");
 
 	/* Create a request and send it */
 	rtc_read_msg = fsp_mkmsg(FSP_CMD_READ_TOD, 0);
@@ -166,7 +175,73 @@ opal_call(OPAL_RTC_READ, opal_rtc_read);
 static int64_t opal_rtc_write(uint32_t year_month_day __unused,
 			      uint64_t hour_minute_second_millisecond __unused)
 {
-	/* NYI */
-	return OPAL_UNSUPPORTED;
+	struct fsp_msg *msg;
+	uint32_t w0, w1, w2;
+	int64_t rc;
+
+	lock(&rtc_lock);
+
+	DBG("Got opal_rtc_write() call...\n");
+
+	/* Do we have a request already ? */
+	msg = rtc_write_msg;
+	if (msg) {
+		DBG("Pending request @%p, state=%d\n", msg, msg->state);
+
+		/* If it's still in progress, return */
+		if (fsp_msg_busy(msg)) {
+			DBG(" -> busy\n");
+			/* Don't free the message */
+			msg = NULL;
+			rc = OPAL_BUSY_EVENT;
+			goto bail;
+		}
+
+		/* It's complete, clear events */
+		rtc_write_msg = NULL;
+		opal_rtc_eval_events();
+
+		/* Check error state */
+		if (msg->state != fsp_msg_done) {
+			DBG(" -> request not in done state -> error !\n");
+			rc = OPAL_INTERNAL_ERROR;
+			goto bail;
+		}
+		rc = OPAL_SUCCESS;
+		goto bail;
+	}
+
+	DBG("Sending new write request...\n");
+
+	/* Create a request and send it. Just like for read, we ignore
+	 * the "millisecond" field which is probably supposed to be
+	 * microseconds and which Linux ignores as well anyway
+	 */
+	w0 = year_month_day;
+	w1 = (hour_minute_second_millisecond >> 32) & 0xffffff00;
+	w2 = 0;
+	
+	rtc_write_msg = fsp_mkmsg(FSP_CMD_WRITE_TOD, 3, w0, w1, w2);
+	if (!rtc_write_msg) {
+		DBG(" -> allocation failed !\n");
+		rc = OPAL_INTERNAL_ERROR;
+		goto bail;
+	}
+	DBG(" -> req at %p\n", rtc_read_msg);
+	if (fsp_queue_msg(rtc_write_msg, opal_rtc_req_complete)) {
+		DBG(" -> queueing failed !\n");
+		rc = OPAL_INTERNAL_ERROR;
+		fsp_freemsg(rtc_write_msg);
+		rtc_write_msg = NULL;
+		goto bail;
+	}
+	rc = OPAL_BUSY_EVENT;
+ bail:
+	unlock(&rtc_lock);
+	if (msg)
+		fsp_freemsg(msg);
+	DBG(" -> opal ret=%lld\n", rc);
+
+	return rc;
 }
 opal_call(OPAL_RTC_WRITE, opal_rtc_write);
