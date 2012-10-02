@@ -1,8 +1,5 @@
 /*
- * XXX TODO:
- *
- *  - Handle RAS issues
- *  - Check the setting of the low bits speed in TFMR
+ * Handle ChipTOD chip & configure core timebases
  */
 #include <skiboot.h>
 #include <chiptod.h>

@@ -1,0 +1,120 @@
+TODO List
+=========
+
+This list is for all iterms for a P7/P7+ target with P7IOC.
+
+* FSP & PSI link work
+   - Monitor PSI link state
+     -> Handle link errors, etc...
+     -> Handle fallback to backup link, retraining, ...
+     -> Handle reset/reload
+   - Handle mbox errors better
+     -> Properly keep messages queued up until comm resumes
+     -> Abort/escalate for upper level restart some message
+        types such as FSP data fetch
+   - Add timeouts
+   - Add PSI interrupt
+     -> Examine feasibility of opal_poll_event() not eating
+        interrupts by only clearing HCTL and not HDIR so the
+	OS can always rely on an interrupt after a state change
+   - Handle redundant FSPs
+   - Do we need to use the "Disable Mbox" command to disable
+     messages we don't support ?
+   - Handle handoff to a runtime FW
+     -> Mailbox suspend/resume as described by D. Larson
+     -> Transfer of buffers & TCEs
+
+* ChipTOD
+  - Examine RAS issues
+     -> HMI (see HMI topic)
+     -> Something to do for backup TOD ?
+     -> Other cases where reconfig is needed ?
+     -> Better deal with timeouts and SCOM errors
+     -> Handle restore after sleep
+  - Examine the setting of the low TB bits speed in TFMR
+     -> How does it correlates to CPU frequency ?
+
+* IO Chip
+  - Configure GX for P7IOC
+  - Configure P7IOC all the way to PHB
+  - Configure PHB
+  - Implement PCI-E reset/link training
+  - Populate device-tree
+  - Implement basic OPAL PCIe functions
+      -> Config space
+      -> XIVE (interrupts)
+      -> MSIs
+      -> TCEs
+      -> M32/M64 windows
+  - Implement EEH support
+      -> Basic state analysis
+      -> PE freeze handling & reporting & recovering
+      -> PHB fence handling & reporting & recovering
+      -> P7IOC/GX fence handling & reporting & recovering
+
+* HMI
+  - Implement a handler
+  - Figure out what to do
+     -> ChipTOD
+     -> More ?
+     -> Problems with KVM ... guest can have offset TB, need
+        to add API between OPAL and KVM when HMI recovery happens
+	so that KVM can re-adjust the guest TB (MC-like)
+
+* Machine Checks
+  - Implement a handler
+  - Figure out what to do
+     -> See existing OPAL data structures
+
+* Debug/trace infrastructure
+  - More dynamic configuration
+     -> Instead of ifdefs ... per-module knobs ?
+     -> Use self-patching for perfs ?
+     -> Maybe add a fast permanent "flight recorder " ?
+
+* P7+ support
+  - Figure out differences with P7
+     -> SCOM bits ?
+     -> GX settings ?
+  - What's up with NX ?
+     -> Basic Enablement
+     -> State of Linux driver
+     -> Needs OPAL interfaces ?
+     -> Interrupts
+
+* FSP integration
+  - Format of MasterLID
+  - How do we integrate with FSP Team ?
+     -> Replace OPAL ? Different LID format, need docs ...
+
+* Live transfer to runtime
+  - Save / Restore state
+     -> Using device-tree ? Or reconstruct from SPIRA ?
+  - Mailbox / TCE transfer (see FSP above)
+  - Backup data section for re-instanciating ourselves
+     -> Or just re-load LID
+
+* Energy Management
+  - TBD. Need to figure out what can be done
+
+* Memory error
+  - TBD. Need to figure out what can be done
+
+* Error logs
+  - OPAL defined interfaces
+  - Need matching kernel code etc...
+
+* NVRAM
+
+* VPDs
+  - Figure out what's available in SPIRA
+    -> Expose in device-tree
+  - Figure out where to get the rest
+    -> LIDs ?
+    -> Expose in device-tree
+
+* Other
+  - Dynamic reconfiguration ?
+  - More P7 chip level RAS ?
+  - Add cache information to device-tree
+  - Add NUMA information to device-tree

@@ -1,10 +1,5 @@
 /*
  * Service Processor handling code
- *
- * TODO: - Handle redundant FSPs
- *       - Monitor PSI link state
- *         -> handle link errors, switch links, etc...
- *       - Handle reset/reload
  */
 #include <stdarg.h>
 #include <processor.h>

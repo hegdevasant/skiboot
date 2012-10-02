@@ -1,0 +1,7 @@
+- Format of CPU Control area
+- SPPACA vs. PCIA... we ask for the later and we get the former
+  -> right now we support only SPPACA but we need to fix that
+- Proc Init seems to be ignored
+- Master LID format... we need to add ourselves there
+- OPAL looks like it's using a different LID format alltogether
+
