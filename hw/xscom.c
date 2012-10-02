@@ -36,7 +36,7 @@ static void __xscom_write(uint32_t gcid, uint32_t pcb_addr, uint64_t val)
 bool xscom_handle_error(uint64_t hmer, uint32_t gcid, uint32_t pcb_addr,
 			bool is_write)
 {
-	unsigned int stat = PPC_GETFIELD(SPR_HMER_XSCOM_STATUS, hmer);
+	unsigned int stat = GETFIELD(SPR_HMER_XSCOM_STATUS, hmer);
 
 	/* XXX Figure out error codes from doc and error
 	 * recovery procedures

@@ -1,14 +1,7 @@
 #ifndef __PROCESSOR_H
 #define __PROCESSOR_H
 
-/* PPC bit number conversion */
-#ifdef __ASSEMBLY__
-#define PPC_BIT(bit)		(0x8000000000000000 >> (bit))
-#else
-#define PPC_BIT(bit)		(0x8000000000000000UL >> (bit))
-#endif
-#define PPC_BITMASK(bs,be)	((PPC_BIT(bs) - PPC_BIT(be)) | PPC_BIT(bs))
-#define PPC_BITLSHIFT(be)	(63 - (be))
+#include <bitutils.h>
 
 /* P7 MSR bits */
 #define MSR_SF		PPC_BIT(0)	/* 64-bit mode */
@@ -46,6 +39,7 @@
 #define SPR_TBWL	0x11c	/* RW: Timebase low */
 #define SPR_TBWU	0x11d	/* RW: Timebase high */
 #define SPR_TBU40	0x11e	/* RW: Timebase Upper 40 bit */
+#define SPR_PVR		0x11f	/* RO: Processor version register */
 #define SPR_HSPRG0	0x130	/* RW: Hypervisor scratch 0 */
 #define SPR_HSPRG1	0x131	/* RW: Hypervisor scratch 1 */
 #define SPR_TFMR	0x13d
@@ -109,6 +103,22 @@
 #define SPR_HMER_XSCOM_STATUS_MASK	PPC_BITMASK(21,23)
 #define SPR_HMER_XSCOM_STATUS_LSH	PPC_BITLSHIFT(23)
 
+/* PVR bits */
+#define SPR_PVR_TYPE_MASK		0xffff0000
+#define SPR_PVR_TYPE_LSH		16
+#define SPR_PVR_VERS_MAJ_MASK		0x000000f0
+#define SPR_PVR_VERS_MAJ_LSH		4
+#define SPR_PVR_VERS_MIN_MASK		0x0000000f
+#define SPR_PVR_VERS_MIN_LSH		0
+
+#define PVR_TYPE(_pvr)		GETFIELD(SPR_PVR_TYPE, _pvr)
+#define PVR_VERS_MAJ(_pvr)	GETFIELD(SPR_PVR_VERS_MAJ, _pvr)
+#define PVR_VERS_MIN(_pvr)	GETFIELD(SPR_PVR_VERS_MIN, _pvr)
+
+/* PVR definitions */
+#define PVR_TYPE_P7	0x003f
+#define PVR_TYPE_P7P	0x004a
+
 #ifdef __ASSEMBLY__
 
 /* Thread priority control opcodes */
@@ -124,22 +134,6 @@
 
 #include <compiler.h>
 #include <stdint.h>
-
-/*
- * PPC bitmask field manipulation
- */
-
-/* Extract field fname from val */
-#define PPC_GETFIELD(fname, val)			\
-	(((val) & fname##_MASK) >> fname##_LSH)
-
-/* Set field fname of oval to fval
- * NOTE: oval isn't modified, the combined result is returned
- */
-#define PPC_SETFIELD(fname, oval, fval)			\
-	(((oval) & ~fname##_MASK) | \
-	 ((((typeof(oval))(fval)) << fname##_LSH) & fname##_MASK))
-
 
 /*
  * SMT priority

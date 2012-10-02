@@ -95,9 +95,9 @@ static void chiptod_setup_base_tmfr(void)
 	uint64_t tfmr;
 
 	tfmr = mfspr(SPR_TFMR);
-	tfmr = PPC_SETFIELD(SPR_TFMR_MAX_CYC_BET_STEPS, tfmr, 0x4b);
-	tfmr = PPC_SETFIELD(SPR_TFMR_N_CLKS_PER_STEP, tfmr, 0);
-	tfmr = PPC_SETFIELD(SPR_TFMR_SYNC_BIT_SEL, tfmr, 4);
+	tfmr = SETFIELD(SPR_TFMR_MAX_CYC_BET_STEPS, tfmr, 0x4b);
+	tfmr = SETFIELD(SPR_TFMR_N_CLKS_PER_STEP, tfmr, 0);
+	tfmr = SETFIELD(SPR_TFMR_SYNC_BIT_SEL, tfmr, 4);
 	tfmr |= SPR_TFMR_TB_ECLIPZ;
 	mtspr(SPR_TFMR, tfmr);
 }
