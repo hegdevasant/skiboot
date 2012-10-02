@@ -11,6 +11,7 @@ struct con_ops {
 extern struct lock con_lock;
 
 extern bool flush_console(void);
+extern bool __flush_console(void);
 extern void set_console(struct con_ops *driver);
 
 #endif /* __CONSOLE_H */

@@ -35,22 +35,38 @@ static void mambo_write(const char *buf __unused, size_t count __unused) { }
 bool __flush_console(void)
 {
 	size_t req, len = 0;
+	static bool in_flush, more_flush;
 
+	/* We need to be careful here, due to some tracing in the
+	 * FSP code, we might end up having more data being added
+	 * to the console buffer, and even re-enter, while inside
+	 * the write callback. So let's prevent re-entrancy and
+	 * make sure we re-evaluate con_in after a write.
+	 */
+	if (in_flush) {
+		more_flush = true;
+		return false;
+	}
 	if (con_in == con_out || !con_driver)
 		return false;
+	in_flush = true;
 
-	if (con_out > con_in) {
-		req = INMEM_CON_LEN - con_out;
-		len = con_driver->write(con_buf + con_out, req);		
-		con_out = (con_out + len) % INMEM_CON_LEN;
-		if (len < req)
-			goto bail;
-	}
-	if (con_out < con_in) {
-		len = con_driver->write(con_buf + con_out, con_in - con_out);
-		con_out = (con_out + len) % INMEM_CON_LEN;
-	}
+	do {
+		more_flush = false;
+		if (con_out > con_in) {
+			req = INMEM_CON_LEN - con_out;
+			len = con_driver->write(con_buf + con_out, req);				con_out = (con_out + len) % INMEM_CON_LEN;
+			if (len < req)
+				goto bail;
+		}
+		if (con_out < con_in) {
+			len = con_driver->write(con_buf + con_out,
+						con_in - con_out);
+			con_out = (con_out + len) % INMEM_CON_LEN;
+		}
+	} while(more_flush);
 bail:
+	in_flush = false;
 	return con_out != con_in;
 }
 

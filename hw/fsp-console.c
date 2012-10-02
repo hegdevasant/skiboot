@@ -43,9 +43,6 @@ static struct fsp_serial fsp_serials[MAX_SERIAL];
 static bool got_intf_query;
 static bool got_assoc_resp;
 
-#ifdef DVS_CONSOLE
-static int fsp_con_port = -1;
-
 static void fsp_pokemsg_reclaim(struct fsp_msg *msg)
 {
 	struct fsp_serial *fs = msg->user_data;
@@ -110,12 +107,21 @@ static size_t fsp_write_vserial(struct fsp_serial *fs, const char *buf,
 	return len;
 }
 
+#ifdef DVS_CONSOLE
+static int fsp_con_port = -1;
+static bool fsp_con_full;
+
 static size_t fsp_con_write(const char *buf, size_t len)
 {
+	size_t written;
+
 	if (fsp_con_port < 0)
 		return 0;
 
-	return fsp_write_vserial(&fsp_serials[fsp_con_port], buf, len);
+	written = fsp_write_vserial(&fsp_serials[fsp_con_port], buf, len);
+	fsp_con_full = (written < len);
+
+	return written;
 }
 
 static struct con_ops fsp_con_ops = {
@@ -550,7 +556,8 @@ void fsp_console_poll(void)
 	/* We don't get messages for out buffer being consumed, so we
 	 * need to poll
 	 */
-	if (opal_pending_events & OPAL_EVENT_CONSOLE_OUTPUT) {
+	if (fsp_con_full ||
+	    (opal_pending_events & OPAL_EVENT_CONSOLE_OUTPUT)) {
 		unsigned int i;
 		bool pending = false;
 
@@ -563,9 +570,13 @@ void fsp_console_poll(void)
 			struct fsp_serial *fs = &fsp_serials[i];
 			struct fsp_serbuf_hdr *sb = fs->out_buf;
 
-			if (fs->log_port || !fs->open)
+			if (!fs->open)
 				continue;
-			if (sb->next_out != sb->next_in) {
+			if (sb->next_out == sb->next_in)
+				continue;
+			if (fs->log_port)
+				__flush_console();
+			else {
 #ifdef OPAL_DEBUG_CONSOLE_POLL
 				if (debug < 5) {
 					printf("OPAL: %d still pending"
