@@ -405,7 +405,7 @@ void add_cpu_nodes(void)
 			dt_property_cell("d-cache-line-size",
 					 t->cache->l1_dcache_line_size);
 		dt_property_cell("clock-frequency",
-				 t->timebase->actual_clock_speed);
+				 t->timebase->actual_clock_speed * 1000000);
 
 		/* FIXME: Hardcoding is bad. */
 		dt_property_cell("timebase-frequency", 512000000);
