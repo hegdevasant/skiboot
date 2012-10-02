@@ -242,12 +242,6 @@ static bool fsp_post_msg(struct fsp *fsp, struct fsp_msg *msg)
 	if (fsp_check_err(fsp))
 		return false;
 
-	/* We avoid tracing outgoing vserial pokes or we end up
-	 * recursively calling into it again and again..
-	 */
-	if ((msg->word0 & 0xff) != 0xe1)
-		fsp_trace_msg(msg, "snd");
-
 	/* Note: We used to read HCTL here and only modify some of
 	 * the bits in it. This was bogus, because we would write back
 	 * the incoming bits as '1' and clear them, causing fsp_poll()
@@ -259,6 +253,11 @@ static bool fsp_post_msg(struct fsp *fsp, struct fsp_msg *msg)
 	fsp->pending = msg;
 	fsp->state = fsp_mbx_send;
 	msg->state = fsp_msg_sent;
+
+	/* We trace after setting the mailbox state so that if the
+	 * tracing recurses, it ends up just queuing the message up
+	 */
+	fsp_trace_msg(msg, "snd");
 
 	/* Build the message in the mailbox */
 	reg = FSP_MBX1_HDATA_AREA;
@@ -292,6 +291,14 @@ static void fsp_poke_queue(struct fsp_cmdclass *cmdclass)
 		return;
 	if (fsp->state != fsp_mbx_idle)
 		return;
+
+	/* From here to the point where fsp_post_msg() sets fsp->state
+	 * to !idle we must not cause any re-entrency (no debug or trace)
+	 * in a code path that may hit fsp_post_msg() (it's ok to do so
+	 * if we are going to bail out), as we are committed to calling
+	 * fsp_post_msg() and so a re-entrancy could cause us to do a
+	 * double-send into the mailbox.
+	 */
 	if (cmdclass->busy || list_empty(&cmdclass->msgq))
 		return;
 

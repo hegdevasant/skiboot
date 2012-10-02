@@ -421,14 +421,14 @@ struct fsp_msg {
 	 * Driver updated fields
 	 */
 
+	/* Current msg state */
+	enum fsp_msg_state	state;
+
 	/* Set if the message expects a response */
 	bool			response;
 
 	/* Response will be filed by driver when response received */
 	struct fsp_msg		*resp;
-
-	/* Current msg state */
-	enum fsp_msg_state	state;
 
 	/* Internal queuing */
 	struct list_node	link;
