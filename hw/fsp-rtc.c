@@ -84,12 +84,9 @@ static int64_t opal_rtc_decode_msg(struct fsp_msg *msg, uint32_t *y_m_d,
 	 * similar format except that microseconds is flush
 	 * with secs (the reserved bits are at the bottom).
 	 */
-	tmp = (((uint64_t)msg->data.words[1]) << 32) & 0xffffff00;
-	DBG("  tmp1: %llx\n", tmp);
+	tmp = (((uint64_t)msg->data.words[1]) & 0xffffff00) << 32;
 	tmp |= (uint64_t)msg->data.bytes[4] << 32;
-	DBG("  tmp2: %llx\n", tmp);
 	tmp |= (msg->data.words[2] << 8) & 0xffffff00;
-	DBG("  tmp2: %llx\n", tmp);
 	*h_m_s_m = tmp;
 
 	return OPAL_SUCCESS;
