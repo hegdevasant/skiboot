@@ -13,10 +13,6 @@ This list is for all iterms for a P7/P7+ target with P7IOC.
      -> Abort/escalate for upper level restart some message
         types such as FSP data fetch
    - Add timeouts
-   - Add PSI interrupt
-     -> Examine feasibility of opal_poll_event() not eating
-        interrupts by only clearing HCTL and not HDIR so the
-	OS can always rely on an interrupt after a state change
    - Handle redundant FSPs
    - Do we need to use the "Disable Mbox" command to disable
      messages we don't support ?
