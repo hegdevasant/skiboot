@@ -7,6 +7,9 @@
 #include <io.h>
 #include <fsp.h>
 #include <lock.h>
+#include <interrupts.h>
+#include <opal.h>
+#include <gx.h>
 
 //#define DBG(fmt...)	printf(fmt)
 #define DBG(fmt...)	do { } while(0)
@@ -16,6 +19,8 @@
 
 struct fsp_iopath {
 	unsigned short	link_status;	/* straight from SPSS */
+	unsigned int	chip_id;
+	unsigned int	interrupt;
 	void		*gxhb_regs;
 	void		*fsp_regs;
 };
@@ -420,6 +425,7 @@ static void fsp_complete_msg(struct fsp_msg *msg)
 	unlock(&fsp_lock);
 	if (comp)
 		(*comp)(msg);
+	lock(&fsp_lock);
 }
 
 /* WARNING: This will drop the FSP lock !!! */
@@ -433,10 +439,9 @@ static void fsp_complete_send(struct fsp *fsp)
 	DBG("  completing send, word0: 0x%08x, resp: %d\n",
 	    msg->word0, msg->response);
 
-	if (msg->response) {
+	if (msg->response)
 		msg->state = fsp_msg_wresp;
-		unlock(&fsp_lock);
-	} else
+	else
 		fsp_complete_msg(msg);
 }
 
@@ -631,7 +636,6 @@ static void fsp_handle_incoming(struct fsp *fsp)
 		struct fsp_msg *req;
 
 		if (!cmdclass->busy || list_empty(&cmdclass->msgq)) {	
-			unlock(&fsp_lock);
 			prerror("FSP #%d: Got orphan response !\n", fsp->index);
 			__fsp_drop_incoming(fsp);
 			return;
@@ -643,7 +647,6 @@ static void fsp_handle_incoming(struct fsp *fsp)
 		    (req->word0 & 0xff) != (w0 & 0xff) ||
 		    (req->word1 & 0xff) != (w1 & 0x7f)) {
 			__fsp_drop_incoming(fsp);
-			unlock(&fsp_lock);
 			prerror("FSP #%d: Response doesn't match pending msg\n",
 				fsp->index);
 			return;
@@ -654,7 +657,6 @@ static void fsp_handle_incoming(struct fsp *fsp)
 			req->resp = __fsp_allocmsg();
 			if (!req->resp) {
 				__fsp_drop_incoming(fsp);
-				unlock(&fsp_lock);
 				prerror("FSP #%d: Failed to allocate response\n",
 					fsp->index);
 				return;
@@ -672,17 +674,17 @@ static void fsp_handle_incoming(struct fsp *fsp)
 	msg = __fsp_allocmsg();
 	if (!msg) {
 		__fsp_drop_incoming(fsp);
-		unlock(&fsp_lock);
 		prerror("FSP #%d: Failed to allocate incoming msg\n",
 			fsp->index);
 		return;
 	}
 	msg->state = fsp_msg_incoming;
 	__fsp_fill_incoming(fsp, msg, dlen, w0, w1);
-	unlock(&fsp_lock);
 
 	/* Handle FSP commands. This can recurse into fsp_queue_msg etc.. */
+	unlock(&fsp_lock);
 	fsp_handle_command(msg);
+	lock(&fsp_lock);
 }
 
 static void fsp_check_queues(void)
@@ -702,19 +704,42 @@ static void fsp_check_queues(void)
 	}
 }
 
-void fsp_poll(void)
+static void __fsp_poll(bool interrupt)
 {
 	struct fsp *fsp = fsp_get_active();
-	u32 ctl;
+	u32 ctl, hdir;
 
 	if (!fsp)
 		return;
 
 	lock(&fsp_lock);
 
+	/* Crazy interrupt handling scheme:
+	 *
+	 * In order to avoid "losing" interrupts when polling the mbox
+	 * we only clear interrupt conditions when called as a result of
+	 * an interrupt.
+	 *
+	 * That way, if a poll clears, for example, the HPEND condition,
+	 * the interrupt remains, causing a dummy interrupt later on
+	 * thus allowing the OS to be notifed of a state change (ie it
+	 * doesn't need every poll site to monitor every state change).
+	 *
+	 * However, this scheme is complicated by the fact that we need
+	 * to clear the interrupt condition after we have cleared the
+	 * original condition in HCTL, and we might have long stale
+	 * interrupts which we do need to eventually get rid of. However
+	 * clearing interrupts in such a way is racy, so we need to loop
+	 * and re-poll HCTL after having done so or we might miss an
+	 * event. It's a latency risk, but unlikely and probably worth it.
+	 */
+
 	/* Check for error state */
  again:
-	if (fsp_check_err(fsp) || fsp->state == fsp_mbx_error) {
+	if (fsp_check_err(fsp) || fsp->state == fsp_mbx_error) {	
+		/* XXX Blind ack for now, do better ... */
+		if (interrupt)
+			fsp_wreg(fsp, FSP_HDIR_REG, FSP_DBIRQ_ALL);
 		unlock(&fsp_lock);
 		return;
 	}
@@ -732,14 +757,13 @@ void fsp_poll(void)
 			/* mbox is free */
 			fsp->state = fsp_mbx_idle;
 
-			/* Complete message (will srop lock) */
+			/* Complete message (will break the lock) */
 			fsp_complete_send(fsp);
-			lock(&fsp_lock);
 
 			/* Check for something else to send */
 			fsp_check_queues();
 
-			/* Lock can have been dropped, so ctl is now
+			/* Lock can have been broken, so ctl is now
 			 * potentially invalid, let's recheck
 			 */
 			goto again;
@@ -753,13 +777,28 @@ void fsp_poll(void)
 		/* XXX Handle send timeouts!!! */
 	}
 
-	/* Is there an incoming message ? This will drop the lock */
-	if (ctl & FSP_MBX_CTL_HPEND) {
+	/* Is there an incoming message ? This will break the lock as well */
+	if (ctl & FSP_MBX_CTL_HPEND)
 		fsp_handle_incoming(fsp);
-		return;
-	}
 
+	/* Note: Lock may have been broken above, thus ctl might be invalid
+	 * now, don't use it any further.
+	 */
+
+	/* Clear interrupts, and recheck HCTL if any occurred */
+	if (interrupt) {
+		hdir = fsp_rreg(fsp, FSP_HDIR_REG);
+		if (hdir) {
+			fsp_wreg(fsp, FSP_HDIR_REG, hdir);
+			goto again;
+		}
+	}
 	unlock(&fsp_lock);
+}
+
+void fsp_poll(void)
+{
+	return __fsp_poll(false);
 }
 
 int fsp_sync_msg(struct fsp_msg *msg, bool autofree)
@@ -857,6 +896,62 @@ static void fsp_reg_dump(struct fsp *fsp __unused)
 #endif
 }
 
+static void fsp_psi_enable_interrupt(struct fsp *fsp)
+{
+	struct fsp_iopath *iop;
+
+	iop = &fsp->iopath[fsp->active_iopath];
+	if (iop->link_status == SPSS_IO_PATH_PSI_LINK_BAD_FRU)
+		return;
+
+	/* Enable FSP interrupts in the GXHB */
+	out_be64(iop->gxhb_regs + PSIHB_CR,
+		 in_be64(iop->gxhb_regs + PSIHB_CR) | 0x1000000000000000ull);
+}
+
+static int fsp_init_mbox(struct fsp *fsp)
+{
+	unsigned int i;
+
+	/*
+	 * Note: The documentation contradicts itself as to
+	 * whether the HDIM bits should be set or cleared to
+	 * enable interrupts
+	 *
+	 * This seems to work...
+	 */
+
+	/* Mask all interrupts */
+	fsp_wreg(fsp, FSP_HDIM_CLR_REG, FSP_DBIRQ_ALL);
+
+	/* Clear all errors */
+	fsp_wreg(fsp, FSP_HDES_REG, FSP_DBERRSTAT_CLR1 | FSP_DBERRSTAT_CLR2);
+
+	/* Clear whatever crap may remain in HDCR */
+	fsp_wreg(fsp, FSP_MBX1_HCTL_REG, FSP_MBX_CTL_XDN | FSP_MBX_CTL_HPEND |
+		 FSP_MBX_CTL_HCSP_MASK | FSP_MBX_CTL_DCSP_MASK);
+	fsp_wreg(fsp, FSP_MBX2_HCTL_REG, FSP_MBX_CTL_XDN | FSP_MBX_CTL_HPEND |
+		 FSP_MBX_CTL_HCSP_MASK | FSP_MBX_CTL_DCSP_MASK);
+
+	/* Clear all pending interrupts */
+	fsp_wreg(fsp, FSP_HDIR_REG, FSP_DBIRQ_ALL);
+
+	/* Initialize data area as the doco says */
+	for (i = 0; i < 0x40; i += 4)
+		fsp_wreg(fsp, FSP_MBX1_HDATA_AREA + i, 0);
+
+	/* Enable all mbox1 interrupts */
+	fsp_wreg(fsp, FSP_HDIM_SET_REG, FSP_DBIRQ_MBOX1);
+
+	/* Enable interrupts in the PSI HB */
+	fsp_psi_enable_interrupt(fsp);
+
+	/* Debug ... */
+	fsp_reg_dump(fsp);
+
+	return 0;
+}
+
 /* We use a single fixed TCE table for all PSI interfaces */
 static void fsp_init_tce_table(void)
 {
@@ -894,6 +989,91 @@ void fsp_tce_unmap(u32 offset, u32 size)
 		fsp_tce_table[offset++] = 0;
 }
 
+static int fsp_psi_init_phb(struct fsp_iopath *fiop, bool active)
+{
+	u64 reg;
+
+	/* Disable and configure the  TCE table,
+	 * it will be enabled below
+	 */
+	reg = in_be64(fiop->gxhb_regs + PSIHB_CR);
+	reg &= ~0x2000000000000000ull;
+	out_be64(fiop->gxhb_regs + PSIHB_CR, reg);
+	out_be64(fiop->gxhb_regs + PSIHB_TAR, PSI_TCE_TABLE_BASE | 1);
+
+	/* Configure the interrupt BUID and mask it */
+	out_be64(fiop->gxhb_regs + PSIHB_XIVR,
+		 IRQ_BUID(fiop->interrupt) << 16 |
+		 0xffull << 32);
+
+	/* Configure it in the GX controller as well */
+	gx_configure_psi_buid(fiop->chip_id, IRQ_BUID(fiop->interrupt));
+
+	/* Diable interrupt emission in the control register,
+	 * it will be re-enabled later, after the mailbox one
+	 * will have been enabled.
+	 */
+	reg = in_be64(fiop->gxhb_regs + PSIHB_CR);
+	reg &= ~0x1000000000000000ull;
+	out_be64(fiop->gxhb_regs + PSIHB_CR, reg);
+
+	/* Enable interrupts in the mask register. We enable everything
+	 * except for bit "FSP command error detected" which the doc
+	 * (P7 BookIV) says should be masked for normal ops. It also
+	 * seems to be masked under OPAL.
+	 *
+	 * The value below was basically snapshotted from pHyp using
+	 * ecmd getscom :-)
+	 */
+	reg = 0x0010010000000000ull;
+	out_be64(fiop->gxhb_regs + PSIHB_SEMR, reg);
+
+	/* Enable various other configuration register bits based
+	 * on what pHyp does. We keep interrupts disabled until
+	 * after the mailbox has been properly configured. We assume
+	 * basic stuff such as PSI link enable is already there.
+	 *
+	 *  - FSP CMD Enable
+	 *  - FSP MMIO Enable
+	 *  - TCE Enable
+	 *  - Error response enable
+	 *
+	 * Clear all other error bits
+	 *
+	 * XXX: Only on the active link for now
+	 */
+	if (active) {
+		reg = in_be64(fiop->gxhb_regs + PSIHB_CR);
+		reg |=  0x3800000000000000ull;
+		reg &= ~0x00000000ffffffffull;
+		out_be64(fiop->gxhb_regs + PSIHB_CR, reg);
+	}
+#if 1
+	/* Dump the GXHB registers */
+	printf("  PSIHB_BBAR   : %llx\n",
+	       in_be64(fiop->gxhb_regs + PSIHB_BBAR));
+	printf("  PSIHB_FSPBAR : %llx\n",
+	       in_be64(fiop->gxhb_regs + PSIHB_FSPBAR));
+	printf("  PSIHB_FSPMMR : %llx\n",
+	       in_be64(fiop->gxhb_regs + PSIHB_FSPMMR));
+	printf("  PSIHB_TAR    : %llx\n",
+	       in_be64(fiop->gxhb_regs + PSIHB_TAR));
+	printf("  PSIHB_CR     : %llx\n",
+	       in_be64(fiop->gxhb_regs + PSIHB_CR));
+	printf("  PSIHB_SEMR   : %llx\n",
+	       in_be64(fiop->gxhb_regs + PSIHB_SEMR));
+	printf("  PSIHB_XIVR   : %llx\n",
+	       in_be64(fiop->gxhb_regs + PSIHB_XIVR));
+#endif
+
+	/* Get the FSP register window */
+	reg = in_be64(fiop->gxhb_regs + PSIHB_FSPBAR);
+	fiop->fsp_regs = (void *)(reg | (1ULL << 63) | FSP1_REG_OFFSET);
+
+	return 0;
+}
+
+
 static void fsp_create_fsp(const void *spss, int index)
 {
 	struct fsp *fsp;
@@ -930,7 +1110,6 @@ static void fsp_create_fsp(const void *spss, int index)
 		unsigned int iopath_sz;
 		const char *ststr;
 		bool active;
-		u64 reg;
 
 		iopath = HDIF_get_iarray_item(spss, SPSS_IDATA_SP_IOPATH,
 					      i, &iopath_sz);
@@ -947,6 +1126,8 @@ static void fsp_create_fsp(const void *spss, int index)
 		fiop = &fsp->iopath[i];
 		fiop->link_status = iopath->psi.link_status;
 		fiop->gxhb_regs = (void *)iopath->psi.gxhb_base;
+		fiop->chip_id = iopath->psi.proc_chip_id;
+		fiop->interrupt = get_psi_interrupt(fiop->chip_id);
 		active = false;
 		switch(fiop->link_status) {
 		case SPSS_IO_PATH_PSI_LINK_BAD_FRU:
@@ -967,41 +1148,12 @@ static void fsp_create_fsp(const void *spss, int index)
 		if (active)
 			fsp->active_iopath = i;
 
-		/* Disable, configure and enable the TCE table */
-		reg = in_be64(fiop->gxhb_regs + PSIHB_CR);
-		reg &= ~0x2000000000000000ULL;
-		out_be64(fiop->gxhb_regs + PSIHB_CR, reg);
-		out_be64(fiop->gxhb_regs + PSIHB_TAR, PSI_TCE_TABLE_BASE | 1);
-		reg |= 0x2000000000000000ULL;
-		out_be64(fiop->gxhb_regs + PSIHB_CR, reg);
-
-		/* Dump the GXHB registers */
-#if 1
-		printf("  PSIHB_BBAR   : %llx\n",
-		       in_be64(fiop->gxhb_regs + PSIHB_BBAR));
-		printf("  PSIHB_FSPBAR : %llx\n",
-		       in_be64(fiop->gxhb_regs + PSIHB_FSPBAR));
-		printf("  PSIHB_FSPMMR : %llx\n",
-		       in_be64(fiop->gxhb_regs + PSIHB_FSPMMR));
-		printf("  PSIHB_TAR    : %llx\n",
-		       in_be64(fiop->gxhb_regs + PSIHB_TAR));
-		printf("  PSIHB_CR     : %llx\n",
-		       in_be64(fiop->gxhb_regs + PSIHB_CR));
-		printf("  PSIHB_SEMR   : %llx\n",
-		       in_be64(fiop->gxhb_regs + PSIHB_SEMR));
-		printf("  PSIHB_XIVR   : %llx\n",
-		       in_be64(fiop->gxhb_regs + PSIHB_XIVR));
-#endif
-
-		/* Get the FSP register window */
-		reg = in_be64(fiop->gxhb_regs + PSIHB_FSPBAR);
-		fiop->fsp_regs =
-			(void *)(reg | (1ULL << 63) | FSP1_REG_OFFSET);
-		
+		/* XXX Handle errors */
+		fsp_psi_init_phb(fiop, active);
 	}
 	if (fsp->active_iopath >= 0 && !active_fsp) {
-		fsp_reg_dump(fsp);
 		active_fsp = fsp;
+		fsp_init_mbox(fsp);
 	}
 
 	fsp->link = first_fsp;
@@ -1150,3 +1302,95 @@ int fsp_fetch_data(uint8_t flags, uint16_t id, uint32_t sub_id,
 	return 0;
 }
 
+unsigned int fsp_get_interrupts(uint32_t *psi_irqs, unsigned int max)
+{
+	struct fsp *fsp;
+	struct fsp_iopath *iop;
+
+#if 0 /* XXX We only support the one active link on the first FSP */
+	unsigned int idx = 0;
+
+	for (fsp = first_fsp; fsp; fsp = fsp->link) {
+		unsigned int i;
+
+		for (i = 0; i < fsp->iopath_count; i++) {
+			iop = &fsp->iopath[i];
+			psi_irqs[idx++] = iop->interrupt;
+			if (idx >= max)
+				goto bail;
+		}
+	}
+ bail:
+	return idx;a
+#else
+	fsp = fsp_get_active();
+	if (!fsp || max == 0)
+		return 0;
+	iop = &fsp->iopath[fsp->active_iopath];
+	if (iop->link_status == SPSS_IO_PATH_PSI_LINK_BAD_FRU)
+		return 0;
+	
+	psi_irqs[0] = iop->interrupt;
+
+	return 1;
+#endif
+}
+
+void fsp_psi_interrupt(uint32_t isn __unused)
+{
+	/* XXX We should decode the chip, find the link, etc...
+	 *
+	 * then we should handle PSI interrupts (link errors etc...)
+	 * vs. mailbox interrupts
+	 *
+	 * For now, we just poll & clear the status bits
+	 */
+	__fsp_poll(true);
+}
+
+/*
+ * XXX The functions below need to be fixed similarily to handle
+ *     multiple links and target the right one !!!
+ */
+int64_t fsp_set_xive(uint32_t isn __unused, uint16_t server, uint8_t priority)
+{
+	struct fsp *fsp = fsp_get_active(); /* XXX FIXME */
+	struct fsp_iopath *iop;
+	uint64_t xivr;
+
+	if (!fsp)
+		return OPAL_HARDWARE;
+	iop = &fsp->iopath[fsp->active_iopath];
+	if (iop->link_status == SPSS_IO_PATH_PSI_LINK_BAD_FRU)
+		return OPAL_HARDWARE;
+
+	/* Populate the XIVR */
+	xivr  = (uint64_t)server << 40;
+	xivr |= (uint64_t)priority << 32;
+	xivr |=	IRQ_BUID(iop->interrupt) << 16;
+
+	out_be64(iop->gxhb_regs + PSIHB_XIVR, xivr);
+
+	return OPAL_SUCCESS;
+}
+
+int64_t fsp_get_xive(uint32_t isn __unused, uint16_t *server, uint8_t *priority)
+{
+	struct fsp *fsp = fsp_get_active(); /* XXX FIXME */
+	struct fsp_iopath *iop;
+	uint64_t xivr;
+
+	if (!fsp)
+		return OPAL_HARDWARE;
+	iop = &fsp->iopath[fsp->active_iopath];
+	if (iop->link_status == SPSS_IO_PATH_PSI_LINK_BAD_FRU)
+		return OPAL_HARDWARE;
+
+	/* Read & decode the XIVR */
+	xivr = in_be64(iop->gxhb_regs + PSIHB_XIVR);
+
+	*server = (xivr >> 40) & 0x7ff;
+	*priority = (xivr >> 32) & 0xff;
+
+	return OPAL_SUCCESS;
+}

@@ -17,9 +17,14 @@
  * Where T is the "torrent" bit and is 0 for P7 chips and 1 for
  * directly XSCOM'able IO chips such as Torrent
  */
- #define PIR2GCID(pir) ({ 				\
+#define PIR2GCID(pir) ({ 				\
 	uint32_t _pir = pir;				\
 	((_pir >> 4) & 0x38) | ((_pir >> 5) & 0x3); })
+
+/* Convert a 5-bit Chip# (NodeID | ChipID) into a GCID */
+#define CHIP2GCID(chip) ({				\
+	uint32_t _chip = chip;				\
+	((_chip << 1) & 0x38) | (_chip & 0x3); })
 
 /*
  * Error handling:

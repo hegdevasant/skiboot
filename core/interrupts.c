@@ -1,9 +1,32 @@
 #include <skiboot.h>
 #include <device_tree.h>
 #include <cpu.h>
+#include <fsp.h>
+#include <interrupts.h>
+#include <opal.h>
 #include <ccan/str/str.h>
 
 static uint32_t ics_phandle;
+
+
+/*
+ * This takes a 5-bit chip id (node:3 + chip:2) and returns a 20 bit
+ * value representing the PSI interrupt. This includes all the fields
+ * above, ie, is a global interrupt number
+ */
+uint32_t get_psi_interrupt(uint32_t chip_id)
+{
+	uint32_t irq;
+
+	/* Get the node ID bits into position */
+	irq  = (chip_id & 0x1c) << (4 + 9 + 1 + 2 + 1);
+	/* Get the chip ID bits into position */
+	irq |= (chip_id & 0x03) << (4 + 9 + 1);
+	/* Add in the BUID */
+	irq |= PSI_IRQ_BUID << 4;
+
+	return irq;
+}
 
 void add_icp_nodes(void)
 {
@@ -67,3 +90,69 @@ uint32_t get_ics_phandle(void)
 	return ics_phandle;
 }
 
+void add_opal_interrupts(void)
+{
+	/* We support up to 32 chips, thus 32 PSI interrupts */
+#define MAX_PSI_IRQS	32
+
+	uint32_t irqs[MAX_PSI_IRQS];
+	unsigned int psi_irq_count;
+
+	/* OPAL currently wants to be forwarded the PSI interrupts
+	 *
+	 * Later it might want to handle more interrupts, but for
+	 * now let's stick to those
+	 */
+	psi_irq_count = fsp_get_interrupts(irqs, MAX_PSI_IRQS);
+
+	/* The opal-interrupts property has one cell per interrupt,
+	 * it is not a standard interrupt property
+	 */
+	dt_property("opal-interrupts", irqs, psi_irq_count * 4);
+}
+
+static int64_t opal_set_xive(uint32_t isn, uint16_t server, uint8_t priority)
+{
+	if (IRQ_BUID(isn) == PSI_IRQ_BUID)
+		return fsp_set_xive(isn, server, priority);
+
+	/* XXX Add PCI & NX */
+
+	return OPAL_PARAMETER;
+}
+opal_call(OPAL_SET_XIVE, opal_set_xive);
+
+static int64_t opal_get_xive(uint32_t isn, uint16_t *server, uint8_t *priority)
+{
+	if (IRQ_BUID(isn) == PSI_IRQ_BUID)
+		return fsp_get_xive(isn, server, priority);
+
+	/* XXX Add PCI & NX */
+
+	return OPAL_PARAMETER;
+}
+opal_call(OPAL_GET_XIVE, opal_get_xive);
+
+int64_t opal_handle_interrupt(uint32_t isn, uint64_t *outstanding_event_mask)
+{
+	/* We only support PSI interrupts atm */
+	if (IRQ_BUID(isn) != PSI_IRQ_BUID)
+		return OPAL_PARAMETER;
+
+	/* Handle the interrupt at the FSP level (somewhat equivalent
+	 * to fsp_poll(), see comments in the code for differences
+	 */
+	fsp_psi_interrupt(isn);
+
+	/* Poll the console buffers on any interrupt since we don't
+	 * get send notifications
+	 */
+	fsp_console_poll();
+
+	/* Update output events */
+	if (outstanding_event_mask)
+		*outstanding_event_mask = opal_pending_events;
+
+	return OPAL_SUCCESS;
+}
+opal_call(OPAL_HANDLE_INTERRUPT, opal_handle_interrupt);

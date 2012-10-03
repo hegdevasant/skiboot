@@ -142,6 +142,11 @@
 #define FSP_DBIRQ_ERROR1		(1 <<  2)
 #define FSP_DBIRQ_XUP1			(1 <<  1)
 #define FSP_DBIRQ_HPEND1		(1 <<  0)
+#define FSP_DBIRQ_MBOX1			(FSP_DBIRQ_ERROR1 | FSP_DBIRQ_XUP1 | \
+					 FSP_DBIRQ_HPEND1)
+#define FSP_DBIRQ_MBOX2			(FSP_DBIRQ_ERROR2 | FSP_DBIRQ_XUP2 | \
+					 FSP_DBIRQ_HPEND2)
+#define FSP_DBIRQ_ALL			(FSP_DBIRQ_MBOX1 | FSP_DBIRQ_MBOX2)
 
 /* Doorbell Interrupt Register (FSP internal interrupt latch
  * read-only on host side
@@ -533,5 +538,11 @@ extern void fsp_console_init(void);
 extern void fsp_console_poll(void);
 extern void add_opal_console_nodes(void);
 extern void add_stdout_path(void);
+
+/* Interrupts */
+extern void fsp_psi_interrupt(uint32_t isn);
+extern unsigned int fsp_get_interrupts(uint32_t *psi_irqs, unsigned int max);
+extern int64_t fsp_set_xive(uint32_t isn, uint16_t server, uint8_t priority);
+extern int64_t fsp_get_xive(uint32_t isn, uint16_t *server, uint8_t *priority);
 
 #endif /* __FSP_H */

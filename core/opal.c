@@ -5,6 +5,7 @@
 #include <fsp.h>
 #include <device_tree.h>
 #include <cpu.h>
+#include <interrupts.h>
 
 /* Pending events to signal via opal_poll_events */
 uint64_t opal_pending_events;
@@ -71,7 +72,7 @@ void add_opal_nodes(void)
 			  entry & 0xffffffff);
 	dt_property_cells("opal-runtime-size", 2, size >> 32,
 			  size & 0xffffffff);
-	/* XXX add OPAL/FSP interrupt */
+	add_opal_interrupts();
 	add_opal_console_nodes();
 	//add_opal_nvram_node();
 	//add_opal_oppanel_node();
