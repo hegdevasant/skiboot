@@ -114,3 +114,11 @@ This list is for all iterms for a P7/P7+ target with P7IOC.
   - More P7 chip level RAS ?
   - Add cache information to device-tree
   - Add NUMA information to device-tree
+  - Blade specific bits (Figure out what they are...)
+    -> Comm with BMC ?
+    -> Hotswap ?
+    -> Storage attachment ?
+    -> etc...
+
+
+    
