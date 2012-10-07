@@ -25,22 +25,11 @@ static int
 print_itoa(char **buffer,unsigned long value, unsigned short int base)
 {
 	const char zeichen[] = {'0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F'};
-	static char sign = 0;
 
 	if(base <= 2 || base > 16)
 		return 0;
 
-	if(value >= (unsigned long)-1) {
-		sign = 1;
-		value *= -1;
-	}
-
-	if(value < base) {
-		if(sign) {
-			**buffer = '-';
-			*buffer += 1;
-			sign = 0;
-		}
+	if (value < base) {
 		**buffer = zeichen[value];
 		*buffer += 1;
 	} else {
@@ -112,7 +101,7 @@ print_format(char **buffer, const char *format, void *var)
 				sizec[i] = '\0';
 				value = (unsigned long) var;
 				signBit = 0x1ULL << (length_mod * 8 - 1);
-				if (signBit & value) {
+				if ((*form != 'u') && (signBit & value)) {
 					**buffer = '-';
 					*buffer += 1;
 					value = (-(unsigned long)value) & convert[length_mod];
