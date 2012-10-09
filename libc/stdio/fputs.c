@@ -18,11 +18,6 @@
 
 int fputs(const char *str, FILE *stream)
 {
-	int ret;
-
-	ret = write(stream->fd, str, strlen(str));
-	write(stream->fd, "\r\n", 2);
-
-	return ret;
+	return write(stream->fd, str, strlen(str));
 }
 

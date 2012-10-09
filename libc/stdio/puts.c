@@ -16,13 +16,12 @@
 #include "unistd.h"
 
 
-int
-puts(const char *str)
+int puts(const char *str)
 {
 	int ret;
 
 	ret = write(stdout->fd, str, strlen(str));
-	write(stdout->fd, "\r\n", 2);
+	write(stdout->fd, "\n", 1);
 
-	return ret;
+	return ret + 1;
 }
