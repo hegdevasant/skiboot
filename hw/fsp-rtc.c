@@ -3,8 +3,8 @@
 #include <opal.h>
 #include <lock.h>
 
-#define DBG(fmt...)	printf("RTC: " fmt)
-//#define DBG(fmt...)	do { } while(0)
+//#define DBG(fmt...)	printf("RTC: " fmt)
+#define DBG(fmt...)	do { } while(0)
 
 /*
  * Note on how those operate:
