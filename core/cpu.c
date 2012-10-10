@@ -502,3 +502,24 @@ int64_t opal_start_cpu_thread(uint64_t pir, uint64_t start_address)
 }
 opal_call(OPAL_START_CPU, opal_start_cpu_thread);
 
+int64_t opal_query_cpu_status(uint64_t pir, uint8_t *thread_status)
+{
+	struct cpu_thread *cpu;
+
+	cpu = find_cpu_by_pir(pir);
+	if (!cpu) {
+		prerror("OPAL: Invalid CPU !\n");
+		return OPAL_PARAMETER;
+	}
+	if (cpu->state != cpu_state_active && cpu->state != cpu_state_os) {
+		prerror("OPAL: CPU not active in OPAL nor OS !\n");
+		return OPAL_PARAMETER;
+	}
+	if (cpu->state == cpu_state_os)
+		*thread_status = OPAL_THREAD_STARTED;
+	else
+		*thread_status = OPAL_THREAD_INACTIVE;
+
+	return OPAL_SUCCESS;
+}
+opal_call(OPAL_QUERY_CPU_STATUS, opal_query_cpu_status);
