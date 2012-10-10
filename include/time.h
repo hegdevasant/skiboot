@@ -38,6 +38,16 @@ extern unsigned long tb_hz;
 static const unsigned long tb_hz = 512000000;
 #endif
 
+static inline unsigned long secs_to_tb(unsigned long secs)
+{
+	return secs * tb_hz;
+}
+
+static inline unsigned long msecs_to_tb(unsigned long  msecs)
+{
+	return msecs * (tb_hz / 1000);
+}
+
 /* wait_poll - Wait a certain number of TB ticks while polling FSP */
 extern void time_wait(unsigned long duration);
 
