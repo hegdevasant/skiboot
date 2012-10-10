@@ -13,7 +13,7 @@
 
 //#define DBG(fmt...)	printf(fmt)
 #define DBG(fmt...)	do { } while(0)
-#define FSP_TRACE
+//#define FSP_TRACE
 
 #define FSP_MAX_IOPATH	4
 
