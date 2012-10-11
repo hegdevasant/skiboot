@@ -10,9 +10,11 @@
  *     IBM Corporation - initial implementation
  *****************************************************************************/
 
+#include <stdbool.h>
 #include "stdio.h"
 #include "stdlib.h"
 #include "string.h"
+#include "ctype.h"
 
 static const unsigned long long convert[] = {
 	0x0, 0xFF, 0xFFFF, 0xFFFFFF, 0xFFFFFFFF,
@@ -22,19 +24,26 @@ static const unsigned long long convert[] = {
 
 
 static int
-print_itoa(char **buffer,unsigned long value, unsigned short int base)
+print_itoa(char **buffer, unsigned long value, unsigned short base, bool upper)
 {
-	const char zeichen[] = {'0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F'};
+	const char zeichen[] = {'0','1','2','3','4','5','6','7','8','9','a','b','c','d','e','f'};
+	char c;
 
 	if(base <= 2 || base > 16)
 		return 0;
 
 	if (value < base) {
-		**buffer = zeichen[value];
+		c = zeichen[value];
+		if (upper)
+			c = toupper(c);
+		**buffer = c;
 		*buffer += 1;
 	} else {
-		print_itoa(buffer, value / base, base);
-		**buffer = zeichen[(value % base)];
+		print_itoa(buffer, value / base, base, upper);
+		c = zeichen[value % base];
+		if (upper)
+			c = toupper(c);
+		**buffer = c;
 		*buffer += 1;
 	}
 
@@ -83,6 +92,7 @@ print_format(char **buffer, const char *format, void *var)
 	unsigned long signBit;
 	char *form, sizec[32];
 	char sign = ' ';
+	bool upper = false;
 
 	form  = (char *) format;
 	start = (unsigned long) *buffer;
@@ -107,21 +117,22 @@ print_format(char **buffer, const char *format, void *var)
 					value = (-(unsigned long)value) & convert[length_mod];
 				}
 				print_fill(buffer, sizec, value, 10, sign, 0);
-				print_itoa(buffer, value, 10);
+				print_itoa(buffer, value, 10, upper);
 				break;
 			case 'X':
+				upper = true;
 			case 'x':
 				sizec[i] = '\0';
 				value = (unsigned long) var & convert[length_mod];
 				print_fill(buffer, sizec, value, 16, sign, 0);
-				print_itoa(buffer, value, 16);
+				print_itoa(buffer, value, 16, upper);
 				break;
 			case 'O':
 			case 'o':
 				sizec[i] = '\0';
 				value = (long int) var & convert[length_mod];
 				print_fill(buffer, sizec, value, 8, sign, 0);
-				print_itoa(buffer, value, 8);
+				print_itoa(buffer, value, 8, upper);
 				break;
 			case 'p':
 				sizec[i] = '\0';
@@ -130,7 +141,7 @@ print_format(char **buffer, const char *format, void *var)
 				*buffer += 1;	
 				**buffer = 'x';
 				*buffer += 1;
-				print_itoa(buffer,(unsigned long) var, 16);
+				print_itoa(buffer,(unsigned long) var, 16, upper);
 				break;
 			case 'c':
 				sizec[i] = '\0';
