@@ -105,7 +105,7 @@ static void add_chosen_node(void)
 
 void *create_dtb(void)
 {
-	size_t len = 0x10000;
+	size_t len = DEVICE_TREE_MAX_SIZE;
 
 	do {
 		lphandle = 0;
