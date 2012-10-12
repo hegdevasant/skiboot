@@ -83,6 +83,31 @@ struct proc_init_data {
 } __packed __align(0x10);
 
 /*
+ * The FRU ID structure is used in several tuples, so we
+ * define it generically here
+ */
+struct spira_fru_id {
+	uint16_t	slca_index;
+	uint16_t	rsrc_id;	/* formerly VPD port number */
+};
+
+/*
+ * The FRU operational status structure is used in several
+ * tuples, so we define it generically here
+ */
+struct spira_fru_op_status {
+	uint8_t	flags;
+#define FRU_OP_STATUS_FLAG_USED		0x02 /* If 0 -> not used (redundant) */
+#define FRU_OP_STATUS_FLAG_FUNCTIONAL	0x01 /* If 0 -> non-functional */
+	uint8_t	reserved[3];
+};
+
+/*
+ * Move VPD related stuff to another file ...
+ */
+#define VPD_ID(_a, _b)	((_a) << 8 | (_b))
+
+/*
  * Service Processor Subsystem Structure
  *
  * This structure contains several internal data blocks
@@ -244,5 +269,192 @@ struct msvpd_pmover_bsr_synchro {
 
 /* Child index 0: MS area child structure */
 #define MSVPD_CHILD_MS_AREAS		0
+
+/*
+ * CEC I/O Hub FRU
+ *
+ * This is an array of CEC Hub FRU HDIF structures
+ *
+ * Each of these has some idata pointers to generic info about the
+ * hub and a possible child pointer for dauther card.
+ *
+ * Actual ports are in the SLCA and need to be cross referenced
+ *
+ * Note that slots meant for the addition of GX+ adapters that
+ * are currently unpopulated but support hotplug will have a
+ * minimum "placeholder" entry, which will be fully populated
+ * when the array is rebuild during concurrent maintainance.
+ * This "placeholder" is called a "reservation".
+ *
+ * WARNING: The array rebuild by concurrent maintainance is not
+ * guaranteed to be in the same order as the IPL array, not is
+ * the order stable between concurrent maintainance operations.
+ *
+ * There's also a child pointer to daugher card structures but
+ * we aren't going to handle that just yet.
+ */
+#define CECHUB_FRU_HDIF_SIG	"IO HUB"
+
+/* Idata index 0: FRU ID data
+ *
+ * This is a generic struct spira_fru_id defined above
+ */
+#define CECHUB_FRU_ID_DATA		0
+
+/* Idata index 1: ASCII Keyword VPS */
+#define CECHUB_ASCII_KEYWORD_VPD	1
+
+/* Idata index 2: Hub FRU ID data area */
+#define CECHUB_FRU_ID_DATA_AREA		2
+
+struct cechub_hub_fru_id {
+	uint32_t	card_type;
+#define CECHUB_FRU_TYPE_IOHUB_RSRV	0
+#define CECHUB_FRU_TYPE_IOHUB_CARD	1
+#define CECHUB_FRU_TYPE_CPU_CARD	2
+#define CECHUB_FRU_TYPE_CEC_BKPLANE	3
+#define CECHUB_FRU_TYPE_BKPLANE_EXT	4
+	uint32_t	unused;
+	uint16_t	total_chips;
+	uint8_t		flags;
+#define CECHUB_FRU_FLAG_HEADLESS	0x80 /* not connected to CPU */
+#define CECHUB_FRU_FLAG_PASSTHROUGH	0x40 /* connected to passhtrough
+						port of another hub */
+	uint8_t		reserved;
+	uint16_t	parent_hub_id;	/* chip instance number of the
+					   hub that contains the passthrough
+					   port this one is connected to */
+	uint16_t	reserved2;
+} __packed;
+
+
+/* Idata index 3: IO HUB array */
+
+#define CECHUB_FRU_IO_HUBS		3
+
+/* This is an HDIF array of IO Hub structures
+ *
+ * Note that a lot of that stuff seems to be unused (not
+ * populated) on our Juno machines (both p5ioc2 and p7ioc
+ * based). The flags are 0, the pdt too.
+ *
+ * The BUID extension field seems to be 0 as well, however
+ * on those machines, the hub is connected to node 0, chip 0,
+ * GX 0, ... so it's hard to tell the layout of the field,
+ * but we can reconstruct it ourselves from proc_chip_id
+ * and GX bus index anyway.
+ */
+struct cechub_io_hub {
+	uint64_t	fmtc_address;
+	uint32_t	fmtc_tce_size;
+	uint16_t	hub_num;	/* unique hub number (I/O Hub ID) */
+	uint8_t		flags;
+#define CECHUB_HUB_FLAG_STATE_MASK	0xc0
+#define CECHUB_HUB_FLAG_STATE_OK	0x00
+#define CECHUB_HUB_FLAG_STATE_FAILURES	0x40
+#define CECHUB_HUB_FLAG_STATE_NOT_INST	0x80
+#define CECHUB_HUB_FLAG_STATE_UNUSABLE	0xc0
+#define CECHUB_HUB_FLAG_MASTER_HUB	0x20
+#define CECHUB_HUB_FLAG_GARD_MASK_VALID	0x08
+#define CECHUB_HUB_FLAG_SWITCH_MASK_PDT	0x04
+#define CECHUB_HUB_FLAG_FAB_BR0_PDT	0x02
+#define CECHUB_HUB_FLAG_FAB_BR1_PDT	0x01
+	uint8_t		nr_ports;
+	uint8_t		fab_br0_pdt;	/* p5ioc2 PCI-X */
+#define CECHUB_HUB_FAB_BR0_PDT_PHB0	0x80
+#define CECHUB_HUB_FAB_BR0_PDT_PHB1	0x40
+#define CECHUB_HUB_FAB_BR0_PDT_PHB2	0x20
+#define CECHUB_HUB_FAB_BR0_PDT_PHB3	0x10
+	uint8_t		fab_br1_pdt;	/* p5ioc2 & p7ioc PCI-E */
+#define CECHUB_HUB_FAB_BR1_PDT_PHB0	0x80
+#define CECHUB_HUB_FAB_BR1_PDT_PHB1	0x40
+#define CECHUB_HUB_FAB_BR1_PDT_PHB2	0x20
+#define CECHUB_HUB_FAB_BR1_PDT_PHB3	0x10
+#define CECHUB_HUB_FAB_BR1_PDT_PHB4	0x08 /* p7ioc only */
+#define CECHUB_HUB_FAB_BR1_PDT_PHB5	0x04 /* p7ioc only */
+	uint16_t	iohub_id;	/* the type of hub */
+#define CECHUB_HUB_P5IOC2	0x1061	/* from VPL1 */
+#define CECHUB_HUB_P7IOC	0x60e7	/* from VPL3 */
+	uint32_t	ec_level;
+	uint32_t	aff_dom2;	/* relates to aff_dom2 of PACA */
+	uint32_t	aff_dom3;	/* relates to aff_dom3 of PACA */
+	uint64_t	reserved;
+	uint32_t	proc_chip_id;	/* cpu the hub is connected to */
+	uint32_t	gx_index;	/* GX bus index on cpu */
+	uint32_t	buid_ext;	/* BUID Extension (unused on juno ?) */
+	uint32_t	xscom_chip_id;	/* TORRENT ONLY */
+	uint32_t	mrid;		/* no idea, got 0x00040000 on vpl3 */
+	uint32_t	mem_map_vers;	/* Memory map version (1 on vpl3) */
+	uint64_t	gx_ctrl_bar0;	/* vpl3 has: 0x00003ebffe000000 */
+	uint64_t	gx_ctrl_bar1;	/* vpl3 has: 0x00003efe00000000 */
+	uint64_t	gx_ctrl_bar2;	/* vpl3 has: 0x00003da000000000 */
+	uint64_t	gx_ctrl_bar3;	/* vpl3 has: 0x00003dc000000000 */
+	uint64_t	gx_ctrl_bar4;	/* vpl3 has: 0x00003de000000000 */
+	uint32_t	sw_mask_pdt;
+	uint16_t	gard_mask;	/* vpl3 has: 0x0f79 */
+} __packed;
+
+/*
+ * Slot Location Code Array (aka SLCA)
+ *
+ * This is a pile of location codes referenced by various other
+ * structures such as the IO Hubs for things on the CEC. Not
+ * everything in there is a physical port. The SLCA is actually
+ * a tree which represent the topology of the system.
+ *
+ * The tree works as follow: A parent has a pointer to the first
+ * child. A child has a pointer to its parent. Siblings are
+ * consecutive entries.
+ *
+ * Note: If we ever support concurrent maintainance... this is
+ * completely rebuilt, invalidating all indices, though other
+ * structures that may reference SLCA by index will be rebuilt
+ * as well.
+ *
+ * Note that a lot of that stuff is based on VPD documentation
+ * such as the identification keywords. I will list the ones
+ * I manage to figure out without the doc separately.
+ */
+#define SLCA_HDIF_SIG	"SLCA "
+
+/* Idata index 0 : SLCA root pointer
+ *
+ * The SLCA array is an HDIF array of all the entries. The tree
+ * structure is based on indices inside the entries and order of
+ * the entries
+ */
+#define SLCA_IDATA_ARRAY	0
+
+/* Note: An "index" (or idx) is always an index into the SLCA array
+ * and "id" is a reference to some other object.
+ */
+struct slca_entry {
+	uint16_t	my_index;	/* redudant, useful */
+	uint16_t	rsrc_id;	/* formerly VPD port number */
+	uint8_t		fru_id[2];	/* ASCII VPD ID */
+#define SLCA_ROOT_VPD_ID	VPD_ID('V','V')
+#define SLCA_SYSTEM_VPD_ID	VPD_ID('S','V')
+	uint16_t	parent_index;	/* Parent entry index */
+	uint8_t		flags;
+#define SLCA_FLAG_NON_FUNCTIONAL	0x02	/* For redundant entries */
+#define SLCA_FLAG_IMBEDDED		0x01	/* not set => pluggable */
+	uint8_t		old_nr_child;	/* Legacy: Nr of children */
+	uint16_t	child_index;	/* First child index */
+	uint16_t	child_rsrc_id;	/* Resource ID of first child */
+	uint8_t		loc_code_allen;	/* Alloc len of loc code */
+	uint8_t		loc_code_len;	/* Loc code len */
+	uint8_t		loc_code[80];	/* NULL terminated (thus max 79 chr) */
+	uint16_t	first_dup_idx;	/* First redundant resource index */
+	uint8_t		nr_dups;	/* Number of redudant entries */
+	uint8_t		reserved;
+	uint16_t	nr_child;	/* New version */
+	uint8_t		install_indic;	/* Installed indicator */
+#define SLCA_INSTALL_NO_HW_PDT		1 /* No HW presence detect */
+#define SLCA_INSTALL_INSTALLED		2
+#define SLCA_INSTALL_NOT_INSTALLED	3
+	uint8_t		vpd_collected;
+#define SLCA_VPD_COLLECTED		2
+#define SLCA_VPD_NOT_COLLECTED		3
+} __packed;
 
 #endif /* __SPIRA_H */
