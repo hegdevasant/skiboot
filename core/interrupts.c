@@ -62,6 +62,7 @@ void add_icp_nodes(void)
 		irange[1] = 4;				   /* num servers */
 		dt_property("ibm,interrupt-server-ranges",
 			    irange, sizeof(irange));
+		dt_property("interrupt-controller", NULL, 0);
 		dt_property("reg", reg, sizeof(reg));
 		dt_property_cell("#address-cells", 0);
 		dt_property_cell("#interrupt-cells", 1);
@@ -80,6 +81,7 @@ void add_ics_node(void)
 	dt_property_cell("#interrupt-cells", 1);
 	dt_property_string("device_type",
 			   "PowerPC-Interrupt-Source-Controller");
+	dt_property("interrupt-controller", NULL, 0);
 	dt_end_node();
 }
 
