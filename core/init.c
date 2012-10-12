@@ -8,6 +8,7 @@
 #include <device_tree.h>
 #include <opal.h>
 #include <elf.h>
+#include <cec.h>
 
 /*
  * Boot semaphore, incremented by each CPU calling in
@@ -127,6 +128,12 @@ void main_cpu_entry(void)
 	memory_parse();
 
 	op_display(OP_LOG, OP_MOD_INIT, 0x0004);
+
+	/* Initialize CEC hardware. This will also call out into
+	 * Hubs, daugher cards etc... as needed and will take care
+	 * of the IO Hubs
+	 */
+	cec_init();
 
 	/* Create the OPAL call table */
 	opal_table_init();

@@ -4,10 +4,10 @@
 #include <fsp.h>
 #include <interrupts.h>
 #include <opal.h>
+#include <cec.h>
 #include <ccan/str/str.h>
 
 static uint32_t ics_phandle;
-
 
 /*
  * This takes a 5-bit chip id (node:3 + chip:2) and returns a 20 bit
@@ -118,9 +118,10 @@ static int64_t opal_set_xive(uint32_t isn, uint16_t server, uint8_t priority)
 	if (IRQ_BUID(isn) == PSI_IRQ_BUID)
 		return fsp_set_xive(isn, server, priority);
 
-	/* XXX Add PCI & NX */
+	/* XXX Add NX */
 
-	return OPAL_PARAMETER;
+	/* Everything else goes to the IOCs */
+	return cec_set_xive(isn, server, priority);
 }
 opal_call(OPAL_SET_XIVE, opal_set_xive);
 
@@ -129,9 +130,10 @@ static int64_t opal_get_xive(uint32_t isn, uint16_t *server, uint8_t *priority)
 	if (IRQ_BUID(isn) == PSI_IRQ_BUID)
 		return fsp_get_xive(isn, server, priority);
 
-	/* XXX Add PCI & NX */
+	/* XXX Add NX */
 
-	return OPAL_PARAMETER;
+	/* Everything else goes to the IOCs */
+	return cec_get_xive(isn, server, priority);
 }
 opal_call(OPAL_GET_XIVE, opal_get_xive);
 

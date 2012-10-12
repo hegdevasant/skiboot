@@ -7,6 +7,7 @@
 #include <opal.h>
 #include <interrupts.h>
 #include <fsp.h>
+#include <cec.h>
 
 static int fdt_error;
 static void *fdt;
@@ -137,6 +138,7 @@ void *create_dtb(void)
 		add_memory_nodes();
 		add_icp_nodes();
 		add_opal_nodes();
+		add_cec_nodes();
 		add_chosen_node();
 		dt_end_node();
 
