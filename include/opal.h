@@ -130,7 +130,12 @@ enum OpalShpcAction {
 };
 enum OpalShpcLinkState {
 	OPAL_SHPC_LINK_DOWN = 0,
-	OPAL_SHPC_LINK_UP = 1
+	OPAL_SHPC_LINK_UP_x1 = 1,
+	OPAL_SHPC_LINK_UP_x2 = 2,
+	OPAL_SHPC_LINK_UP_x4 = 4,
+	OPAL_SHPC_LINK_UP_x8 = 8,
+	OPAL_SHPC_LINK_UP_x16 = 16,
+	OPAL_SHPC_LINK_UP_x32 = 32
 };
 enum OpalMmioWindowType {
 	OPAL_M32_WINDOW_TYPE = 1,
@@ -140,6 +145,10 @@ enum OpalMmioWindowType {
 enum OpalShpcSlotState {
 	OPAL_SHPC_DEV_NOT_PRESENT = 0,
 	OPAL_SHPC_DEV_PRESENT = 1
+};
+enum OpalShpcPowerState {
+	OPAL_SHPC_POWER_OFF = 0,
+	OPAL_SHPC_POWER_ON = 1
 };
 enum OpalExceptionHandler {
 	OPAL_MACHINE_CHECK_HANDLER = 1,
