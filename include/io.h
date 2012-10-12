@@ -6,6 +6,7 @@
 #include <compiler.h>
 #include <stdint.h>
 #include <byteorder.h>
+#include <processor.h>
 
 /*
  * IO access functions
