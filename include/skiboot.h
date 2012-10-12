@@ -44,6 +44,19 @@ extern void backtrace(void);
 /* Convert a 4-bit number to a hex char */
 extern char tohex(uint8_t nibble);
 
+/* Bit position of the most significant 1-bit (LSB=0, MSB=63) */
+static inline int ilog2(unsigned long val)
+{
+	int left_zeros;
+
+	asm volatile ("cntlzd %0,%1" : "=r" (left_zeros) : "r" (val));
+
+	return 63 - left_zeros;
+}
+
+#define lo32(x)	((x) & 0xffffffff)
+#define hi32(x)	(((x) >> 32) & 0xffffffff)
+
 /* Start the kernel */
 extern void start_kernel(uint64_t entry, void* fdt) __noreturn;
 extern void start_kernel_secondary(uint64_t entry) __noreturn;
