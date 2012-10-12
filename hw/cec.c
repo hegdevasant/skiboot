@@ -1,9 +1,7 @@
 #include <skiboot.h>
 #include <spira.h>
 #include <cec.h>
-#if 0
 #include <p7ioc.h>
-#endif
 
 /* We keep an array of IO Hubs indexed on the BUID Extension
  *
@@ -134,12 +132,10 @@ static void cec_make_iochips(const void *sp_iohubs)
 			continue;
 		}
 		switch(hub->iohub_id) {
-#if 0
 		case CECHUB_HUB_P7IOC:
 			printf("CEC:     P7IOC !\n");
 			cec_iohubs[hub_id] = p7ioc_create_hub(hub, hub_id);
 			break;
-#endif
 		default:
 			printf("CEC:     Hub ID 0x%04x unsupported !\n",
 			       hub->iohub_id);
