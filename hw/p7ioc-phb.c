@@ -1069,9 +1069,11 @@ static int64_t p7ioc_ioda_reset(struct phb *phb)
 	 * going to remain unmodified... for now.
 	 */
 	p7ioc_phb_ioda_sel(p, IODA_TBL_LXIVT, 0, true);
-	for (i = 0; i < 8; i++)
+	for (i = 0; i < 8; i++) {
 		out_be64(p->regs + PHB_IODA_DATA0,
 			 SETFIELD(IODA_XIVT_PRIORITY, 0ull, 0xff));
+		p->xive_cache[i] = SETFIELD(IODA_XIVT_PRIORITY, 0ull, 0xff);
+	}
 
 	/* Init_22..23: Cleanup the MXIVT
 	 *
@@ -1080,9 +1082,11 @@ static int64_t p7ioc_ioda_reset(struct phb *phb)
 	 * going to remain unmodified... for now.
 	 */
 	p7ioc_phb_ioda_sel(p, IODA_TBL_MXIVT, 0, true);
-	for (i = 0; i < 256; i++)
+	for (i = 0; i < 256; i++) {
 		out_be64(p->regs + PHB_IODA_DATA0,
 			 SETFIELD(IODA_XIVT_PRIORITY, 0ull, 0xff));
+		p->xive_cache[i+8] = SETFIELD(IODA_XIVT_PRIORITY, 0ull, 0xff);
+	}
 
 	/* Init_24..25: Cleanup the MVT */
 	p7ioc_phb_ioda_sel(p, IODA_TBL_MVT, 0, true);
@@ -1176,25 +1180,22 @@ static const struct phb_ops p7ioc_phb_ops = {
 int64_t p7ioc_phb_get_xive(struct p7ioc_phb *p, uint32_t isn,
 			   uint16_t *server, uint8_t *prio)
 {
-	uint32_t buid = IRQ_BUID(isn);
-	uint32_t table, irq;
-	uint64_t xive;
+	uint32_t irq, buid = IRQ_BUID(isn);
+	uint64_t xive, *xcache;
 
 	if (buid == p->buid_lsi) {
-		table = IODA_TBL_LXIVT;
 		irq = isn & 0xf;
 		/* Unused LSIs */
 		if (irq > 7 || irq == 6)
 			return OPAL_PARAMETER;
+		xcache = &p->xive_cache[irq];
 	} else if (buid >= p->buid_msi && buid < (p->buid_msi + 0x10)) {
-		table = IODA_TBL_MXIVT;
 		irq = isn & 0xff;
+		xcache = &p->xive_cache[irq + 8];
 	} else
 		return OPAL_PARAMETER;
 
-	p7ioc_phb_ioda_sel(p, table, irq, false);
-	xive = in_be64(p->regs + PHB_IODA_DATA0);
-
+	xive = *xcache;
 	*server = GETFIELD(IODA_XIVT_SERVER, xive);
 	*prio = GETFIELD(IODA_XIVT_PRIORITY, xive);
 
@@ -1207,7 +1208,8 @@ int64_t p7ioc_phb_set_xive(struct p7ioc_phb *p, uint32_t isn,
 {
 	uint32_t buid = IRQ_BUID(isn);
 	uint32_t table, irq;
-	uint64_t xive;
+	uint64_t xive, *xcache;
+	uint64_t m_server, m_prio;
 
 	if (buid == p->buid_lsi) {
 		table = IODA_TBL_LXIVT;
@@ -1215,18 +1217,37 @@ int64_t p7ioc_phb_set_xive(struct p7ioc_phb *p, uint32_t isn,
 		/* Unused LSIs */
 		if (irq > 7 || irq == 6)
 			return OPAL_PARAMETER;
+		xcache = &p->xive_cache[irq];
 	} else if (buid >= p->buid_msi && buid < (p->buid_msi + 0x10)) {
 		table = IODA_TBL_MXIVT;
 		irq = isn & 0xff;
+		xcache = &p->xive_cache[irq + 8];
 	} else
 		return OPAL_PARAMETER;
 
 	p7ioc_phb_ioda_sel(p, table, irq, false);
 
+	/* We cache the arguments because we have to mangle
+	 * it in order to hijack 3 bits of priority to extend
+	 * the server number
+	 */
+	xive = SETFIELD(IODA_XIVT_SERVER, 0ull, server);
+	xive = SETFIELD(IODA_XIVT_PRIORITY, xive, prio);
+	*xcache = xive;
+
+	/* Now we mangle the server and priority */
+	if (prio == 0xff) {
+		m_server = 0;
+		m_prio = 0xff;
+	} else {
+		m_server = server >> 3;
+		m_prio = (prio >> 3) | ((server & 7) << 5);
+	}
+
 	/* We use HRT entry 0 always for now */
 	xive = in_be64(p->regs + PHB_IODA_DATA0);
-	xive = SETFIELD(IODA_XIVT_SERVER, xive, server);
-	xive = SETFIELD(IODA_XIVT_PRIORITY, xive, prio);
+	xive = SETFIELD(IODA_XIVT_SERVER, xive, m_server);
+	xive = SETFIELD(IODA_XIVT_PRIORITY, xive, m_prio);
 	out_be64(p->regs + PHB_IODA_DATA0, xive);
 
 	return OPAL_SUCCESS;

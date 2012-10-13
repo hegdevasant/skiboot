@@ -621,6 +621,7 @@ struct p7ioc_phb {
 	uint64_t			retries;
 	int64_t				ecap;	/* cached PCI-E cap offset */
 	int64_t				aercap; /* cached AER ecap offset */
+	uint64_t			xive_cache[256 + 8];
 	struct p7ioc			*ioc;
 	struct phb			phb;
 };
