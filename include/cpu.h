@@ -134,13 +134,14 @@ extern struct cpu_thread *next_cpu(struct cpu_thread *cpu);
  *          fully started, all CPUs are seen as unavailable from
  *          this API standpoint.
  */
+extern struct cpu_thread *first_available_cpu(void);
 extern struct cpu_thread *next_available_cpu(struct cpu_thread *cpu);
 
 #define for_each_cpu(cpu)	\
 	for (cpu = first_cpu(); cpu; cpu = next_cpu(cpu))
 
 #define for_each_available_cpu(cpu)	\
-	for (cpu = first_cpu(); cpu; cpu = next_available_cpu(cpu))
+	for (cpu = first_available_cpu(); cpu; cpu = next_available_cpu(cpu))
 
 /* Return the caller CPU (only after cpu_parse) */
 register struct cpu_thread *__this_cpu asm("r13");

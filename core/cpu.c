@@ -186,18 +186,25 @@ struct cpu_thread *find_cpu_by_pir(u32 pir)
 	return &cpu_threads[pir];
 }
 
-struct cpu_thread *first_cpu(void)
-{
-	return &cpu_threads[0];
-}
-
 struct cpu_thread *next_cpu(struct cpu_thread *cpu)
 {
-	unsigned int index = cpu - cpu_threads;
+	unsigned int index;
 
-	if (index >= cpu_max_pir)
-		return NULL;
-	return &cpu_threads[index + 1];
+	if (cpu == NULL)
+		index = 0;
+	else
+		index = cpu - cpu_threads + 1;
+	for (; index <= cpu_max_pir; index++) {
+		cpu = &cpu_threads[index];
+		if (cpu->state != cpu_state_no_cpu)
+			return cpu;
+	}
+	return NULL;
+}
+
+struct cpu_thread *first_cpu(void)
+{
+	return next_cpu(NULL);
 }
 
 struct cpu_thread *next_available_cpu(struct cpu_thread *cpu)
@@ -207,6 +214,11 @@ struct cpu_thread *next_available_cpu(struct cpu_thread *cpu)
 	} while(cpu && cpu->state != cpu_state_active);
 
 	return cpu;
+}
+
+struct cpu_thread *first_available_cpu(void)
+{
+	return next_available_cpu(NULL);
 }
 
 void cpu_disable_all_threads(struct cpu_thread *cpu)
