@@ -152,6 +152,25 @@ struct cpu_thread *find_cpu_by_chip_id(u32 id)
 	for (i = 0; i <= cpu_max_pir; i++) {
 		struct cpu_thread *t = &cpu_threads[i];
 
+		if (t->state == cpu_state_no_cpu)
+			continue;
+		if (t->id->verify_exists_flags & CPU_ID_SECONDARY_THREAD)
+			continue;
+		if (t->id->processor_chip_id == id)
+			return t;
+	}
+	return NULL;
+}
+
+struct cpu_thread *find_active_cpu_by_chip_id(u32 id)
+{
+	unsigned int i;
+
+	for (i = 0; i <= cpu_max_pir; i++) {
+		struct cpu_thread *t = &cpu_threads[i];
+
+		if (t->state != cpu_state_active)
+			continue;
 		if (t->id->verify_exists_flags & CPU_ID_SECONDARY_THREAD)
 			continue;
 		if (t->id->processor_chip_id == id)
@@ -162,15 +181,9 @@ struct cpu_thread *find_cpu_by_chip_id(u32 id)
 
 struct cpu_thread *find_cpu_by_pir(u32 pir)
 {
-	unsigned int i;
-
-	for (i = 0; i <= cpu_max_pir; i++) {
-		struct cpu_thread *t = &cpu_threads[i];
-
-		if (t->pir == pir)
-			return t;
-	}
-	return NULL;
+	if (pir > cpu_max_pir)
+		return NULL;
+	return &cpu_threads[pir];
 }
 
 struct cpu_thread *first_cpu(void)

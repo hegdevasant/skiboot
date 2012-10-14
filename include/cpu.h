@@ -121,7 +121,7 @@ extern void cpu_bringup(void);
 extern void cpu_callin(struct cpu_thread *cpu);
 
 extern struct cpu_thread *find_cpu_by_chip_id(u32 id);
-
+extern struct cpu_thread *find_active_cpu_by_chip_id(u32 id);
 extern struct cpu_thread *find_cpu_by_pir(u32 pir);
 
 /* Iterator */

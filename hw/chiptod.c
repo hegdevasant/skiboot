@@ -359,7 +359,7 @@ void chiptod_init(void)
 	op_display(OP_LOG, OP_MOD_CHIPTOD, 1);
 
 	/* Pick somebody on the primary */
-	cpu0 = find_cpu_by_chip_id(id_primary->chip_id);
+	cpu0 = find_active_cpu_by_chip_id(id_primary->chip_id);
 	if (!cpu0) {
 		prerror("CHIPTOD: Failed to find a CPU on chip %d !\n",
 			id_primary->chip_id);
