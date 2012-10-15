@@ -177,6 +177,53 @@ struct spss_iopath {
  *
  */
 
+/* Idata index 0: System Parameters */
+#define IPLPARAMS_SYS_PARAMS	0
+
+struct iplparams_sysparams {
+	char		sys_model[4];
+	char		cpu_feature_code[4];
+	uint32_t	effective_pvr;
+	uint32_t	system_type;
+	uint8_t		num_lpar_oct[8];
+	uint32_t	abc_bus_speed;
+	uint32_t	wxyz_bus_speed;
+	uint32_t	sys_eco_mode;
+	uint32_t	sys_attributes;
+	uint32_t	mem_scrubbing;
+	uint16_t	cur_spl_value;
+	uint8_t		pump_mode;
+	uint8_t		use_pore_sleep;
+	uint32_t	pore_image_size;
+} __packed;
+
+/* Idata index 1: IPL parameters */
+#define IPLPARAMS_IPLPARAMS	1
+
+struct iplparams_iplparams {
+	uint8_t		reserved;
+	uint8_t		hv_ipl_dest;
+	uint8_t		ipl_side;
+#define IPLPARAMS_CEC_FW_IPL_SIDE_TEMP	0x10
+#define IPLPARAMS_FSP_FW_IPL_SIDE_TEMP	0x01
+	uint8_t		ipl_speed;
+	uint16_t	cec_ipl_attrib;
+	uint8_t		cec_ipl_maj_type;
+	uint8_t		cec_ipl_min_type;
+	uint8_t		os_ipl_mode;
+	uint8_t		keylock_pos;
+	uint8_t		lmb_size;
+	uint8_t		deprecated;
+	uint32_t	max_hsl_opticonnect;
+	uint32_t	other_attrib;
+#define IPLPARAMS_OATTR_CLEAR_NVRAM	0x04000000
+	uint16_t	huge_page_count;
+	uint8_t		huge_page_size;
+#define IPLPARAMS_HUGE_PG_SIZE_16G	0
+	uint8_t		num_vlan_switches;
+	uint64_t	reserved2;
+};
+
 /* Idata index 8: serial ports */
 #define IPLPARMS_IDATA_SERIAL	8
 
