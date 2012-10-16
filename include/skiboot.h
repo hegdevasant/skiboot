@@ -54,6 +54,11 @@ static inline int ilog2(unsigned long val)
 	return 63 - left_zeros;
 }
 
+static inline bool is_pow2(unsigned long val)
+{
+	return val == (1ul << ilog2(val));
+}
+
 #define lo32(x)	((x) & 0xffffffff)
 #define hi32(x)	(((x) >> 32) & 0xffffffff)
 
