@@ -1773,7 +1773,7 @@ void p7ioc_phb_add_nodes(struct p7ioc_phb *p)
 	char name[sizeof("pciex@") + STR_MAX_CHARS(p->regs)];
 	static const char p7ioc_phb_compat[] =
 		"ibm,p7ioc-pciex\0ibm,ioda-phb";
-	uint64_t reg[2], m32b, iob;
+	uint64_t reg[2], m32b, iob, tkill;
 	uint32_t lsibase, icsp = get_ics_phandle();
 	struct pci_lsi_state lstate;
 
@@ -1798,6 +1798,9 @@ void p7ioc_phb_add_nodes(struct p7ioc_phb *p)
 	dt_property_cell("ibm,opal-msi-ports", 256);
 	dt_property_cell("ibm,opal-num-pes", 128);
 	dt_property_cells("ibm,opal-msi-ranges", 2, p->buid_msi << 4, 0x100);
+	tkill = reg[0] + PHB_TCE_KILL;
+	dt_property_cells("ibm,opal-tce-kill", 2, hi32(tkill), lo32(tkill));
+
 	/* XXX FIXME: add slot-name */
 
 	/* "ranges", we only expose IO and M32
