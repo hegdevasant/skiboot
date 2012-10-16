@@ -267,7 +267,7 @@ struct phb_ops {
 
 struct phb {
 	int			opal_id;
-	uint8_t			scan_map;
+	uint32_t		scan_map;
 	struct list_head	devices;
 	const struct phb_ops	*ops;
 };
