@@ -2,6 +2,7 @@
 #include <spira.h>
 #include <cec.h>
 #include <p7ioc.h>
+#include <p5ioc2.h>
 #include <interrupts.h>
 
 /* We keep an array of IO Hubs indexed on the BUID Extension
@@ -13,6 +14,9 @@
  * |--|--|--|--|--|--|--|
  *
  * The OPAL hub ID is thus the index in that array
+ *
+ * XXX We have no hub level locking, that might be an issue
+ * with get_diag_data...
  */
 #define MAX_IO_HUBS	0x80
 
@@ -139,6 +143,10 @@ static void cec_make_iochips(const void *sp_iohubs)
 		case CECHUB_HUB_P7IOC:
 			printf("CEC:     P7IOC !\n");
 			cec_iohubs[hub_id] = p7ioc_create_hub(hub, hub_id);
+			break;
+		case CECHUB_HUB_P5IOC2:
+			printf("CEC:     P5IOC2 !\n");
+			cec_iohubs[hub_id] = p5ioc2_create_hub(hub, hub_id);
 			break;
 		default:
 			printf("CEC:     Hub ID 0x%04x unsupported !\n",
