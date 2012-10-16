@@ -487,3 +487,42 @@ static int64_t opal_pci_reset(uint64_t phb_id, uint8_t reset_scope,
 }
 opal_call(OPAL_PCI_RESET, opal_pci_reset);
 
+static int64_t opal_pci_set_phb_tce_memory(uint64_t phb_id,
+					   uint64_t tce_mem_addr,
+					   uint64_t tce_mem_size)
+{
+	struct phb *phb = pci_get_phb(phb_id);
+	int64_t rc;
+
+	if (!phb)
+		return OPAL_PARAMETER;
+	if (!phb->ops->set_phb_tce_memory)
+		return OPAL_UNSUPPORTED;
+	phb->ops->lock(phb);
+	rc = phb->ops->set_phb_tce_memory(phb, tce_mem_addr, tce_mem_size);
+	phb->ops->unlock(phb);
+	pci_put_phb(phb);
+
+	return rc;
+}
+opal_call(OPAL_PCI_SET_PHB_TCE_MEMORY, opal_pci_set_phb_tce_memory);
+
+static int64_t opal_pci_get_phb_diag_data(uint64_t phb_id,
+					  void *diag_buffer,
+					  uint64_t diag_buffer_len)
+{
+	struct phb *phb = pci_get_phb(phb_id);
+	int64_t rc;
+
+	if (!phb)
+		return OPAL_PARAMETER;
+	if (!phb->ops->get_diag_data)
+		return OPAL_UNSUPPORTED;
+	phb->ops->lock(phb);
+	rc = phb->ops->get_diag_data(phb, diag_buffer, diag_buffer_len);
+	phb->ops->unlock(phb);
+	pci_put_phb(phb);
+
+	return rc;
+}
+opal_call(OPAL_PCI_GET_PHB_DIAG_DATA, opal_pci_get_phb_diag_data);

@@ -119,6 +119,9 @@ struct phb_ops {
 	int64_t (*eeh_freeze_clear)(struct phb *phb, uint64_t pe_number,
 				    uint64_t eeh_action_token);
 
+	int64_t (*get_diag_data)(struct phb *phb, void *diag_buffer,
+				 uint64_t diag_buffer_len);
+
 	/*
 	 * Other IODA methods
 	 *
@@ -179,6 +182,11 @@ struct phb_ops {
 
 	int64_t (*ioda_reset)(struct phb *phb);
 
+	/*
+	 * P5IOC2 only
+	 */
+	int64_t (*set_phb_tce_memory)(struct phb *phb, uint64_t tce_mem_addr,
+				      uint64_t tce_mem_size);
 
 	/*
 	 * Slot control
