@@ -77,3 +77,65 @@ int gx_configure_psi_buid(uint32_t chip, uint32_t buid)
 }
 
 
+static int gx_p7_configure_tce_bar(uint32_t chip, uint32_t gx, uint64_t addr,
+				   uint64_t size)
+{
+	uint32_t gcid = CHIP2GCID(chip);
+	uint32_t areg, mreg;
+	int rc;
+
+	switch (gx) {
+	case 0:
+		areg = GX_P7_GX0_TCE_BAR;
+		mreg = GX_P7_GX0_TCE_MASK;
+		break;
+	case 1:
+		areg = GX_P7_GX1_TCE_BAR;
+		mreg = GX_P7_GX1_TCE_MASK;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	if (addr) {
+		uint64_t taddr, tmask;
+
+		/* The address field contains bits 18 to 43 of the address */
+		taddr = SETFIELD(GX_P7_TCE_BAR_ADDR, 0ul,
+				 (addr >> GX_P7_TCE_BAR_ADDR_SHIFT));
+		taddr |= GX_P7_TCE_BAR_ENABLE;
+		tmask = SETFIELD(GX_P7_TCE_MASK, 0ul,
+				 ((~(size - 1)) >> GX_P7_TCE_BAR_ADDR_SHIFT));
+		rc = xscom_write(gcid, areg, 0);
+		rc |= xscom_write(gcid, mreg, tmask);
+		rc |= xscom_write(gcid, areg, taddr);
+	} else {
+		rc = xscom_write(gcid, areg, 0);
+	}
+	return rc ? -EIO : 0;
+}
+
+/* Configure the TCE BAR of a given GX bus
+ *
+ * @chip: Chip number (0..31)
+ * @gx  : GX bus index
+ * @addr: base address of TCE table
+ * @size: size of TCE table
+ */
+int gx_configure_tce_bar(uint32_t chip, uint32_t gx, uint64_t addr,
+			 uint64_t size)
+{
+	uint32_t pvr = mfspr(SPR_PVR);
+
+	printf("GX: TCE BAR for PVR %x (type %x) chip %d gx %d\n",
+	       pvr, PVR_TYPE(pvr), chip, gx);
+
+	/* We only support P7... is there a P7+ with P5IOC2 ? */
+	switch(PVR_TYPE(pvr)) {
+	case PVR_TYPE_P7:
+		return gx_p7_configure_tce_bar(chip, gx, addr, size);
+	}
+	return -EINVAL;
+}
+
+
