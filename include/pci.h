@@ -322,6 +322,10 @@ static inline void pci_put_phb(struct phb *phb __unused) { }
 
 /* Device tree */
 extern void pci_add_nodes(struct phb *phb, struct pci_lsi_state *lstate);
+extern void pci_std_swizzle_irq_map(struct pci_device *pd,
+				    struct pci_lsi_state *lstate,
+				    uint8_t swizzle);
+
 /* Initialize all PCI slots */
 extern void pci_init_slots(void);
 

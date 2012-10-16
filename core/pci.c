@@ -772,9 +772,9 @@ static const char *pci_class_name(uint32_t class_code)
 	return "device";
 }
 
-static void pci_std_swizzle_irq_map(struct pci_device *pd,
-				    struct pci_lsi_state *lstate,
-				    uint8_t swizzle)
+void pci_std_swizzle_irq_map(struct pci_device *pd,
+			     struct pci_lsi_state *lstate,
+			     uint8_t swizzle)
 {
 	uint32_t *map, *p;
 	int dev, irq;
@@ -799,11 +799,14 @@ static void pci_std_swizzle_irq_map(struct pci_device *pd,
 	 * A PCI Express root or downstream port needs only one
 	 * entry for device 0. Anything else will get a full map
 	 * for all possible 32 child device numbers
+	 *
+	 * If we have been passed a host bridge (pd == NULL) we also
+	 * do a simple per-pin map
 	 */
 	int edevcount;
 
-	if (pd->dev_type == PCIE_TYPE_ROOT_PORT ||
-	    pd->dev_type == PCIE_TYPE_SWITCH_DNPORT) {
+	if (!pd || (pd->dev_type == PCIE_TYPE_ROOT_PORT ||
+		    pd->dev_type == PCIE_TYPE_SWITCH_DNPORT)) {
 		edevcount = 1;
 		dt_property_cells("interrupt-map-mask", 4, 0, 0, 0, 7);
 	} else {
