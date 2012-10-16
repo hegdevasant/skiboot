@@ -1272,6 +1272,7 @@ void p7ioc_phb_setup(struct p7ioc *ioc, uint8_t index, bool active)
 	p->ioc = ioc;
 	p->active = active;
 	p->phb.ops = &p7ioc_phb_ops;
+	p->phb.phb_type = phb_type_pcie_v2;
 	p->regs_asb = ioc->regs + PHBn_ASB_BASE(index);
 	p->regs = ioc->regs + PHBn_AIB_BASE(index);
 	p->buid_lsi = buid_base + PHB_BUID_LSI_OFFSET;

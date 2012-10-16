@@ -265,9 +265,19 @@ struct phb_ops {
 	int64_t (*poll)(struct phb *phb);
 };
 
+enum phb_type {
+	phb_type_pci,
+	phb_type_pcix_v1,
+	phb_type_pcix_v2,
+	phb_type_pcie_v1,
+	phb_type_pcie_v2,
+	phb_type_pcie_v3,
+};
+
 struct phb {
 	int			opal_id;
 	uint32_t		scan_map;
+	enum phb_type		phb_type;
 	struct list_head	devices;
 	const struct phb_ops	*ops;
 };

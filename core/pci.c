@@ -475,7 +475,8 @@ static void pci_init_slot(struct phb *phb)
 		       phb->opal_id, rc);
 		return;
 	}
-	printf("PHB%d: Link up at x%lld width\n", phb->opal_id, rc);
+	if (phb->phb_type >= phb_type_pcie_v1)
+		printf("PHB%d: Link up at x%lld width\n", phb->opal_id, rc);
 	printf("PHB%d: Scanning...\n", phb->opal_id);
 
 	pci_scan(phb, 0, 0xff, &phb->devices, NULL);
