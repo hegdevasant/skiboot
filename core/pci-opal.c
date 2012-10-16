@@ -122,6 +122,8 @@ static int64_t opal_pci_eeh_freeze_status(uint64_t phb_id, uint64_t pe_number,
 
 	if (!phb)
 		return OPAL_PARAMETER;
+	if (!phb->ops->eeh_freeze_status)
+		return OPAL_UNSUPPORTED;
 	phb->ops->lock(phb);
 	rc = phb->ops->eeh_freeze_status(phb, pe_number, freeze_state,
 					 pci_error_type, phb_status);
@@ -140,6 +142,8 @@ static int64_t opal_pci_eeh_freeze_clear(uint64_t phb_id, uint64_t pe_number,
 
 	if (!phb)
 		return OPAL_PARAMETER;
+	if (!phb->ops->eeh_freeze_clear)
+		return OPAL_UNSUPPORTED;
 	phb->ops->lock(phb);
 	rc = phb->ops->eeh_freeze_clear(phb, pe_number, eeh_action_token);
 	phb->ops->unlock(phb);
@@ -157,6 +161,8 @@ static int64_t opal_pci_phb_mmio_enable(uint64_t phb_id, uint16_t window_type,
 
 	if (!phb)
 		return OPAL_PARAMETER;
+	if (!phb->ops->phb_mmio_enable)
+		return OPAL_UNSUPPORTED;
 	phb->ops->lock(phb);
 	rc = phb->ops->phb_mmio_enable(phb, window_type, window_num, enable);
 	phb->ops->unlock(phb);
@@ -178,6 +184,8 @@ static int64_t opal_pci_set_phb_mem_window(uint64_t phb_id,
 
 	if (!phb)
 		return OPAL_PARAMETER;
+	if (!phb->ops->set_phb_mem_window)
+		return OPAL_UNSUPPORTED;
 	phb->ops->lock(phb);
 	rc = phb->ops->set_phb_mem_window(phb, window_type, window_num,
 					  starting_real_address,
@@ -200,6 +208,8 @@ static int64_t opal_pci_map_pe_mmio_window(uint64_t phb_id, uint16_t pe_number,
 
 	if (!phb)
 		return OPAL_PARAMETER;
+	if (!phb->ops->map_pe_mmio_window)
+		return OPAL_UNSUPPORTED;
 	phb->ops->lock(phb);
 	rc = phb->ops->map_pe_mmio_window(phb, pe_number, window_type,
 					  window_num, segment_num);
@@ -232,6 +242,8 @@ static int64_t opal_pci_set_pe(uint64_t phb_id, uint64_t pe_number,
 
 	if (!phb)
 		return OPAL_PARAMETER;
+	if (!phb->ops->set_pe)
+		return OPAL_UNSUPPORTED;
 	phb->ops->lock(phb);
 	rc = phb->ops->set_pe(phb, pe_number, bus_dev_func, bus_compare,
 			      dev_compare, func_compare, pe_action);
@@ -250,6 +262,8 @@ static int64_t opal_pci_set_peltv(uint64_t phb_id, uint32_t parent_pe,
 
 	if (!phb)
 		return OPAL_PARAMETER;
+	if (!phb->ops->set_peltv)
+		return OPAL_UNSUPPORTED;
 	phb->ops->lock(phb);
 	rc = phb->ops->set_peltv(phb, parent_pe, child_pe, state);
 	phb->ops->unlock(phb);
@@ -267,6 +281,8 @@ static int64_t opal_pci_set_mve(uint64_t phb_id, uint32_t mve_number,
 
 	if (!phb)
 		return OPAL_PARAMETER;
+	if (!phb->ops->set_mve)
+		return OPAL_UNSUPPORTED;
 	phb->ops->lock(phb);
 	rc = phb->ops->set_mve(phb, mve_number, pe_number);
 	phb->ops->unlock(phb);
@@ -284,6 +300,8 @@ static int64_t opal_pci_set_mve_enable(uint64_t phb_id, uint32_t mve_number,
 
 	if (!phb)
 		return OPAL_PARAMETER;
+	if (!phb->ops->set_mve_enable)
+		return OPAL_UNSUPPORTED;
 	phb->ops->lock(phb);
 	rc = phb->ops->set_mve_enable(phb, mve_number, state);
 	phb->ops->unlock(phb);
@@ -321,6 +339,8 @@ static int64_t opal_pci_set_xive_pe(uint64_t phb_id, uint32_t pe_number,
 
 	if (!phb)
 		return OPAL_PARAMETER;
+	if (!phb->ops->set_xive_pe)
+		return OPAL_UNSUPPORTED;
 	phb->ops->lock(phb);
 	rc = phb->ops->set_xive_pe(phb, pe_number, xive_num);
 	phb->ops->unlock(phb);
@@ -338,6 +358,8 @@ static int64_t opal_get_xive_source(uint64_t phb_id, uint32_t xive_num,
 
 	if (!phb)
 		return OPAL_PARAMETER;
+	if (!phb->ops->get_xive_source)
+		return OPAL_UNSUPPORTED;
 	phb->ops->lock(phb);
 	rc = phb->ops->get_xive_source(phb, xive_num, interrupt_source_number);
 	phb->ops->unlock(phb);
@@ -356,6 +378,8 @@ static int64_t opal_get_msi_32(uint64_t phb_id, uint32_t mve_number,
 
 	if (!phb)
 		return OPAL_PARAMETER;
+	if (!phb->ops->get_msi_32)
+		return OPAL_UNSUPPORTED;
 	phb->ops->lock(phb);
 	rc = phb->ops->get_msi_32(phb, mve_number, xive_num, msi_range,
 				  msi_address, message_data);
@@ -375,6 +399,8 @@ static int64_t opal_get_msi_64(uint64_t phb_id, uint32_t mve_number,
 
 	if (!phb)
 		return OPAL_PARAMETER;
+	if (!phb->ops->get_msi_64)
+		return OPAL_UNSUPPORTED;
 	phb->ops->lock(phb);
 	rc = phb->ops->get_msi_64(phb, mve_number, xive_num, msi_range,
 				  msi_address, message_data);
@@ -397,6 +423,8 @@ static int64_t opal_pci_map_pe_dma_window(uint64_t phb_id, uint16_t pe_number,
 
 	if (!phb)
 		return OPAL_PARAMETER;
+	if (!phb->ops->map_pe_dma_window)
+		return OPAL_UNSUPPORTED;
 	phb->ops->lock(phb);
 	rc = phb->ops->map_pe_dma_window(phb, pe_number, window_id,
 					 tce_levels, tce_table_addr,
@@ -419,6 +447,8 @@ static int64_t opal_pci_map_pe_dma_window_real(uint64_t phb_id,
 
 	if (!phb)
 		return OPAL_PARAMETER;
+	if (!phb->ops->map_pe_dma_window_real)
+		return OPAL_UNSUPPORTED;
 	phb->ops->lock(phb);
 	rc = phb->ops->map_pe_dma_window_real(phb, pe_number, window_id,
 					      pci_start_addr, pci_mem_size);
@@ -444,7 +474,8 @@ static int64_t opal_pci_reset(uint64_t phb_id, uint8_t reset_scope,
 	case OPAL_PCI_IODA_TABLE_RESET:
 		if (assert_state != OPAL_ASSERT_RESET)
 			break;
-		phb->ops->ioda_reset(phb);
+		if (phb->ops->ioda_reset)
+			phb->ops->ioda_reset(phb);
 		break;
 	default:
 		rc = OPAL_UNSUPPORTED;
