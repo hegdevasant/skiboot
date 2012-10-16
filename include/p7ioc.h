@@ -261,7 +261,6 @@ struct p7ioc {
 	/* PHB array */
 	struct p7ioc_phb		phbs[P7IOC_NUM_PHBS];
 	   
-	const struct cechub_io_hub	*sp_data;
 	struct io_hub			hub;
 };
 
