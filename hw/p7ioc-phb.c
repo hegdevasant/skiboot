@@ -244,6 +244,9 @@ static int64_t p7ioc_link_state(struct phb *phb)
 		PHBERR(p, "Failed to read link status\n");
 		return OPAL_HARDWARE;
 	}
+	if (!(lstat & PCICAP_EXP_LSTAT_DLLL_ACT))
+		return OPAL_SHPC_LINK_DOWN;
+
 	return GETFIELD(PCICAP_EXP_LSTAT_WIDTH, lstat);
 }
 
