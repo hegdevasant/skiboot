@@ -84,7 +84,7 @@
 #define PHBn_M64_BASE(n)	(PHB_M64_OFFSET + (n) * PHB_M64_SIZE)
 #define PHBn_BUID_BASE(n)	(PHB_BUID_OFFSET + (n) * PHB_BUID_SIZE)
 
-#define BUID_TO_PHB(buid)	((buid - PHB_BUID_OFFSET) / PHB_BUID_SIZE)
+#define BUID_TO_PHB(buid)	(((buid) - PHB_BUID_OFFSET) / PHB_BUID_SIZE)
 
 /* p7ioc has 6 PHBs */
 #define P7IOC_NUM_PHBS		6

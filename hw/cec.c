@@ -2,6 +2,7 @@
 #include <spira.h>
 #include <cec.h>
 #include <p7ioc.h>
+#include <interrupts.h>
 
 /* We keep an array of IO Hubs indexed on the BUID Extension
  *
@@ -29,7 +30,8 @@ int64_t cec_get_xive(uint32_t isn, uint16_t *server, uint8_t *priority)
 	struct io_hub *hub;
 	uint32_t id;
 
-	id = isn >> (9 + 4);	/* Extract BUID extension */
+	/* We index our hubs by BUID extension */
+	id = IRQ_BEXT(isn);
 	if (id >= MAX_IO_HUBS)
 		return OPAL_PARAMETER;
 
@@ -45,7 +47,8 @@ int64_t cec_set_xive(uint32_t isn, uint16_t server, uint8_t priority)
 	struct io_hub *hub;
 	uint32_t id;
 
-	id = isn >> (9 + 4);	/* Extract BUID extension */
+	/* We index our hubs by BUID extension */
+	id = IRQ_BEXT(isn);
 	if (id >= MAX_IO_HUBS)
 		return OPAL_PARAMETER;
 
@@ -120,7 +123,8 @@ static void cec_make_iochips(const void *sp_iohubs)
 			printf("CEC:     Unusable");
 			continue;
 		}
-		hub_id = hub->buid_ext >> 9;
+
+		hub_id = hub->buid_ext;
 		if (hub_id > MAX_IO_HUBS) {
 			printf("CEC:     BUID Extension out of "
 			       " supported range (%x)!\n", hub->buid_ext);

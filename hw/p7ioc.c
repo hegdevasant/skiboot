@@ -76,7 +76,7 @@ static int64_t p7ioc_get_xive(struct io_hub *hub, uint32_t isn,
 	buid = IRQ_BUID(isn);
 
 	/* RGC */
-	if (buid == ioc->rgc_buid)
+	if (buid == BUID_BASE(ioc->rgc_buid))
 		return p7ioc_rgc_get_xive(ioc, isn, server, prio);
 
 	/* PCI */
@@ -103,7 +103,7 @@ static int64_t p7ioc_set_xive(struct io_hub *hub, uint32_t isn,
 	buid = IRQ_BUID(isn);
 
 	/* RGC */
-	if (buid == ioc->rgc_buid)
+	if (buid == BUID_BASE(ioc->rgc_buid))
 		return p7ioc_rgc_set_xive(ioc, isn, server, prio);
 
 	/* PCI */
@@ -162,7 +162,7 @@ struct io_hub *p7ioc_create_hub(const struct cechub_io_hub *hub, uint32_t id)
 	ioc->mmio2_win_start = hub->gx_ctrl_bar2;
 	ioc->mmio2_win_size = MWIN2_SIZE;
 
-	ioc->buid_base = hub->buid_ext;
+	ioc->buid_base = hub->buid_ext << 9;
 	ioc->rgc_buid = ioc->buid_base + RGC_BUID_OFFSET;
 
 	/* Setup PHB structures (no HW access yet).

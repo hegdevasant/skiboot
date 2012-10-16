@@ -104,9 +104,21 @@
  */
 #define PSI_IRQ_BUID	0x3	/* 9-bit BUID for the PSI interrupts */
 
+/* Extract individual components of an IRQ number */
 #define IRQ_BUID(irq)	(((irq) >>  4) & 0x1ff)
+#define IRQ_GXID(irq)	(((irq) >> 13) & 0x1)
 #define IRQ_CHIP(irq)	(((irq) >> 14) & 0x3)
+#define IRQ_TBIT(irq)	(((irq) >> 16) & 0x1)
 #define IRQ_NODE(irq)	(((irq) >> 17) & 0x7)
+
+/* Extract the "full BUID" (extension + BUID) */
+#define IRQ_FBUID(irq)	(((irq) >> 4) & 0xffff)
+
+/* BUID Extension (GX + CHIP + T + NODE) */
+#define IRQ_BEXT(irq)	(((irq) >> 13) & 0x7f)
+
+/* Strip extension from BUID */
+#define BUID_BASE(buid)	((buid) & 0x1ff)
 
 extern uint32_t get_psi_interrupt(uint32_t chip_id);
 
