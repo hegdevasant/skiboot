@@ -91,7 +91,7 @@ static int64_t p7ioc_pcicfg_check(struct p7ioc_phb *p, uint32_t bdfn,
 		return OPAL_HARDWARE;
 
 	/* Check PHB state */
-	if (p->state == PHB_STATE_BROKEN)
+	if (p->state == P7IOC_PHB_STATE_BROKEN)
 		return OPAL_HARDWARE;
 
 	return OPAL_SUCCESS;
@@ -277,7 +277,7 @@ static int64_t p7ioc_slot_power_off(struct phb *phb)
 {
 	struct p7ioc_phb *p = phb_to_p7ioc_phb(phb);
 
-	if (p->state != PHB_STATE_FUNCTIONAL)
+	if (p->state != P7IOC_PHB_STATE_FUNCTIONAL)
 		return OPAL_BUSY;
 
 	/* run state machine */
@@ -291,7 +291,7 @@ static int64_t p7ioc_sm_slot_power_on(struct p7ioc_phb *p)
 	uint16_t brctl;
 
 	switch(p->state) {
-	case PHB_STATE_FUNCTIONAL:
+	case P7IOC_PHB_STATE_FUNCTIONAL:
 		/* Check presence */
 		reg = in_be64(p->regs + PHB_PCIE_SLOTCTL2);
 		if (!(reg & PHB_PCIE_SLOTCTL2_PRSTN_STAT)) {
@@ -310,7 +310,7 @@ static int64_t p7ioc_sm_slot_power_on(struct p7ioc_phb *p)
 			reg &= ~(0x8c00000000000000ul);
 			reg |= 0x8400000000000000ul;
 			out_be64(p->regs + PHB_HOTPLUG_OVERRIDE, reg);
-			p->state = PHB_STATE_SPUP_STABILIZE_DELAY;
+			p->state = P7IOC_PHB_STATE_SPUP_STABILIZE_DELAY;
 			PHBDBG(p, "Slot power on: powering on...\n");
 			return p7ioc_set_sm_timeout(p, secs_to_tb(2));
 		}
@@ -321,10 +321,10 @@ static int64_t p7ioc_sm_slot_power_on(struct p7ioc_phb *p)
 		brctl &= ~PCI_CFG_BRCTL_SECONDARY_RESET;
 		p7ioc_pcicfg_write16(&p->phb, 0, PCI_CFG_BRCTL, brctl);
 		p->retries = 40;
-		p->state = PHB_STATE_SPUP_WAIT_LINK;
+		p->state = P7IOC_PHB_STATE_SPUP_WAIT_LINK;
 		PHBDBG(p, "Slot power on: waiting for link\n");
 		/* Fall through */
-	case PHB_STATE_SPUP_WAIT_LINK:
+	case P7IOC_PHB_STATE_SPUP_WAIT_LINK:
 		reg = in_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL);
 		/* Link is up ? Complete */
 
@@ -335,7 +335,7 @@ static int64_t p7ioc_sm_slot_power_on(struct p7ioc_phb *p)
 			/* Restore UTL interrupts */
 			out_be64(p->regs + UTL_PCIE_PORT_IRQ_EN,
 				 0xfe65000000000000);
-			p->state = PHB_STATE_FUNCTIONAL;
+			p->state = P7IOC_PHB_STATE_FUNCTIONAL;
 			PHBDBG(p, "Slot power on: up !\n");
 			return OPAL_SUCCESS;
 		}
@@ -366,10 +366,10 @@ static int64_t p7ioc_sm_slot_power_on(struct p7ioc_phb *p)
 		p7ioc_pcicfg_read16(&p->phb, 0, PCI_CFG_BRCTL, &brctl);
 		brctl |= PCI_CFG_BRCTL_SECONDARY_RESET;
 		p7ioc_pcicfg_write16(&p->phb, 0, PCI_CFG_BRCTL, brctl);
-		p->state = PHB_STATE_SPUP_HOT_RESET_DELAY;
+		p->state = P7IOC_PHB_STATE_SPUP_HOT_RESET_DELAY;
 		PHBDBG(p, "Slot power on: soft reset...\n");
 		return p7ioc_set_sm_timeout(p, secs_to_tb(1));
-	case PHB_STATE_SPUP_HOT_RESET_DELAY:
+	case P7IOC_PHB_STATE_SPUP_HOT_RESET_DELAY:
 		/* Turn off host reset */
 		p7ioc_pcicfg_read16(&p->phb, 0, PCI_CFG_BRCTL, &brctl);
 		brctl &= ~PCI_CFG_BRCTL_SECONDARY_RESET;
@@ -386,17 +386,17 @@ static int64_t p7ioc_sm_slot_power_on(struct p7ioc_phb *p)
 		p7ioc_pcicfg_write32(&p->phb, 0,
 				     p->aercap + PCIECAP_AER_CE_MASK, reg32);
 		/* Go back to waiting for link */
-		p->state = PHB_STATE_SPUP_WAIT_LINK;
+		p->state = P7IOC_PHB_STATE_SPUP_WAIT_LINK;
 		PHBDBG(p, "Slot power on: waiting for link (2)\n");
 		return p7ioc_set_sm_timeout(p, msecs_to_tb(10));
 
-	case PHB_STATE_SPUP_STABILIZE_DELAY:
+	case P7IOC_PHB_STATE_SPUP_STABILIZE_DELAY:
 		/* Come here after the 2s delay after power up */
 		p->retries = 1000;
-		p->state = PHB_STATE_SPUP_SLOT_STATUS;
+		p->state = P7IOC_PHB_STATE_SPUP_SLOT_STATUS;
 		PHBDBG(p, "Slot power on: waiting for power\n");
 		/* Fall through */
-	case PHB_STATE_SPUP_SLOT_STATUS:
+	case P7IOC_PHB_STATE_SPUP_SLOT_STATUS:
 		reg = in_be64(p->regs + PHB_PCIE_SLOTCTL2);
 
 		/* Doc says to check LED status, but we ignore that, there
@@ -416,7 +416,7 @@ static int64_t p7ioc_sm_slot_power_on(struct p7ioc_phb *p)
 
 	/* Unknown state, hardware error ? */
  error:
-	p->state = PHB_STATE_FUNCTIONAL;
+	p->state = P7IOC_PHB_STATE_FUNCTIONAL;
 	return OPAL_HARDWARE;
 }
 
@@ -424,7 +424,7 @@ static int64_t p7ioc_slot_power_on(struct phb *phb)
 {
 	struct p7ioc_phb *p = phb_to_p7ioc_phb(phb);
 
-	if (p->state != PHB_STATE_FUNCTIONAL)
+	if (p->state != P7IOC_PHB_STATE_FUNCTIONAL)
 		return OPAL_BUSY;
 
 	/* run state machine */
@@ -446,7 +446,7 @@ static int64_t p7ioc_hot_reset(struct phb *phb)
 {
 	struct p7ioc_phb *p = phb_to_p7ioc_phb(phb);
 
-	if (p->state != PHB_STATE_FUNCTIONAL)
+	if (p->state != P7IOC_PHB_STATE_FUNCTIONAL)
 		return OPAL_BUSY;
 
 	/* run state machine */
@@ -458,7 +458,7 @@ static int64_t p7ioc_poll(struct phb *phb)
 	struct p7ioc_phb *p = phb_to_p7ioc_phb(phb);
 	uint64_t now = mftb();
 
-	if (p->state == PHB_STATE_FUNCTIONAL)
+	if (p->state == P7IOC_PHB_STATE_FUNCTIONAL)
 		return OPAL_SUCCESS;
 
 	/* Check timer */
@@ -471,15 +471,15 @@ static int64_t p7ioc_poll(struct phb *phb)
 
 	/* Dispatch to the right state machine */
 	switch(p->state) {
-	case PHB_STATE_SPUP_STABILIZE_DELAY:
-	case PHB_STATE_SPUP_SLOT_STATUS:
-	case PHB_STATE_SPUP_WAIT_LINK:
-	case PHB_STATE_SPUP_HOT_RESET_DELAY:
+	case P7IOC_PHB_STATE_SPUP_STABILIZE_DELAY:
+	case P7IOC_PHB_STATE_SPUP_SLOT_STATUS:
+	case P7IOC_PHB_STATE_SPUP_WAIT_LINK:
+	case P7IOC_PHB_STATE_SPUP_HOT_RESET_DELAY:
 		return p7ioc_sm_slot_power_on(p);
-	case PHB_STATE_SPDOWN_STABILIZE_DELAY:
-	case PHB_STATE_SPDOWN_SLOT_STATUS:
+	case P7IOC_PHB_STATE_SPDOWN_STABILIZE_DELAY:
+	case P7IOC_PHB_STATE_SPDOWN_SLOT_STATUS:
 		return p7ioc_sm_slot_power_off(p);
-	case PHB_STATE_HRESET_DELAY:
+	case P7IOC_PHB_STATE_HRESET_DELAY:
 		return p7ioc_sm_hot_reset(p);
 	default:
 		break;
@@ -1276,7 +1276,7 @@ void p7ioc_phb_setup(struct p7ioc *ioc, uint8_t index, bool active)
 	p->io_base = ioc->mmio1_win_start + PHBn_IO_BASE(index);
 	p->m32_base = ioc->mmio2_win_start + PHBn_M32_BASE(index);
 	p->m64_base = ioc->mmio2_win_start + PHBn_M64_BASE(index);
-	p->state = PHB_STATE_UNINITIALIZED;
+	p->state = P7IOC_PHB_STATE_UNINITIALIZED;
 	p->phb.scan_map = 0x1; /* Only device 0 to scan */
 
 	/* We register the PHB before we initialize it so we
@@ -1551,7 +1551,7 @@ int64_t p7ioc_phb_init(struct p7ioc_phb *p)
 
 	PHBDBG(p, "Initializing PHB %d...\n", p->index);
 
-	p->state = PHB_STATE_INITIALIZING;
+	p->state = P7IOC_PHB_STATE_INITIALIZING;
 
 	/* For some reason, the doc wants us to read the version
 	 * register, so let's do it. We shoud probably check that
@@ -1757,13 +1757,13 @@ int64_t p7ioc_phb_init(struct p7ioc_phb *p)
 	out_be64(p->regs + PHB_TIMEOUT_CTRL2,		   0x0000561300000000);
 
 	/* Mark the PHB as functional which enables all the various sequences */
-	p->state = PHB_STATE_FUNCTIONAL;
+	p->state = P7IOC_PHB_STATE_FUNCTIONAL;
 
 	return OPAL_SUCCESS;
 
  failed:
 	PHBERR(p, "Initialization failed\n");
-	p->state = PHB_STATE_BROKEN;
+	p->state = P7IOC_PHB_STATE_BROKEN;
 
 	return OPAL_HARDWARE;
 }

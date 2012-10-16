@@ -163,7 +163,7 @@
  * Any attempt at starting a new "asynchronous" operation while one is
  * already in progress will result in an error.
  *
- * Internally, this is represented by the state being PHB_STATE_FUNCTIONAL
+ * Internally, this is represented by the state being P7IOC_PHB_STATE_FUNCTIONAL
  * when no operation is in progress, which it reaches at the end of the
  * boot time initializations. Any attempt at performing a slot operation
  * on a PHB in that state will change the state to the corresponding
@@ -176,29 +176,29 @@
  */
 enum p7ioc_phb_state {
 	/* First init state */
-	PHB_STATE_UNINITIALIZED,
+	P7IOC_PHB_STATE_UNINITIALIZED,
 
 	/* During PHB HW inits */
-	PHB_STATE_INITIALIZING,
+	P7IOC_PHB_STATE_INITIALIZING,
 
 	/* Set if the PHB is for some reason unusable */
-	PHB_STATE_BROKEN,
+	P7IOC_PHB_STATE_BROKEN,
 
 	/* Slot Power up state machine */
-	PHB_STATE_SPUP_STABILIZE_DELAY,		/* Step 3 Delay 2s */
-	PHB_STATE_SPUP_SLOT_STATUS,		/* Step 4 waiting for status */
-	PHB_STATE_SPUP_WAIT_LINK,		/* Step 9 Wait link training */
-	PHB_STATE_SPUP_HOT_RESET_DELAY,		/* Step 12 Activate Hot Reset */
+	P7IOC_PHB_STATE_SPUP_STABILIZE_DELAY,	/* Step 3 Delay 2s */
+	P7IOC_PHB_STATE_SPUP_SLOT_STATUS,	/* Step 4 waiting for status */
+	P7IOC_PHB_STATE_SPUP_WAIT_LINK,		/* Step 9 Wait link training */
+	P7IOC_PHB_STATE_SPUP_HOT_RESET_DELAY,	/* Step 12 Activate Hot Reset */
 
 	/* Slot Power down state machine */
-	PHB_STATE_SPDOWN_STABILIZE_DELAY,	/* Step 2 Delay 2s */
-	PHB_STATE_SPDOWN_SLOT_STATUS,		/* Step 3 waiting for status */
+	P7IOC_PHB_STATE_SPDOWN_STABILIZE_DELAY,	/* Step 2 Delay 2s */
+	P7IOC_PHB_STATE_SPDOWN_SLOT_STATUS,	/* Step 3 waiting for status */
 
 	/* Hot Reset sequence */
-	PHB_STATE_HRESET_DELAY,			/* Hot reset delay */
+	P7IOC_PHB_STATE_HRESET_DELAY,		/* Hot reset delay */
 
 	/* Normal PHB functional state */
-	PHB_STATE_FUNCTIONAL,
+	P7IOC_PHB_STATE_FUNCTIONAL,
 };
 
 struct p7ioc;
