@@ -104,6 +104,9 @@ static int64_t p7ioc_pcicfg_read8(struct phb *phb, uint32_t bdfn,
 	uint64_t addr;
 	int64_t rc;
 
+	/* Initialize data in case of error */
+	*data = 0xff;
+
 	rc = p7ioc_pcicfg_check(p, bdfn, offset, 1);
 	if (rc)
 		return rc;
@@ -123,6 +126,9 @@ static int64_t p7ioc_pcicfg_read16(struct phb *phb, uint32_t bdfn,
 	uint64_t addr;
 	int64_t rc;
 
+	/* Initialize data in case of error */
+	*data = 0xffff;
+
 	rc = p7ioc_pcicfg_check(p, bdfn, offset, 2);
 	if (rc)
 		return rc;
@@ -141,6 +147,9 @@ static int64_t p7ioc_pcicfg_read32(struct phb *phb, uint32_t bdfn,
 	struct p7ioc_phb *p = phb_to_p7ioc_phb(phb);
 	uint64_t addr;
 	int64_t rc;
+
+	/* Initialize data in case of error */
+	*data = 0xffffffff;
 
 	rc = p7ioc_pcicfg_check(p, bdfn, offset, 4);
 	if (rc)
