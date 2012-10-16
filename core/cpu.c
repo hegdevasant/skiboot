@@ -287,7 +287,12 @@ bool __cpu_parse(void)
 		bool is_boot_cpu;
 
 		id = HDIF_get_idata(paca, 2, &size);
-		if (!id || size < sizeof(*id)) {
+
+		/* The ID structure on Blade314 is only 0x54 long. We can
+		 * cope with it as we don't use all the additional fields.
+		 * The minimum size we support is  0x40
+		 */
+		if (!id || size < SPIRA_CPU_ID_MIN_SIZE) {
 			prerror("CPU[%i]: bad id size %u @ %p\n",
 				i, size, id);
 			return false;

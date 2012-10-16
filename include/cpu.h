@@ -34,6 +34,8 @@ struct HDIF_cpu_id {
 	u32 physical_thread_id;
 	u32 deprecated2;
 	u32 ccm_node_id;
+	/* This fields are not always present, check struct size */
+#define SPIRA_CPU_ID_MIN_SIZE	0x40
 	u32 hw_card_id;
 	u32 internal_drawer_node_id;
 	u32 drawer_book_octant_blade_id;
