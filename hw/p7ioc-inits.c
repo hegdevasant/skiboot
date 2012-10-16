@@ -4,6 +4,7 @@
  */
 #include <skiboot.h>
 #include <p7ioc.h>
+#include <p7ioc-regs.h>
 #include <io.h>
 #include <processor.h>
 
