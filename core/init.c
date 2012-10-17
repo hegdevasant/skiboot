@@ -21,7 +21,7 @@ enum ipl_state ipl_state = ipl_initial;
 static uint64_t kernel_entry;
 static uint64_t kernel_top;
 static void *fdt;
-static bool cec_ipl_temp_side;
+bool cec_ipl_temp_side;
 
 static void fetch_global_params(void)
 {

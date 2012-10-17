@@ -35,6 +35,11 @@ enum ipl_state {
 };
 extern enum ipl_state ipl_state;
 
+/* Set to true if CEC booted from the T side, else false,
+ * can be used to get to the right LIDs
+ */
+extern bool cec_ipl_temp_side;
+
 /* Boot stack top */
 extern void *boot_stack_top;
 
