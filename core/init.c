@@ -54,10 +54,11 @@ static void fetch_global_params(void)
 
 static bool load_kernel(void)
 {
-	uint32_t lid, ksize;
 	struct elf64_hdr *kh = (void *)KERNEL_LOAD_BASE;
 	struct elf64_phdr *ph;
 	unsigned int i;
+	uint32_t lid;
+	size_t ksize;
 
 	ksize = KERNEL_LOAD_SIZE;
 	lid = KERNEL_LID;
@@ -66,7 +67,7 @@ static bool load_kernel(void)
 	fsp_fetch_data(0, FSP_DATASET_NONSP_LID, lid, 0,
 		       (void *)KERNEL_LOAD_BASE, &ksize);
 
-	printf("INIT: Kernel loaded, size: %d bytes\n", ksize);
+	printf("INIT: Kernel loaded, size: %ld bytes\n", ksize);
 
 	/* Check it's a ppc64 ELF */
 	if (kh->ei_ident != ELF_IDENT		||

@@ -530,7 +530,7 @@ extern void fsp_tce_unmap(u32 offset, u32 size);
 
 /* Data fetch helper */
 extern int fsp_fetch_data(uint8_t flags, uint16_t id, uint32_t sub_id,
-			  uint32_t offset, void *buffer, uint32_t *length);
+			  uint32_t offset, void *buffer, size_t *length);
 
 /* FSP console stuff */
 extern void fsp_console_preinit(void);

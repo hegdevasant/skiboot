@@ -1236,7 +1236,7 @@ void fsp_opl(void)
 }
 
 int fsp_fetch_data(uint8_t flags, uint16_t id, uint32_t sub_id,
-		   uint32_t offset, void *buffer, uint32_t *length)
+		   uint32_t offset, void *buffer, size_t *length)
 {
 	uint32_t total, remaining = *length;
 	uint64_t baddr;
