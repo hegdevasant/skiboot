@@ -8,6 +8,8 @@
 #include <interrupts.h>
 #include <fsp.h>
 #include <cec.h>
+#include <spira.h>
+#include <vpd.h>
 
 static int fdt_error;
 static void *fdt;
@@ -104,6 +106,25 @@ static void add_chosen_node(void)
 	dt_end_node();
 }
 
+static void add_dtb_model(void)
+{
+	const char *model;
+	char *str;
+	uint8_t sz;
+
+	model = vpd_find_from_spira(&spira.ntuples.system_vpd,
+				    SYSVPD_IDATA_KW_VPD,
+				    "VSYS", "TM", &sz);
+	if (!model) {
+		dt_property_string("model", "Unknown");
+		return;
+	}
+	str = zalloc(sz + 1);
+	memcpy(str, model, sz);
+	dt_property_string("model", str);
+	free(str);
+}
+
 void *create_dtb(void)
 {
 	size_t len = DEVICE_TREE_MAX_SIZE;
@@ -124,7 +145,7 @@ void *create_dtb(void)
 
 		dt_begin_node("device-tree");
 		dt_property_string("name", "device-tree");
-		dt_property_string("model", "FIXME");
+		add_dtb_model();
 		dt_property_string("compatible", "ibm,powernv");
 		dt_property_cell("#address-cells", 2);
 		dt_property_cell("#size-cells", 2);

@@ -504,4 +504,18 @@ struct slca_entry {
 #define SLCA_VPD_NOT_COLLECTED		3
 } __packed;
 
+/*
+ * System VPD
+ */
+#define SYSVPD_HDIF_SIG	"SYSVPD"
+
+/* Idata index 0 : FRU ID Data */
+#define SYSVPD_IDATA_FRU_ID	0
+
+/* Idata index 1 : Keyword VPD */
+#define SYSVPD_IDATA_KW_VPD	1
+
+/* Idata index 2 : Operational status */
+#define SYSVPD_IDATA_OP_STATUS	2
+
 #endif /* __SPIRA_H */
