@@ -120,6 +120,9 @@ void main_cpu_entry(void)
 	 */
 	cpu_parse();
 
+	/* Collect some global parameters from SPIRA */
+	fetch_global_params();
+
 	/* Now locks can be used */
 	init_locks();
 
@@ -128,9 +131,6 @@ void main_cpu_entry(void)
 
 	/* Early initializations of the FSP interface */
 	fsp_init();
-
-	/* Collect some global parameters from SPIRA */
-	fetch_global_params();
 
 	/* Get ready to receive E0 class messages. We need to respond
 	 * to some of these for the init sequence to make forward progress
