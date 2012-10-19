@@ -296,6 +296,7 @@
 #define FSP_CMD_PANELSTATUS	0x0ce5c00 /* FSP->HV */
 #define FSP_CMD_PANELSTATUS_EX1	0x0ce5c02 /* FSP->HV */
 #define FSP_CMD_PANELSTATUS_EX2	0x0ce5c03 /* FSP->HV */
+
 /*
  * Class 0xD4
  */
@@ -361,7 +362,11 @@
 /*
  * Class E8
  */
-#define FSP_CMD_DISP_SRC_DIRECT	0x01e84a42 /* HV->FSP */
+#define FSP_CMD_READ_SRC	0x1e84a40 /* HV->FSP */
+#define FSP_CMD_DISP_SRC_INDIR	0x1e84a41 /* HV->FSP */
+#define FSP_CMD_DISP_SRC_DIRECT	0x1e84a42 /* HV->FSP */
+#define FSP_CMD_CLEAR_SRC	0x1e84b00 /* HV->FSP */
+#define FSP_CMD_DIS_SRC_ECHO	0x1e87600 /* HV->FSP */
 
 /*
  * Layout of the PSI DMA address space
@@ -386,7 +391,8 @@
 #define PSI_DMA_INBOUND_SIZE	0x00100000
 #define PSI_DMA_FETCH		0x00200000
 #define PSI_DMA_FETCH_SIZE	0x00800000
-
+#define PSI_DMA_OP_PANEL_MISC	0x00a00000
+#define PSI_DMA_OP_PANEL_SIZE	0x00001000
 
 /*
  * Functions exposed to the rest of skiboot

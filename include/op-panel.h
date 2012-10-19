@@ -44,4 +44,6 @@ enum op_module {
 
 extern void op_display(enum op_severity, enum op_module, uint16_t code);
 
+extern void op_panel_disable_src_echo(void);
+
 #endif /* __OP_PANEL_H */

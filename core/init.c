@@ -191,6 +191,7 @@ void main_cpu_entry(void)
 	op_display(OP_LOG, OP_MOD_INIT, 0x0007);
 
 	/* Start the kernel */
+	op_panel_disable_src_echo();
 	cpu_give_self_os();
 	start_kernel(kernel_entry, fdt);
 }
