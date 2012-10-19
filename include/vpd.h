@@ -13,6 +13,13 @@ extern const void *vpd_find(const void *vpd, size_t vpd_size,
 			    const char *record, const char *keyword,
 			    uint8_t *sz);
 
+/* Low level keyword search in a record. Can be used when we
+ * need to find the next keyword of a given type, for example
+ * when having multiple MF/SM keyword pairs
+ */
+const void *vpd_find_keyword(const void *rec, size_t rec_sz,
+			     const char *kw, uint8_t *kw_size);
+
 /* Helper to load a VPD LID. Pass a ptr to the corresponding LX keyword */
 #define VPD_LOAD_LXRN_VINI	0xff
 extern const void *vpd_lid_load(const uint8_t *lx, uint8_t lxrn,

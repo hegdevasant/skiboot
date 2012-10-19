@@ -6,8 +6,8 @@
 
 #define CHECK_SPACE(_p, _n, _e) (((_e) - (_p)) >= (_n))
 
-static const void *vpd_find_keyword(const void *rec, size_t rec_sz,
-				    const char *kw, uint8_t *kw_size)
+const void *vpd_find_keyword(const void *rec, size_t rec_sz,
+			     const char *kw, uint8_t *kw_size)
 {
 	const uint8_t *p = rec, *end = rec + rec_sz;
 
