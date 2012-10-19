@@ -419,16 +419,7 @@ static uint8_t pci_scan(struct phb *phb, uint8_t bus, uint8_t max_bus,
 				max_sub = max_bus;
 		}
 
-		/* Now do we update the subordinate bus field ? Well, it depends
-		 * if max_bus is ff or not. If max_bus is ff, we assume that
-		 * ->choose_bus didn't specify a range constraint, in which
-		 * case we set it and continue.
-		 *
-		 * XXX Note: With appropirate VPD info, we could know whether
-		 * there can ever be anything hotplugged behind that bridge or
-		 * not and if not, we can crop our bus range to a lower power of
-		 * two for example...
-		 */
+		/* Update the max subordinate as described previously */
 		if (use_max)
 			max_sub = max_bus;
 		pci_cfg_write8(phb, pd->bdfn, PCI_CFG_SUBORDINATE_BUS, max_sub);
