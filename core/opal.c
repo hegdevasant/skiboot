@@ -6,6 +6,7 @@
 #include <device_tree.h>
 #include <cpu.h>
 #include <interrupts.h>
+#include <op-panel.h>
 
 /* Pending events to signal via opal_poll_events */
 uint64_t opal_pending_events;
@@ -75,7 +76,7 @@ void add_opal_nodes(void)
 	add_opal_interrupts();
 	add_opal_console_nodes();
 	add_opal_nvram_node();
-	//add_opal_oppanel_node();
+	add_opal_oppanel_node();
 	//add_opal_firmware_node();
 	//add_opal_errlog_node();
 	dt_end_node();

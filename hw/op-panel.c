@@ -2,6 +2,7 @@
 #include <fsp.h>
 #include <lock.h>
 #include <opal.h>
+#include <device_tree.h>
 
 static struct fsp_msg *op_msg;
 static struct fsp_msg *op_req;
@@ -132,3 +133,12 @@ static int64_t opal_write_oppanel(oppanel_line_t *lines, uint64_t num_lines)
 	return rc;
 }
 opal_call(OPAL_WRITE_OPPANEL, opal_write_oppanel);
+
+void add_opal_oppanel_node(void)
+{
+	dt_begin_node("oppanel");
+	dt_property_cell("#length", 16);
+	dt_property_cell("#lines", 2);
+	dt_property_string("compatible", "ibm,opal-oppanel");
+	dt_end_node();
+}
