@@ -61,8 +61,12 @@
 #define HEAP_BASE		(SKIBOOT_BASE + 0x01800000)
 #define HEAP_SIZE		0x01000000
 
-/* This is our total size, currenly 40M XXX we can reduce that a lot ! */
-#define SKIBOOT_SIZE		0x02800000
+/* This is our NVRAM image at base + 40M, it is set to be 1M in size */
+#define NVRAM_BASE		(SKIBOOT_BASE + 0x02800000)
+#define NVRAM_SIZE		0x00100000
+
+/* This is our total size, currenly 41M XXX we can reduce that a lot ! */
+#define SKIBOOT_SIZE		0x02900000
 
 /* Address at which we load the kernel LID. Currently +1M */
 #define KERNEL_LOAD_BASE	0x00100000

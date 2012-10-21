@@ -74,7 +74,7 @@ void add_opal_nodes(void)
 			  size & 0xffffffff);
 	add_opal_interrupts();
 	add_opal_console_nodes();
-	//add_opal_nvram_node();
+	add_opal_nvram_node();
 	//add_opal_oppanel_node();
 	//add_opal_firmware_node();
 	//add_opal_errlog_node();

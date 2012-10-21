@@ -147,6 +147,9 @@ void main_cpu_entry(void)
 
 	op_display(OP_LOG, OP_MOD_INIT, 0x0001);
 
+	/* Initialize nvram access */
+	fsp_nvram_init();
+
 	/* Call in secondary CPUs */
 	cpu_bringup();
 
@@ -168,10 +171,12 @@ void main_cpu_entry(void)
 	 */
 	cec_init();
 
+	op_display(OP_LOG, OP_MOD_INIT, 0x0005);
+
 	/* Create the OPAL call table */
 	opal_table_init();
 
-	op_display(OP_LOG, OP_MOD_INIT, 0x0005);
+	op_display(OP_LOG, OP_MOD_INIT, 0x0006);
 
 	/* Load kernel LID */
 	if (!load_kernel()) {
@@ -181,6 +186,13 @@ void main_cpu_entry(void)
 
 	op_display(OP_LOG, OP_MOD_INIT, 0x0006);
 
+	/* We wait for the nvram read to complete here so we can
+	 * grab stuff from there such as the kernel arguments
+	 */
+	fsp_nvram_wait_open();
+
+	op_display(OP_LOG, OP_MOD_INIT, 0x0007);
+
 	/* Create the device tree blob to boot OS. */
 	fdt = create_dtb();
 	if (!fdt) {
@@ -188,7 +200,7 @@ void main_cpu_entry(void)
 		abort();
 	}
 
-	op_display(OP_LOG, OP_MOD_INIT, 0x0007);
+	op_display(OP_LOG, OP_MOD_INIT, 0x0008);
 
 	/* Start the kernel */
 	op_panel_disable_src_echo();

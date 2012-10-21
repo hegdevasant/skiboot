@@ -369,6 +369,18 @@
 #define FSP_CMD_DIS_SRC_ECHO	0x1e87600 /* HV->FSP */
 
 /*
+ * Class EB
+ */
+#define FSP_CMD_GET_VNVRAM_SIZE	0x01eb0100 /* HV->FSP */
+#define FSP_CMD_OPEN_VNVRAM	0x01eb0200 /* HV->FSP */
+#define FSP_CMD_READ_VNVRAM	0x01eb0300 /* HV->FSP */
+#define FSP_CMD_WRITE_VNVRAM	0x01eb0400 /* HV->FSP */
+#define FSP_CMD_GET_VNV_STATS	0x00eb0500 /* FSP->HV */
+#define FSP_RSP_GET_VNV_STATS	0x00eb8500
+#define FSP_CMD_FREE_VNV_STATS	0x00eb0600 /* FSP->HV */
+#define FSP_RSP_FREE_VNV_STATS	0x00eb8600
+
+/*
  * Layout of the PSI DMA address space
  *
  * We instanciate a TCE table of 16K mapping 64M
@@ -393,6 +405,10 @@
 #define PSI_DMA_FETCH_SIZE	0x00800000
 #define PSI_DMA_OP_PANEL_MISC	0x00a00000
 #define PSI_DMA_OP_PANEL_SIZE	0x00001000
+#define PSI_DMA_NVRAM_TRIPL	0x00a01000
+#define PSI_DMA_NVRAM_TRIPL_SZ	0x00001000
+#define PSI_DMA_NVRAM_BODY	0x00b00000
+#define PSI_DMA_NVRAM_BODY_SZ	0x00100000
 
 /*
  * Functions exposed to the rest of skiboot
@@ -550,5 +566,11 @@ extern void fsp_psi_interrupt(uint32_t isn);
 extern unsigned int fsp_get_interrupts(uint32_t *psi_irqs, unsigned int max);
 extern int64_t fsp_set_xive(uint32_t isn, uint16_t server, uint8_t priority);
 extern int64_t fsp_get_xive(uint32_t isn, uint16_t *server, uint8_t *priority);
+
+/* NVRAM */
+extern void fsp_nvram_init(void);
+extern void add_opal_nvram_node(void);
+extern void fsp_nvram_wait_open(void);
+
 
 #endif /* __FSP_H */

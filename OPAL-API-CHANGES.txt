@@ -69,6 +69,24 @@
    TODO: Define a specific status to request a retry due to a loss
          of FSP communication (or a reset/reload)
 
+* NVRAM commands
+
+  opal_read_nvram() always returns immediately. The nvram is
+  read at boot and cached in memory. Writes update that image
+  immediately as well but then trigger an asynchronous
+  writeback to the FSP (and always return an immediate success
+  or error status).
+
+  The nvram "event" will be set until that writeback is complete.
+
+  Subsequent nvram writes will still update the memory image, whether
+  a writeback is in progress or not. If a writeback is in progress, a
+  new writeback will be triggered.
+
+  TODO: Consider deferring writebacks to poweroff/reboot or an
+  explicit new OPAL function... 
+
+
 * PCI:
  
      Lots of planned changes to the reset * SHPC functions, still to
