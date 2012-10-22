@@ -20,6 +20,7 @@ enum ipl_state ipl_state = ipl_initial;
 
 static uint64_t kernel_entry;
 static uint64_t kernel_top;
+static uint64_t mem_top;
 static void *fdt;
 bool cec_ipl_temp_side;
 
@@ -161,7 +162,7 @@ void main_cpu_entry(void)
 	op_display(OP_LOG, OP_MOD_INIT, 0x0003);
 
 	/* Parse the memory layout. */
-	memory_parse();
+	mem_top = memory_parse();
 
 	op_display(OP_LOG, OP_MOD_INIT, 0x0004);
 
@@ -205,7 +206,7 @@ void main_cpu_entry(void)
 	/* Start the kernel */
 	op_panel_disable_src_echo();
 	cpu_give_self_os();
-	start_kernel(kernel_entry, fdt);
+	start_kernel(kernel_entry, fdt, mem_top);
 }
 
 void secondary_cpu_entry(void)

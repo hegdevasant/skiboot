@@ -56,7 +56,7 @@ struct address_range {
 };
 
 /* This populates msareas list. */
-extern void memory_parse(void);
+extern uint64_t memory_parse(void);
 
 extern void add_memory_nodes(void);
 #endif /* __MEMORY_H */

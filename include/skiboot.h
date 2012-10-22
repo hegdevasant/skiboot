@@ -68,7 +68,8 @@ static inline bool is_pow2(unsigned long val)
 #define hi32(x)	(((x) >> 32) & 0xffffffff)
 
 /* Start the kernel */
-extern void start_kernel(uint64_t entry, void* fdt) __noreturn;
+extern void start_kernel(uint64_t entry, void* fdt,
+			 uint64_t mem_top) __noreturn;
 extern void start_kernel_secondary(uint64_t entry) __noreturn;
 
 #endif /* __SKIBOOT_H */

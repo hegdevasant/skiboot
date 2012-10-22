@@ -4,6 +4,8 @@
 #include <opal.h>
 #include <stack.h>
 
+#define EPAPR_MAGIC	0x65504150
+
 #define EXCEPTION(nr)	\
 	.= nr;		\
 	b .;
@@ -431,10 +433,10 @@ start_kernel:
 	LOAD_IMM64(%r8,SKIBOOT_BASE);
 	LOAD_IMM32(%r10, opal_entry - __head)
 	add	%r9,%r8,%r10
+	LOAD_IMM32(%r6, EPAPR_MAGIC)
+	addi	%r7,%r5,1
 	li	%r4,0
 	li	%r5,0
-	li	%r6,0
-	li	%r7,0
 	bctr
 
 .global start_kernel_secondary
