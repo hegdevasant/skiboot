@@ -56,7 +56,7 @@ enum nvram_state {
 
 static void *nvram_image = (void *)NVRAM_BASE;
 static uint32_t nvram_size;
-static struct lock nvram_lock;
+static struct lock nvram_lock = LOCK_UNLOCKED;
 static struct fsp_msg *nvram_msg;
 static uint32_t nvram_dirty_start;
 static uint32_t nvram_dirty_end;
@@ -113,8 +113,7 @@ static void nvram_wr_complete(struct fsp_msg *msg)
 }
 
 static void nvram_send_write(void)
-{
-	uint32_t start = nvram_dirty_start;
+{	uint32_t start = nvram_dirty_start;
 	uint32_t end = nvram_dirty_end;
 	uint32_t count;
 
@@ -271,7 +270,7 @@ static int64_t opal_read_nvram(uint64_t buffer, uint64_t size, uint64_t offset)
 	rc = opal_nvram_check_state();
 	if (!rc)
 		memcpy((void *)buffer, nvram_image + offset, size);
-	lock(&nvram_lock);
+	unlock(&nvram_lock);
 
 	return rc;
 }
@@ -290,7 +289,7 @@ static int64_t opal_write_nvram(uint64_t buffer, uint64_t size, uint64_t offset)
 		memcpy(nvram_image + offset, (void *)buffer, size);
 		nvram_mark_dirty(offset, size);
 	}
-	lock(&nvram_lock);
+	unlock(&nvram_lock);
 
 	return rc;
 }
