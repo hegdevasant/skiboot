@@ -7,6 +7,7 @@
 #include <pci-cfg.h>
 #include <interrupts.h>
 #include <device_tree.h>
+#include <opal.h>
 #include <ccan/str/str.h>
 
 static void p7ioc_phb_trace(struct p7ioc_phb *p, FILE *s, const char *fmt, ...)
@@ -500,10 +501,123 @@ static int64_t p7ioc_poll(struct phb *phb)
 	return OPAL_HARDWARE;
 }
 
+static void p7ioc_eeh_read_phb_status(struct p7ioc_phb *p,
+				      struct OpalIoP7IOCPhbErrorData *stat)
+{
+	uint16_t tmp16;
+	unsigned int i;
+
+	memset(stat, 0, sizeof(struct OpalIoP7IOCPhbErrorData));
+
+	/*
+	 * We read some registers using config space through AIB.
+	 *
+	 * Get to other registers using ASB when possible to get to them
+	 * through a fence if one is present.
+	 *
+	 * Note that the OpalIoP7IOCPhbErrorData has oddities, such as the
+	 * bridge control being 32-bit and the UTL registers being 32-bit
+	 * (which they really are, but they use the top 32-bit of a 64-bit
+	 * register so we need to be a bit careful).
+	 */
+
+	/* Grab RC bridge control, make it 32-bit */
+	p7ioc_pcicfg_read16(&p->phb, 0, PCI_CFG_BRCTL, &tmp16);
+	stat->brdgCtl = tmp16;
+
+	/* Grab UTL status registers */
+	stat->portStatusReg = hi32(in_be64(p->regs_asb
+					   + UTL_PCIE_PORT_STATUS));
+	stat->rootCmplxStatus = hi32(in_be64(p->regs_asb
+					   + UTL_RC_STATUS));
+	stat->busAgentStatus = hi32(in_be64(p->regs_asb
+					   + UTL_SYS_BUS_AGENT_STATUS));
+
+	/*
+	 * Grab various RC PCIe capability registers. All device, slot
+	 * and link status are 16-bit, so we grab the pair control+status
+	 * for each of them
+	 */
+	p7ioc_pcicfg_read32(&p->phb, 0, p->ecap + PCICAP_EXP_DEVCTL,
+			    &stat->deviceStatus);
+	p7ioc_pcicfg_read32(&p->phb, 0, p->ecap + PCICAP_EXP_SLOTCTL,
+			    &stat->slotStatus);
+	p7ioc_pcicfg_read32(&p->phb, 0, p->ecap + PCICAP_EXP_LCTL,
+			    &stat->linkStatus);
+
+	/*
+	 * I assume those are the standard config space header, cmd & status
+	 * together makes 32-bit. Secondary status is 16-bit so I'll clear
+	 * the top on that one
+	 */
+	p7ioc_pcicfg_read32(&p->phb, 0, PCI_CFG_CMD, &stat->devCmdStatus);
+	p7ioc_pcicfg_read16(&p->phb, 0, PCI_CFG_SECONDARY_STATUS, &tmp16);
+	stat->devSecStatus = tmp16;
+
+	/* Grab a bunch of AER regs */
+	p7ioc_pcicfg_read32(&p->phb, 0, p->aercap + PCIECAP_AER_RERR_STA,
+			    &stat->rootErrorStatus);
+	p7ioc_pcicfg_read32(&p->phb, 0, p->aercap + PCIECAP_AER_UE_STATUS,
+			    &stat->uncorrErrorStatus);
+	p7ioc_pcicfg_read32(&p->phb, 0, p->aercap + PCIECAP_AER_CE_STATUS,
+			    &stat->corrErrorStatus);
+	p7ioc_pcicfg_read32(&p->phb, 0, p->aercap + PCIECAP_AER_HDR_LOG0,
+			    &stat->tlpHdr1);
+	p7ioc_pcicfg_read32(&p->phb, 0, p->aercap + PCIECAP_AER_HDR_LOG1,
+			    &stat->tlpHdr2);
+	p7ioc_pcicfg_read32(&p->phb, 0, p->aercap + PCIECAP_AER_HDR_LOG2,
+			    &stat->tlpHdr3);
+	p7ioc_pcicfg_read32(&p->phb, 0, p->aercap + PCIECAP_AER_HDR_LOG3,
+			    &stat->tlpHdr4);
+	p7ioc_pcicfg_read32(&p->phb, 0, p->aercap + PCIECAP_AER_SRCID,
+			    &stat->sourceId);
+
+	/*
+	 * No idea what that that is supposed to be, opal.h says
+	 * "Record data about the call to allocate a buffer."
+	 *
+	 * Let's leave them alone for now...
+	 *
+	 * uint64_t errorClass;
+	 * uint64_t correlator;
+	*/
+
+	/* P7IOC MMIO Error Regs */
+	stat->p7iocPlssr = in_be64(p->regs_asb + PHB_CPU_LOADSTORE_STATUS);
+	stat->p7iocPlssr = in_be64(p->regs_asb + PHB_DMA_CHAN_STATUS);
+	stat->lemFir = in_be64(p->regs_asb + PHB_LEM_FIR_ACCUM);
+	stat->lemErrorMask = in_be64(p->regs_asb + PHB_LEM_ERROR_MASK);
+	stat->lemWOF = in_be64(p->regs_asb + PHB_LEM_WOF);
+	stat->phbErrorStatus = in_be64(p->regs_asb + PHB_ERR_STATUS);
+	stat->phbFirstErrorStatus = in_be64(p->regs_asb + PHB_ERR1_STATUS);
+	stat->phbErrorLog0 = in_be64(p->regs_asb + PHB_ERR_LOG_0);
+	stat->phbErrorLog1 = in_be64(p->regs_asb + PHB_ERR_LOG_1);
+	stat->mmioErrorStatus = in_be64(p->regs_asb + PHB_OUT_ERR_STATUS);
+	stat->mmioFirstErrorStatus = in_be64(p->regs_asb + PHB_OUT_ERR1_STATUS);
+	stat->mmioErrorLog0 = in_be64(p->regs_asb + PHB_OUT_ERR_LOG_0);
+	stat->mmioErrorLog1 = in_be64(p->regs_asb + PHB_OUT_ERR_LOG_1);
+	stat->dma0ErrorStatus = in_be64(p->regs_asb + PHB_INA_ERR_STATUS);
+	stat->dma0FirstErrorStatus = in_be64(p->regs_asb + PHB_INA_ERR1_STATUS);
+	stat->dma0ErrorLog0 = in_be64(p->regs_asb + PHB_INA_ERR_LOG_0);
+	stat->dma0ErrorLog1 = in_be64(p->regs_asb + PHB_INA_ERR_LOG_1);
+	stat->dma1ErrorStatus = in_be64(p->regs_asb + PHB_INB_ERR_STATUS);
+	stat->dma1FirstErrorStatus = in_be64(p->regs_asb + PHB_INB_ERR1_STATUS);
+	stat->dma1ErrorLog0 = in_be64(p->regs_asb + PHB_INB_ERR_LOG_0);
+	stat->dma1ErrorLog1 = in_be64(p->regs_asb + PHB_INB_ERR_LOG_1);
+
+	/* Grab PESTA & B content */
+	p7ioc_phb_ioda_sel(p, IODA_TBL_PESTA, 0, true);
+	for (i = 0; i < OPAL_P7IOC_NUM_PEST_REGS; i++)
+		stat->pestA[i] = in_be64(p->regs + PHB_IODA_DATA0);
+	p7ioc_phb_ioda_sel(p, IODA_TBL_PESTB, 0, true);
+	for (i = 0; i < OPAL_P7IOC_NUM_PEST_REGS; i++)
+		stat->pestB[i] = in_be64(p->regs + PHB_IODA_DATA0);
+}
+
 static int64_t p7ioc_eeh_freeze_status(struct phb *phb, uint64_t pe_number,
 				       uint8_t *freeze_state,
 				       uint16_t *pci_error_type,
-				       uint64_t *phb_status __unused)
+				       uint64_t *phb_status)
 {
 	struct p7ioc_phb *p = phb_to_p7ioc_phb(phb);
 	uint64_t peev_bit = PPC_BIT(pe_number & 0x3f);
@@ -542,6 +656,9 @@ static int64_t p7ioc_eeh_freeze_status(struct phb *phb, uint64_t pe_number,
 	else
 		*pci_error_type = OPAL_EEH_PCI_DMA_ERROR;
 
+	if (phb_status)
+		p7ioc_eeh_read_phb_status(p, (struct OpalIoP7IOCPhbErrorData *)
+					  phb_status);
 	return OPAL_SUCCESS;
 }
 
@@ -652,6 +769,20 @@ static int64_t p7ioc_eeh_freeze_clear(struct phb *phb, uint64_t pe_number,
 		p7ioc_phb_ioda_sel(p, IODA_TBL_PESTB, pe_number, false);
 		out_be64(p->regs + PHB_IODA_DATA0, 0);
 	}
+
+	return OPAL_SUCCESS;
+}
+
+static int64_t p7ioc_get_diag_data(struct phb *phb, void *diag_buffer,
+				   uint64_t diag_buffer_len)
+{
+	struct p7ioc_phb *p = phb_to_p7ioc_phb(phb);
+
+	if (diag_buffer_len < sizeof(struct OpalIoP7IOCPhbErrorData))
+		return OPAL_PARAMETER;
+
+	p7ioc_eeh_read_phb_status(p, (struct OpalIoP7IOCPhbErrorData *)
+				  diag_buffer);
 
 	return OPAL_SUCCESS;
 }
@@ -1054,7 +1185,7 @@ static uint8_t p7ioc_choose_bus(struct phb *phb __unused,
 /* p7ioc_phb_ioda_reset - Reset the IODA tables
  *
  * This reset the IODA tables in the PHB. It is called at
- * initialization time, on PHB reset, and can be called
+ * initiaopalization time, on PHB reset, and can be called
  * explicitly from OPAL
  */
 static int64_t p7ioc_ioda_reset(struct phb *phb)
@@ -1166,6 +1297,7 @@ static const struct phb_ops p7ioc_phb_ops = {
 	.choose_bus		= p7ioc_choose_bus,
 	.eeh_freeze_status	= p7ioc_eeh_freeze_status,
 	.eeh_freeze_clear	= p7ioc_eeh_freeze_clear,
+	.get_diag_data		= p7ioc_get_diag_data,
 	.phb_mmio_enable	= p7ioc_phb_mmio_enable,
 	.set_phb_mem_window	= p7ioc_set_phb_mem_window,
 	.map_pe_mmio_window	= p7ioc_map_pe_mmio_window,
