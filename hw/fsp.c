@@ -1394,3 +1394,32 @@ int64_t fsp_get_xive(uint32_t isn __unused, uint16_t *server, uint8_t *priority)
 
 	return OPAL_SUCCESS;
 }
+
+/* Called on a fast reset, make sure we aren't stuck with
+ * an accepted and never EOId PSI interrupt
+ */
+void fsp_psi_irq_reset(void)
+{
+	struct fsp_iopath *iop;
+	struct fsp *fsp;
+	unsigned int i;
+	uint64_t xivr;
+
+	printf("FSP: Hot reset !\n");
+
+	for (fsp = first_fsp; fsp; fsp = fsp->link) {
+		for (i = 0; i < fsp->iopath_count; i++) {
+			iop = &fsp->iopath[i];
+
+			/* Mask the interrupt & clean the XIVR */
+			xivr = 0x000000ff00000000;
+			xivr |=	IRQ_BUID(iop->interrupt) << 16;
+			out_be64(iop->gxhb_regs + PSIHB_XIVR, xivr);
+
+#if 0 /* Seems to checkstop ... */
+			/* Send a dummy EOI to make sure the ICP is clear */
+			icp_send_eoi(iop->interrupt);
+#endif
+		}
+	}
+}

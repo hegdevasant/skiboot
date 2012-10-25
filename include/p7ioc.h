@@ -281,6 +281,6 @@ extern int64_t p7ioc_phb_get_xive(struct p7ioc_phb *p, uint32_t isn,
 				  uint16_t *server, uint8_t *prio);
 extern int64_t p7ioc_phb_set_xive(struct p7ioc_phb *p, uint32_t isn,
 				  uint16_t server, uint8_t prio);
-
+extern void p7ioc_phb_reset(struct p7ioc_phb *p);
 
 #endif /* __P7IOC_H */

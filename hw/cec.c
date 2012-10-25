@@ -213,6 +213,17 @@ void cec_init(void)
 	pci_init_slots();
 }
 
+void cec_reset(void)
+{
+	unsigned int i;
+
+	for (i = 0; i < MAX_IO_HUBS; i++) {
+		if (!cec_iohubs[i] || !cec_iohubs[i]->ops->reset)
+			continue;
+		cec_iohubs[i]->ops->reset(cec_iohubs[i]);
+	}
+}
+
 static int64_t opal_pci_set_hub_tce_memory(uint64_t hub_id,
 					   uint64_t tce_mem_addr,
 					   uint64_t tce_mem_size)

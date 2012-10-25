@@ -1983,3 +1983,15 @@ void p7ioc_phb_add_nodes(struct p7ioc_phb *p)
 	dt_end_node();
 }
 
+void p7ioc_phb_reset(struct p7ioc_phb *p)
+{
+	/* Called from fast reset. We should do a full PHB reset,
+	 * but for now we just clean up the IODA tables.
+	 *
+	 * XXX That means we can have stuck interrupts. We really
+	 * want a full reset along with PERST of devices
+	 */
+	PHBDBG(p, "Hot reset !\n");
+	p7ioc_ioda_reset(&p->phb);
+}
+

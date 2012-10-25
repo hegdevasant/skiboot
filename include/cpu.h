@@ -152,6 +152,20 @@ static inline struct cpu_thread *this_cpu(void)
 	return __this_cpu;
 }
 
+/* Get the thread # of a cpu within the core */
+static inline uint32_t cpu_get_thread_index(struct cpu_thread *cpu)
+{
+	/* XXX Handle P8 */
+	return cpu->pir & 0x3;
+}
+
+/* Get the PIR of thread 0 of the same core */
+static inline uint32_t cpu_get_thread0(struct cpu_thread *cpu)
+{
+	/* XXX Handle P8 */
+	return cpu->pir & ~3;
+}
+
 /* Called when some error condition requires disabling a core */
 void cpu_disable_all_threads(struct cpu_thread *cpu);
 

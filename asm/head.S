@@ -134,6 +134,10 @@ boot_entry:
 	/* Make sure we are in SMT medium */
 	smt_medium
 
+	/* Initialize various SPRs */
+	bl init_shared_sprs
+	bl init_replicated_sprs
+
 	/* Check if we need to copy ourselves up and update %r30 to
 	 * be our new offset
 	 */
@@ -181,6 +185,9 @@ boot_entry:
 	li	%r0,1
 	std	%r0,0(%r3)
 
+	/* Clear our r13, we don't have a cpu thread struct yet */
+	li	%r13,0
+
 	/* Clear BSS before we try to use that stack */
 	li	%r0,0
 	LOAD_ADDR_FROM_TOC(%r3, _sbss)
@@ -191,6 +198,8 @@ boot_entry:
 1:	std	%r0,0(%r3)
 	addi	%r3,%r3,8
 	bdnz	1b
+
+	/* Jump to C */
 	bl	main_cpu_entry
 	b	.
 
@@ -205,6 +214,9 @@ secondary_wait:
 	ld	%r0,0(%r3)
 	cmpdi	%r0,0
 	beq	1b
+
+	/* Init some registers */
+	bl init_replicated_sprs
 
 	/* Switch to new runtime address */
 	mr	%r30,%r29
@@ -261,6 +273,99 @@ call_relocate:
 1:	/* Fatal relocate failure */
 	b	.
 
+/* This is a little piece of code that is copied down to
+ * 0x100 when doing a "fast reset"
+ */
+.global fast_reset_patch_start
+fast_reset_patch_start:	
+	smt_medium
+	LOAD_IMM64(%r30, SKIBOOT_BASE)
+	LOAD_IMM32(%r3, fast_reset_entry - __head)
+	add	%r3,%r30,%r3
+	mtctr	%r3
+	bctr
+.global fast_reset_patch_end
+fast_reset_patch_end:
+
+/* Fast reset code. We clean up the TLB and a few SPRs and
+ * return to C code. All CPUs do that, the CPU triggering the
+ * reset does it to itself last. The C code will sort out who
+ * the master is. We come from the trampoline above with
+ * r30 containing SKIBOOT_BASE
+ */
+fast_reset_entry:
+	/* Clear out SLB */
+	li	%r6,0
+	slbmte	%r6,%r6
+	slbia
+	ptesync
+
+	/* Get PIR, check if we are primary */
+	mfspr	%r31,SPR_PIR
+	andi.	%r0,%r31,3
+	bne	2f
+
+	/* Clean the TLB */
+	li	%r6,128
+	mtctr	%r6
+	li	%r7,0x800		/* IS field = 0b10 */
+	ptesync
+1:	tlbiel	%r7
+	addi	%r7,%r7,0x1000
+	bdnz	1b
+	ptesync
+
+	/* Clean other SPRs */
+	bl	init_shared_sprs
+2:	bl	init_replicated_sprs
+
+	/* Get a stack */
+	sldi	%r3,%r31,3
+	add	%r3,%r3,%r30
+	ld	%r1,(cpu_stacks - __head)(%r3)
+
+	/* Clean up initial frame */
+	li	%r3,0
+	std	%r3,0(%r1)
+	std	%r3,8(%r1)
+	std	%r3,16(%r1)
+
+	/* Get the CPU thread struct */
+	mulli	%r3,%r31,CPUTHREAD_SIZE
+	add	%r3,%r3,%r30
+	addis	%r3,%r3,(cpu_threads - __head)@ha
+	addi	%r13,%r3,(cpu_threads - __head)@l
+
+	/* Get our TOC */
+	addis	%r2,%r30,(__toc_start - __head)@ha
+	addi	%r2,%r2,(__toc_start - __head)@l
+
+	/* Go to C ! */
+	bl	fast_reboot
+	b	.
+
+/* Functions to initialize replicated and shared SPRs to sane
+ * values. This is called at boot and on soft-reset
+ */
+init_shared_sprs:
+	li	%r0,0
+	mtspr	SPR_SDR1, %r0
+	mtspr	SPR_AMOR, %r0
+
+	/* TSCR: doc recommended value */
+	LOAD_IMM32(%r3,0x88CC6880)
+	mtspr	SPR_TSCR, %r3
+
+	/* LPCR: sane value */
+	LOAD_IMM64(%r3,0x0070000000000004)
+	mtspr	SPR_LPCR, %r3
+
+	/* XXX TODO: Add more */
+	blr
+
+init_replicated_sprs:
+	/* XXX TODO: Add more */
+	blr
 
 /*
  *
@@ -381,6 +486,12 @@ opal_entry:
 	addis	%r2,%r2,(__toc_start - __head)@ha
 	addi	%r2,%r2,(__toc_start - __head)@l
 
+	/* Check for a reboot in progress */
+	LOAD_ADDR_FROM_TOC(%r12, reboot_in_progress)
+	lbz	%r12,0(%r12)
+	cmpwi	%r12,0
+	bne	3f
+
 #ifdef OPAL_TRACE_ENTRY
 	mr	%r3,%r1
 	bl	opal_trace_entry
@@ -422,11 +533,15 @@ opal_entry:
 	bl	opal_bad_token
 	b	1b
 
+3:	/* Reboot in progress, reject all calls */
+	li	%r3,OPAL_BUSY
+	b	1b
 
 .global start_kernel
 start_kernel:
 	sync
 	icbi	0,%r3
+	sync
 	isync
 	mtctr	%r3
 	mr	%r3,%r4

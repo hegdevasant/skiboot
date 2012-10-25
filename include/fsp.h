@@ -566,6 +566,7 @@ extern void fsp_psi_interrupt(uint32_t isn);
 extern unsigned int fsp_get_interrupts(uint32_t *psi_irqs, unsigned int max);
 extern int64_t fsp_set_xive(uint32_t isn, uint16_t server, uint8_t priority);
 extern int64_t fsp_get_xive(uint32_t isn, uint16_t *server, uint8_t *priority);
+extern void fsp_psi_irq_reset(void);
 
 /* NVRAM */
 extern void fsp_nvram_init(void);

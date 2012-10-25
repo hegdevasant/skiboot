@@ -110,6 +110,10 @@ void cpu_process_jobs(void)
 	void (*func)(void *);
 	void *data;
 
+	sync();
+	if (list_empty(&cpu->job_queue))
+		return;
+
 	lock(&cpu->job_lock);
 	while (true) {
 		if (list_empty(&cpu->job_queue))
@@ -486,6 +490,7 @@ void cpu_bringup(void)
 			smt_very_low();
 			sync();
 		}
+		smt_medium();
 	}
 
 	op_display(OP_LOG, OP_MOD_CPU, 0x0003);

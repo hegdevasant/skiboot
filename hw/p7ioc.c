@@ -119,12 +119,32 @@ static int64_t p7ioc_set_xive(struct io_hub *hub, uint32_t isn,
 	return rc;
 }
 
+static void p7ioc_reset(struct io_hub *hub)
+{
+	struct p7ioc *ioc = iohub_to_p7ioc(hub);
+	unsigned int i;
+
+	/* We could do a full cold reset of P7IOC but for now, let's
+	 * not bother and just try to clean up the interrupts as best
+	 * as possible
+	 */
+
+	/* XXX TODO: RGC interrupts */
+
+	printf("P7IOC: Hot reset !\n");
+
+	for (i = 0; i < P7IOC_NUM_PHBS; i++)
+		if (ioc->phbs[i].active)
+			p7ioc_phb_reset(&ioc->phbs[i]);
+}
+
 static const struct io_hub_ops p7ioc_hub_ops = {
 	.set_tce_mem	= NULL, /* No set_tce_mem for p7ioc, we use FMTC */
 	.get_diag_data	= p7ioc_get_diag_data,
 	.get_xive	= p7ioc_get_xive,
 	.set_xive	= p7ioc_set_xive,
 	.add_nodes	= p7ioc_add_nodes,
+	.reset		= p7ioc_reset,
 };
 
 struct io_hub *p7ioc_create_hub(const struct cechub_io_hub *hub, uint32_t id)

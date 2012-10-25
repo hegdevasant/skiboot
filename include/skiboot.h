@@ -72,5 +72,10 @@ extern void start_kernel(uint64_t entry, void* fdt,
 			 uint64_t mem_top) __noreturn;
 extern void start_kernel_secondary(uint64_t entry) __noreturn;
 
+/* Fast reboot support */
+extern void fast_reset(void);
+extern void __secondary_cpu_entry(void);
+extern void load_and_boot_kernel(bool is_reboot);
+
 #endif /* __SKIBOOT_H */
 

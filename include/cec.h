@@ -28,6 +28,9 @@ struct io_hub_ops {
 
 	/* Called to build the device-tree portion for that hub */
 	void (*add_nodes)(struct io_hub *hub);
+
+	/* Called on fast reset */
+	void (*reset)(struct io_hub *hub);
 };
 
 struct io_hub {
@@ -42,5 +45,6 @@ extern int64_t cec_set_xive(uint32_t isn, uint16_t server, uint8_t priority);
 
 extern void add_cec_nodes(void);
 extern void cec_init(void);
+extern void cec_reset(void);
 
 #endif /* __CEC_H */

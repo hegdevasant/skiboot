@@ -130,6 +130,8 @@ void *create_dtb(void)
 	size_t len = DEVICE_TREE_MAX_SIZE;
 
 	do {
+		if (fdt)
+			free(fdt);
 		lphandle = 0;
 		fdt_error = 0;
 		fdt = malloc(len);
@@ -168,7 +170,6 @@ void *create_dtb(void)
 		if (!fdt_error)
 			break;
 
-		free(fdt);
 		len *= 2;
 	} while (fdt_error == -FDT_ERR_NOSPACE);
 

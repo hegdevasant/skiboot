@@ -30,6 +30,7 @@
 #define SPR_PIR_MASK		0x03ff	/* Mask of implemented bits */
 
 /* SPR register definitions */
+#define SPR_SDR1	0x019
 #define SPR_TBRL	0x10c	/* RO: Timebase low */
 #define SPR_TBRU	0x10d	/* RO: Timebase high */
 #define SPR_SPRC	0x114	/* RW: Access to uArch SPRs (ex SCOMC) */
@@ -43,8 +44,11 @@
 #define SPR_HSPRG0	0x130	/* RW: Hypervisor scratch 0 */
 #define SPR_HSPRG1	0x131	/* RW: Hypervisor scratch 1 */
 #define SPR_TFMR	0x13d
+#define SPR_LPCR	0x13e
 #define SPR_HMER	0x150	/* Hypervisor Maintenance Exception */
 #define SPR_HMEER	0x151	/* HMER interrupt enable mask */
+#define SPR_AMOR	0x15d
+#define SPR_TSCR	0x399
 #define SPR_PIR		0x3ff	/* RO: Processor Identification */
 
 /* Bits in TFMR - control bits */
@@ -200,6 +204,15 @@ static inline void lwsync(void)
 {
 	asm volatile("lwsync" : : : "memory");
 }
+
+/*
+ * Cache sync
+ */
+static inline void sync_icache(void)
+{
+	asm volatile("sync; icbi 0,%0; sync; isync" : : "r" (0) : "memory");
+}
+
 
 /*
  * Byteswap load/stores

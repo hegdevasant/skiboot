@@ -111,6 +111,45 @@ static bool load_kernel(void)
 	return true;
 }
 
+void load_and_boot_kernel(bool is_reboot)
+{
+	op_display(OP_LOG, OP_MOD_INIT, 0x0006);
+
+	/* Load kernel LID */
+	if (!load_kernel()) {
+		op_display(OP_FATAL, OP_MOD_INIT, 1);
+		abort();
+	}
+
+	op_display(OP_LOG, OP_MOD_INIT, 0x0006);
+
+	/* We wait for the nvram read to complete here so we can
+	 * grab stuff from there such as the kernel arguments
+	 */
+	if (!is_reboot)
+		fsp_nvram_wait_open();
+
+	op_display(OP_LOG, OP_MOD_INIT, 0x0007);
+
+	/* Create the device tree blob to boot OS. */
+	fdt = create_dtb();
+	if (!fdt) {
+		op_display(OP_FATAL, OP_MOD_INIT, 2);
+		abort();
+	}
+
+	op_display(OP_LOG, OP_MOD_INIT, 0x0008);
+
+	/* Start the kernel */
+	if (!is_reboot)
+		op_panel_disable_src_echo();
+	cpu_give_self_os();
+
+	printf("INIT: Starting kernel at 0x%llx\n", kernel_entry);
+
+	start_kernel(kernel_entry, fdt, mem_top);
+}
+
 void main_cpu_entry(void)
 {
 	printf("SkiBoot starting...\n");
@@ -177,43 +216,12 @@ void main_cpu_entry(void)
 	/* Create the OPAL call table */
 	opal_table_init();
 
-	op_display(OP_LOG, OP_MOD_INIT, 0x0006);
-
-	/* Load kernel LID */
-	if (!load_kernel()) {
-		op_display(OP_FATAL, OP_MOD_INIT, 1);
-		abort();
-	}
-
-	op_display(OP_LOG, OP_MOD_INIT, 0x0006);
-
-	/* We wait for the nvram read to complete here so we can
-	 * grab stuff from there such as the kernel arguments
-	 */
-	fsp_nvram_wait_open();
-
-	op_display(OP_LOG, OP_MOD_INIT, 0x0007);
-
-	/* Create the device tree blob to boot OS. */
-	fdt = create_dtb();
-	if (!fdt) {
-		op_display(OP_FATAL, OP_MOD_INIT, 2);
-		abort();
-	}
-
-	op_display(OP_LOG, OP_MOD_INIT, 0x0008);
-
-	/* Start the kernel */
-	op_panel_disable_src_echo();
-	cpu_give_self_os();
-	start_kernel(kernel_entry, fdt, mem_top);
+	load_and_boot_kernel(false);
 }
 
-void secondary_cpu_entry(void)
+void __secondary_cpu_entry(void)
 {
 	struct cpu_thread *cpu = this_cpu();
-
-	printf("INIT: CPU PIR 0x%04x called in\n", cpu->pir);
 
 	/* Secondary CPU called in */
 	cpu_callin(cpu);
@@ -224,3 +232,13 @@ void secondary_cpu_entry(void)
 		smt_low();
 	}
 }
+
+void secondary_cpu_entry(void)
+{
+	struct cpu_thread *cpu = this_cpu();
+
+	printf("INIT: CPU PIR 0x%04x called in\n", cpu->pir);
+
+	__secondary_cpu_entry();
+}
+

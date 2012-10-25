@@ -144,6 +144,10 @@ opal_call(OPAL_CEC_POWER_DOWN, opal_cec_power_down);
 
 static int64_t opal_cec_reboot(void)
 {
+	/* Try a fast reset first */
+	fast_reset();
+
+	/* If that failed, talk to the FSP */
 	if (fsp_queue_msg(fsp_mkmsg(FSP_CMD_REBOOT, 0), fsp_freemsg))
 		return OPAL_INTERNAL_ERROR;
 

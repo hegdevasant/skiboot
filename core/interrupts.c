@@ -4,8 +4,15 @@
 #include <fsp.h>
 #include <interrupts.h>
 #include <opal.h>
+#include <io.h>
 #include <cec.h>
 #include <ccan/str/str.h>
+
+/* ICP registers */
+#define ICP_XIRR		0x4	/* 32-bit access */
+#define ICP_CPPR		0x4	/* 8-bit access */
+#define ICP_MFRR		0xc	/* 8-bit access */
+
 
 static uint32_t ics_phandle;
 
@@ -111,6 +118,37 @@ void add_opal_interrupts(void)
 	 * it is not a standard interrupt property
 	 */
 	dt_property("opal-interrupts", irqs, psi_irq_count * 4);
+}
+
+/* This is called on a fast reboot to sanitize the ICP. We set our priority
+ * to 0 to mask all interrupts and make sure no IPI is on the way
+ */
+void reset_cpu_icp(void)
+{
+	void *icp = (void *)this_cpu()->id->ibase;
+
+	/* Adjust for thread */
+	icp += 0x1000 * cpu_get_thread_index(this_cpu());
+
+	/* Clear pending IPIs */
+	out_8(icp + ICP_MFRR, 0xff);
+
+	/* Set priority to max, ignore all incoming interrupts, EOI IPIs */
+	out_8(icp + ICP_CPPR, 2);
+}
+
+/* Used by the PSI code to send an EOI during reset. This will also
+ * set the CPPR to 0 which should already be the case anyway
+ */
+void icp_send_eoi(uint32_t interrupt)
+{
+	void *icp = (void *)this_cpu()->id->ibase;
+
+	/* Adjust for thread */
+	icp += 0x1000 * cpu_get_thread_index(this_cpu());
+
+	/* Set priority to max, ignore all incoming interrupts */
+	out_be32(icp + ICP_XIRR, interrupt & 0xffffff);
 }
 
 static int64_t opal_set_xive(uint32_t isn, uint16_t server, uint8_t priority)

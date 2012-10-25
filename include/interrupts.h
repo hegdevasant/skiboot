@@ -127,4 +127,7 @@ extern void add_ics_node(void);
 extern void add_opal_interrupts(void);
 extern uint32_t get_ics_phandle(void);
 
+extern void reset_cpu_icp(void);
+extern void icp_send_eoi(uint32_t interrupt);
+
 #endif /* __INTERRUPTS_H */
