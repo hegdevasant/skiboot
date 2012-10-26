@@ -66,8 +66,8 @@
 #define PCI_CFG_PREF_MEM_LIMIT		0x0026
 #define PCI_CFG_PREF_MEM_BASE_U32	0x0028
 #define PCI_CFG_PREF_MEM_LIMIT_U32	0x002c
-#define PCI_CFG_PREF_IO_BASE_U16	0x0030
-#define PCI_CFG_PREF_IO_LIMIT_U16	0x0032
+#define PCI_CFG_IO_BASE_U16		0x0030
+#define PCI_CFG_IO_LIMIT_U16		0x0032
 #define PCI_CFG_BR_CAP			0x0034 /* Same as type 0 */
 #define PCI_CFG_BR_ROMBAR		0x0038 /* Different from type 0 */
 #define PCI_CFG_BR_INT_LINE		0x003c /* Same as type 0 */

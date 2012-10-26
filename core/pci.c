@@ -300,6 +300,21 @@ static bool pci_enable_bridge(struct phb *phb, struct pci_device *pd)
 	return true;
 }
 
+/* Clear up bridge resources */
+static void pci_cleanup_bridge(struct phb *phb, struct pci_device *pd)
+{
+	pci_cfg_write16(phb, pd->bdfn, PCI_CFG_IO_BASE_U16, 0xffff);
+	pci_cfg_write8(phb, pd->bdfn, PCI_CFG_IO_BASE, 0xf0);
+	pci_cfg_write16(phb, pd->bdfn, PCI_CFG_IO_LIMIT_U16, 0);
+	pci_cfg_write8(phb, pd->bdfn, PCI_CFG_IO_LIMIT, 0);
+	pci_cfg_write16(phb, pd->bdfn, PCI_CFG_MEM_BASE, 0xfff0);
+	pci_cfg_write16(phb, pd->bdfn, PCI_CFG_MEM_LIMIT, 0);
+	pci_cfg_write32(phb, pd->bdfn, PCI_CFG_PREF_MEM_BASE_U32, 0xffffffff);
+	pci_cfg_write16(phb, pd->bdfn, PCI_CFG_PREF_MEM_BASE, 0xfff0);
+	pci_cfg_write32(phb, pd->bdfn, PCI_CFG_PREF_MEM_LIMIT_U32, 0);
+	pci_cfg_write16(phb, pd->bdfn, PCI_CFG_PREF_MEM_LIMIT, 0);
+}
+
 
 /* pci_scan - Perform a recursive scan of the bus at bus_number
  *            populating the list passed as an argument. This also
@@ -397,6 +412,9 @@ static uint8_t pci_scan(struct phb *phb, uint8_t bus, uint8_t max_bus,
 
 		printf("PCI: Bridge %04x, bus: %02x..%02x %s scanning...\n",
 		       pd->bdfn, next_bus, max_bus, use_max ? "[use max]" : "");
+
+		/* Clear up bridge resources */
+		pci_cleanup_bridge(phb, pd);
 
 		/* Configure the bridge. This will enable power to the slot
 		 * if it's currently disabled, lift reset, etc...
