@@ -297,12 +297,15 @@ static bool pci_enable_bridge(struct phb *phb, struct pci_device *pd)
 
 	/* Clear error status */
 	pci_cfg_write16(phb, pd->bdfn, PCI_CFG_STAT, 0xffff);
+
 	return true;
 }
 
 /* Clear up bridge resources */
 static void pci_cleanup_bridge(struct phb *phb, struct pci_device *pd)
 {
+	uint16_t cmd;
+
 	pci_cfg_write16(phb, pd->bdfn, PCI_CFG_IO_BASE_U16, 0xffff);
 	pci_cfg_write8(phb, pd->bdfn, PCI_CFG_IO_BASE, 0xf0);
 	pci_cfg_write16(phb, pd->bdfn, PCI_CFG_IO_LIMIT_U16, 0);
@@ -313,6 +316,16 @@ static void pci_cleanup_bridge(struct phb *phb, struct pci_device *pd)
 	pci_cfg_write16(phb, pd->bdfn, PCI_CFG_PREF_MEM_BASE, 0xfff0);
 	pci_cfg_write32(phb, pd->bdfn, PCI_CFG_PREF_MEM_LIMIT_U32, 0);
 	pci_cfg_write16(phb, pd->bdfn, PCI_CFG_PREF_MEM_LIMIT, 0);
+
+	/* Note: This is a bit fishy but since we have closed all the
+	 * bridge windows above, it shouldn't be a problem. Basically
+	 * we enable Memory, IO and Bus Master on the bridge because
+	 * some versions of Linux will fail to do it themselves.
+	 */
+	pci_cfg_read16(phb, pd->bdfn, PCI_CFG_CMD, &cmd);
+	cmd |= PCI_CFG_CMD_IO_EN | PCI_CFG_CMD_MEM_EN;
+	cmd |= PCI_CFG_CMD_BUS_MASTER_EN;
+	pci_cfg_write16(phb, pd->bdfn, PCI_CFG_CMD, cmd);	
 }
 
 
@@ -325,6 +338,9 @@ static void pci_cleanup_bridge(struct phb *phb, struct pci_device *pd)
  *       in order to know what slots to scan and what not etc..
  *
  * XXX NOTE: We might want to enable ARI along the way...
+ *
+ * XXX NOTE: We might also want to setup the PCIe MPS/MRSS properly
+ *           here as Linux may or may not do it
  */
 static uint8_t pci_scan(struct phb *phb, uint8_t bus, uint8_t max_bus,
 			struct list_head *list, struct pci_device *parent)
