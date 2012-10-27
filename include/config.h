@@ -28,6 +28,14 @@
 /* Enable this to hookup SkiBoot log to the DVS console */
 #define DVS_CONSOLE		1
 
+/* Enable this to disable setting of the output pending event when
+ * sending things on the console. The FSP is very slow to consume
+ * and older kernels wait after each character during early boot so
+ * things get very slow. Eventually, we may want to create an OPAL
+ * API for the kernel to activate or deactivate that functionality
+ */
+#define DISABLE_CON_PENDING_EVT	1
+
 /* This is our main offset for relocation. All our buffers
  * are offset from that and our code relocates itself to
  * that location

@@ -102,8 +102,10 @@ static size_t fsp_write_vserial(struct fsp_serial *fs, const char *buf,
 		else
 			fs->out_poke = true;
 	}
+#ifdef DISABLE_CON_PENDING_EVT
 	opal_update_pending_evt(OPAL_EVENT_CONSOLE_OUTPUT,
 				OPAL_EVENT_CONSOLE_OUTPUT);
+#endif
 	return len;
 }
 
