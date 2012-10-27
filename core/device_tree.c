@@ -145,8 +145,7 @@ void *create_dtb(void)
 						  SKIBOOT_SIZE));
 		save_err(fdt_finish_reservemap(fdt));
 
-		dt_begin_node("device-tree");
-		dt_property_string("name", "device-tree");
+		dt_begin_node("");
 		add_dtb_model();
 		dt_property_string("compatible", "ibm,powernv");
 		dt_property_cell("#address-cells", 2);

@@ -409,7 +409,6 @@ void add_cpu_nodes(void)
 		sprintf(name, "PowerPC,POWER7@%u", no);
 		dt_begin_node(name);
 		*strchr(name, '@') = '\0';
-		dt_property_string("name", name);
 		dt_property_string("device_type", "cpu");
 		dt_property_string("status", "okay");
 		dt_property_cell("reg", no);
