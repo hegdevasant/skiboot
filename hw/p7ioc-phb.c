@@ -319,8 +319,18 @@ static int64_t p7ioc_sm_slot_power_on(struct p7ioc_phb *p)
 
 		/* If the power is not on, turn it on now */
 		if (!(reg & PHB_PCIE_SLOTCTL2_PWR_EN_STAT)) {
+			/*
+			 * The hotplug override register will not properly
+			 * initiate the poweron sequence unless bit 0
+			 * transitions from 0 to 1. Since it can already be
+			 * set to 1 as a result of a previous power-on
+			 * operation (even if the slot power is now off)
+			 * we need to first clear it, then set it to 1 or
+			 * nothing will happen
+			 */
 			reg = in_be64(p->regs + PHB_HOTPLUG_OVERRIDE);
 			reg &= ~(0x8c00000000000000ul);
+			out_be64(p->regs + PHB_HOTPLUG_OVERRIDE, reg);
 			reg |= 0x8400000000000000ul;
 			out_be64(p->regs + PHB_HOTPLUG_OVERRIDE, reg);
 			p->state = P7IOC_PHB_STATE_SPUP_STABILIZE_DELAY;
@@ -1192,6 +1202,7 @@ static int64_t p7ioc_ioda_reset(struct phb *phb)
 {
 	struct p7ioc_phb *p = phb_to_p7ioc_phb(phb);
 	unsigned int i;
+	uint64_t reg64;
 
 	/* XXX NOTE: Figure out the hub number & HRT business */
 
@@ -1281,6 +1292,14 @@ static int64_t p7ioc_ioda_reset(struct phb *phb)
 	p7ioc_phb_ioda_sel(p, IODA_TBL_M64DT, 0, true);
 	for (i = 0; i < 127; i++)
 		out_be64(p->regs + PHB_IODA_DATA0, 0);
+
+	/* Clear up the TCE cache */
+	reg64 = in_be64(p->regs + PHB_PHB2_CONFIG);
+	reg64 &= ~PHB_PHB2C_64B_TCE_EN;
+	out_be64(p->regs + PHB_PHB2_CONFIG, reg64);
+	reg64 |= PHB_PHB2C_64B_TCE_EN;
+	out_be64(p->regs + PHB_PHB2_CONFIG, reg64);
+	in_be64(p->regs + PHB_PHB2_CONFIG);
 
 	return OPAL_SUCCESS;
 }
@@ -1428,6 +1447,61 @@ void p7ioc_phb_setup(struct p7ioc *ioc, uint8_t index, bool active)
 	 * get a useful OPAL ID for it
 	 */
 	pci_register_phb(&p->phb);
+}
+
+/* Synchronous PEST code used at boot */
+static void p7ioc_phb_sync_perst(struct p7ioc_phb *p)
+{
+	uint64_t reg;
+	unsigned int timeout;
+
+	/* XXX This is only needed if the slot is powered up ...
+	 *
+	 * It seems that the slots are off after we do a hot
+	 * reset sequence, so we probably want to consider
+	 * turning power with PERST asserted or something like
+	 * that in that case...
+	 */
+
+	/* Disable link to avoid training issues */
+	reg = in_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL);
+	PHBDBG("[PERST] old TRAIN_CTL: 0x%016llx\n", reg);
+	reg |= PHB_PCIE_DLP_TCTX_DISABLE;
+	PHBDBG("[PERST] wr  TRAIN_CTL: 0x%016llx\n", reg);
+	out_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL, reg);
+
+	/* Wait for link disabled status */
+	for (timeout = 0; timeout < 12; timeout++) {
+		reg = in_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL);
+		if (reg & PHB_PCIE_DLP_TCRX_DISABLED)
+			break;
+		time_wait_ms(10);
+	}
+
+	PHBDBG("[PERST] new TRAIN_CTL: 0x%016llx\n", reg);
+
+	/* Link disable not set, what do we do ? We seem to hit that
+	 * when doing the boot-time PERST and so far nothing bad
+	 * seem to have come from it but definitely worth investigating
+	 */
+	if (!(reg & PHB_PCIE_DLP_TCRX_DISABLED))
+		PHBERR(p, "Timeout waiting for link disable !\n");
+
+	/* Issue PERST. We keep PERST asserted for 1s like pHyp */
+	reg = in_be64(p->regs + PHB_RESET);
+	reg &= ~0x2000000000000000ul;
+	out_be64(p->regs + PHB_RESET, reg);
+	time_wait_ms(1000);
+	reg |= 0x2000000000000000ul;
+	out_be64(p->regs + PHB_RESET, reg);
+
+	/* Wait 200ms for things to settle */
+	time_wait_ms(200);
+
+	/* Restore link control */
+	reg = in_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL);
+	reg &= ~PHB_PCIE_DLP_TCTX_DISABLE;
+	out_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL, reg);
 }
 
 static bool p7ioc_phb_wait_dlp_reset(struct p7ioc_phb *p)
@@ -1702,7 +1776,9 @@ int64_t p7ioc_phb_init(struct p7ioc_phb *p)
 	 * register, so let's do it. We shoud probably check that
 	 * the value makes sense...
 	 */
-	(void)in_be64(p->regs_asb + PHB_VERSION);
+	val = in_be64(p->regs_asb + PHB_VERSION);
+
+	PHBDBG(p, "Version reg: %llx\n", val);
 
 	/*
 	 * Configure AIB operations
@@ -1776,6 +1852,9 @@ int64_t p7ioc_phb_init(struct p7ioc_phb *p)
 	 * in a later step.
 	 * Firmware will verify in a later step whether the PCI-E link
 	 * has been established.
+	 *
+	 * NOTE: We perform a PERST at the end of the init sequence so
+	 * we could probably skip that link training.
 	 */
 	out_be64(p->regs + PHB_RESET,                      0xE800000000000000);
 
@@ -1810,7 +1889,8 @@ int64_t p7ioc_phb_init(struct p7ioc_phb *p)
 		 PHB_PHB2C_32BIT_MSI_EN	|
 		 PHB_PHB2C_IO_EN	|
 		 PHB_PHB2C_64BIT_MSI_EN	|
-		 PHB_PHB2C_M32_EN);
+		 PHB_PHB2C_M32_EN |
+		 PHB_PHB2C_64B_TCE_EN);
 
 	/* Init_18..xx: Reset all IODA tables */
 	p7ioc_ioda_reset(&p->phb);
@@ -1904,6 +1984,11 @@ int64_t p7ioc_phb_init(struct p7ioc_phb *p)
 	/* Mark the PHB as functional which enables all the various sequences */
 	p->state = P7IOC_PHB_STATE_FUNCTIONAL;
 
+	/* This is an addition to the standard sequence, we perform a PERST
+	 * with the links disabled to work around a training issue
+	 */
+	p7ioc_phb_sync_perst(p);
+
 	return OPAL_SUCCESS;
 
  failed:
@@ -1985,13 +2070,6 @@ void p7ioc_phb_add_nodes(struct p7ioc_phb *p)
 
 void p7ioc_phb_reset(struct p7ioc_phb *p)
 {
-	/* Called from fast reset. We should do a full PHB reset,
-	 * but for now we just clean up the IODA tables.
-	 *
-	 * XXX That means we can have stuck interrupts. We really
-	 * want a full reset along with PERST of devices
-	 */
-	PHBDBG(p, "Hot reset !\n");
 	p7ioc_ioda_reset(&p->phb);
 }
 

@@ -134,7 +134,7 @@ void reset_cpu_icp(void)
 	out_8(icp + ICP_MFRR, 0xff);
 
 	/* Set priority to max, ignore all incoming interrupts, EOI IPIs */
-	out_8(icp + ICP_CPPR, 2);
+	out_be32(icp + ICP_XIRR, 2);
 }
 
 /* Used by the PSI code to send an EOI during reset. This will also

@@ -76,6 +76,9 @@ extern void start_kernel_secondary(uint64_t entry) __noreturn;
 extern void fast_reset(void);
 extern void __secondary_cpu_entry(void);
 extern void load_and_boot_kernel(bool is_reboot);
+extern void cleanup_tlb(void);
+extern void init_shared_sprs(void);
+extern void init_replicated_sprs(void);
 
 #endif /* __SKIBOOT_H */
 

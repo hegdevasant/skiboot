@@ -300,24 +300,8 @@ fast_reset_entry:
 	slbia
 	ptesync
 
-	/* Get PIR, check if we are primary */
+	/* Get PIR */
 	mfspr	%r31,SPR_PIR
-	andi.	%r0,%r31,3
-	bne	2f
-
-	/* Clean the TLB */
-	li	%r6,128
-	mtctr	%r6
-	li	%r7,0x800		/* IS field = 0b10 */
-	ptesync
-1:	tlbiel	%r7
-	addi	%r7,%r7,0x1000
-	bdnz	1b
-	ptesync
-
-	/* Clean other SPRs */
-	bl	init_shared_sprs
-2:	bl	init_replicated_sprs
 
 	/* Get a stack */
 	sldi	%r3,%r31,3
@@ -344,9 +328,22 @@ fast_reset_entry:
 	bl	fast_reboot
 	b	.
 
+.global cleanup_tlb
+cleanup_tlb:
+	/* Clean the TLB */
+	li	%r3,128
+	mtctr	%r3
+	li	%r4,0x800		/* IS field = 0b10 */
+	ptesync
+1:	tlbiel	%r4
+	addi	%r4,%r4,0x1000
+	bdnz	1b
+	ptesync
+
 /* Functions to initialize replicated and shared SPRs to sane
  * values. This is called at boot and on soft-reset
  */
+.global init_shared_sprs
 init_shared_sprs:
 	li	%r0,0
 	mtspr	SPR_SDR1, %r0
@@ -363,6 +360,7 @@ init_shared_sprs:
 	/* XXX TODO: Add more */
 	blr
 
+.global init_replicated_sprs
 init_replicated_sprs:
 	/* XXX TODO: Add more */
 	blr

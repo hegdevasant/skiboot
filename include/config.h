@@ -25,6 +25,9 @@
 /* Enable this for mambo console */
 //#define MAMBO_CONSOLE		1
 
+/* Enable this to make fast reboot clear memory */
+//#define FAST_REBOOT_CLEARS_MEMORY	1
+
 /* Enable this to hookup SkiBoot log to the DVS console */
 #define DVS_CONSOLE		1
 

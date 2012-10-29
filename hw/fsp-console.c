@@ -9,6 +9,7 @@
 #include <console.h>
 #include <opal.h>
 #include <device_tree.h>
+#include <time.h>
 
 struct fsp_serbuf_hdr {
 	u16	partition_id;
@@ -42,6 +43,7 @@ struct fsp_serial {
 static struct fsp_serial fsp_serials[MAX_SERIAL];
 static bool got_intf_query;
 static bool got_assoc_resp;
+static bool got_deassoc_resp;
 
 static void fsp_pokemsg_reclaim(struct fsp_msg *msg)
 {
@@ -102,7 +104,7 @@ static size_t fsp_write_vserial(struct fsp_serial *fs, const char *buf,
 		else
 			fs->out_poke = true;
 	}
-#ifdef DISABLE_CON_PENDING_EVT
+#ifndef DISABLE_CON_PENDING_EVT
 	opal_update_pending_evt(OPAL_EVENT_CONSOLE_OUTPUT,
 				OPAL_EVENT_CONSOLE_OUTPUT);
 #endif
@@ -253,6 +255,7 @@ static bool fsp_con_msg_hmc(u32 cmd_sub_mod, struct fsp_msg *msg)
 	if ((cmd_sub_mod >> 8) == 0xe08b) {
 		printf("Got unassociate response, status 0x%02x\n",
 		       cmd_sub_mod & 0xff);
+		got_deassoc_resp = true;
 		return true;
 	}
 	switch(cmd_sub_mod) {
@@ -598,6 +601,107 @@ void fsp_console_poll(void)
 		}
 		unlock(&con_lock);
 	}
+}
+
+static void flush_all_input(void)
+{
+	unsigned int i;
+
+	lock(&con_lock);
+ 	for (i = 0; i < MAX_SERIAL; i++) {
+		struct fsp_serial *fs = &fsp_serials[i];
+		struct fsp_serbuf_hdr *sb = fs->in_buf;
+
+		if (fs->log_port)
+			continue;
+
+		sb->next_out = sb->next_in;
+	}
+	unlock(&con_lock);
+}
+		
+static bool send_all_hvsi_close(void)
+{
+	unsigned int i;
+	bool has_hvsi = false;
+	static const uint8_t close_packet[] = { 0xfe, 6, 0, 1, 0, 3 };
+
+	lock(&con_lock);
+ 	for (i = 0; i < MAX_SERIAL; i++) {
+		struct fsp_serial *fs = &fsp_serials[i];
+		struct fsp_serbuf_hdr *sb = fs->out_buf;
+		unsigned int space, timeout = 10;
+
+		if (fs->log_port)
+			continue;
+		if (fs->rsrc_id == 0xffff)
+			continue;
+		has_hvsi = true;
+
+		/* Do we have room ? Wait a bit if not */
+		while(timeout--) {
+			space = (sb->next_out + SER_BUF_DATA_SIZE -
+				 sb->next_in - 1) % SER_BUF_DATA_SIZE;
+			if (space >= 6)
+				break;
+			time_wait_ms(500);
+		}
+		fsp_write_vserial(fs, close_packet, 6);
+	}
+	unlock(&con_lock);
+
+	return has_hvsi;
+}
+
+static void reopen_all_hvsi(void)
+{
+	unsigned int i;
+
+ 	for (i = 0; i < MAX_SERIAL; i++) {
+		struct fsp_serial *fs = &fsp_serials[i];
+		if (fs->rsrc_id == 0xffff)
+			continue;
+		printf("FSP: Deassociating HVSI console %d\n", i);
+		got_deassoc_resp = false;
+		fsp_sync_msg(fsp_mkmsg(FSP_CMD_UNASSOC_SERIAL, 2,
+				       (fs->rsrc_id << 16) | 1, i), true);
+		/* XXX add timeout ? */
+		while(!got_deassoc_resp)
+			fsp_poll();
+	}
+ 	for (i = 0; i < MAX_SERIAL; i++) {
+		struct fsp_serial *fs = &fsp_serials[i];
+		if (fs->rsrc_id == 0xffff)
+			continue;
+		printf("FSP: Reassociating HVSI console %d\n", i);
+		got_assoc_resp = false;
+		fsp_sync_msg(fsp_mkmsg(FSP_CMD_ASSOC_SERIAL, 2,
+				       (fs->rsrc_id << 16) | 1, i), true);
+		/* XXX add timeout ? */
+		while(!got_assoc_resp)
+			fsp_poll();
+	}
+}
+
+void fsp_console_reset(void)
+{
+	printf("FSP: Console reset !\n");
+
+	/* This is called on a fast-reset. To work around issues with HVSI
+	 * initial negociation, before we reboot the kernel, we flush all
+	 * input and send an HVSI close packet.
+	 */
+	flush_all_input();
+
+	/* Returns false if there is no HVSI console */
+	if (!send_all_hvsi_close())
+		return;
+
+	time_wait_ms(500);
+	
+	flush_all_input();
+
+	reopen_all_hvsi();
 }
 
 void add_opal_console_nodes(void)

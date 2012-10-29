@@ -166,6 +166,12 @@ static inline uint32_t cpu_get_thread0(struct cpu_thread *cpu)
 	return cpu->pir & ~3;
 }
 
+static inline bool cpu_is_thread0(struct cpu_thread *cpu)
+{
+	/* XXX Handle P8 */
+	return (cpu->pir & 3) == 0;
+}
+
 /* Called when some error condition requires disabling a core */
 void cpu_disable_all_threads(struct cpu_thread *cpu);
 

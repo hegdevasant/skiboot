@@ -560,6 +560,7 @@ extern void fsp_console_init(void);
 extern void fsp_console_poll(void);
 extern void add_opal_console_nodes(void);
 extern void add_stdout_path(void);
+extern void fsp_console_reset(void);
 
 /* Interrupts */
 extern void fsp_psi_interrupt(uint32_t isn);
@@ -572,6 +573,5 @@ extern void fsp_psi_irq_reset(void);
 extern void fsp_nvram_init(void);
 extern void add_opal_nvram_node(void);
 extern void fsp_nvram_wait_open(void);
-
 
 #endif /* __FSP_H */

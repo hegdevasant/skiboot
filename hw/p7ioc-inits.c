@@ -7,6 +7,7 @@
 #include <p7ioc-regs.h>
 #include <io.h>
 #include <processor.h>
+#include <time.h>
 
 #undef DUMP_CI_ROUTING
 #undef DUMP_REG_WRITES
@@ -1031,4 +1032,66 @@ int64_t p7ioc_inits(struct p7ioc *ioc)
 
 	return OPAL_SUCCESS;
 
+}
+
+void p7ioc_reset(struct io_hub *hub)
+{
+	struct p7ioc *ioc = iohub_to_p7ioc(hub);
+	unsigned int i;
+
+	/* We could do a full cold reset of P7IOC but for now, let's
+	 * not bother and just try to clean up the interrupts as best
+	 * as possible
+	 */
+
+	/* XXX TODO: RGC interrupts */
+
+	printf("P7IOC: Clearing IODA...\n");
+
+	/* First clear all IODA tables and wait a bit */
+	for (i = 0; i < 6; i++)
+		p7ioc_phb_reset(&ioc->phbs[i]);
+	time_wait_ms(100);
+
+	/* Hard reset the PHBs */
+	for (i = 0; i < 6; i++) {
+		/* CI port registers offset */
+		uint64_t ci_off = 0x1000 * (i + 2);
+		/* PHB registers via ASB */
+		uint64_t ph_off = 0x10000 * i;
+		uint64_t rreg;
+
+		printf("P7IOC: Hard reset PHBs %d\n", i);
+
+		/* CI port LEM mask */
+		REGW(0x3d0218 | ci_off,	0xa4f4000000000000ul);
+		/* PHB LEM mask */
+		REGW(0xc18 | ph_off,	0xadb650c9808dd051ul);
+		/* Clear CI LEM */
+		REGW(0x3d0208 | ci_off, 0x5b0b000000000000ul);
+
+		/* Reset PHB */
+		rreg =  0;/*PPC_BIT(12 + i*2);*/ /* CI port config reset */
+		rreg |= PPC_BIT(13 + i*2);	/* CI port func reset */
+		rreg |= PPC_BIT(32 + i);	/* PHBn config reset */
+		REGW(0x3e1c00, rreg);
+		REGW(0x3e1c00, 0);
+	}
+	/* Clear fence shadow WOF */
+	REGW(0x3ec018, 0);
+
+	/* Wait a bit (needed ?) */
+	time_wait_ms(100);
+
+	printf("P7IOC: Reconfigure PHBs\n");
+
+	p7ioc_init_PHBs(ioc);
+
+	/* Restore CI LEMs */
+	REGW(0x3d2220, 0x0000000000000000);
+	REGW(0x3d3220, 0x0000000000000000);
+	REGW(0x3d4220, 0x0000000000000000);
+	REGW(0x3d5220, 0x0000000000000000);
+	REGW(0x3d6220, 0x0000000000000000);
+	REGW(0x3d7220, 0x0000000000000000);
 }

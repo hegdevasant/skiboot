@@ -8,6 +8,7 @@
 #include <interrupts.h>
 #include <cec.h>
 #include <time.h>
+#include <memory.h>
 
 /*
  * To get control of all threads, we sreset them via XSCOM after
@@ -182,6 +183,16 @@ void fast_reset(void)
 	}
 }
 
+static void cleanup_cpu_state(void)
+{
+	if (cpu_is_thread0(this_cpu())) {
+		cleanup_tlb();
+		init_shared_sprs();
+	}
+	init_replicated_sprs();
+	reset_cpu_icp();
+}
+
 /* Entry from asm after a fast reset */
 void fast_reboot(void)
 {
@@ -207,7 +218,7 @@ void fast_reboot(void)
 			sync();
 		}
 		smt_medium();
-		reset_cpu_icp();
+		cleanup_cpu_state();
 		__secondary_cpu_entry();
 	}
 
@@ -250,11 +261,14 @@ void fast_reboot(void)
 	fast_boot_release = false;
 	reboot_in_progress = 0;
 
-	/* Clean up our ICP, mask all interrupts */
-	reset_cpu_icp();
+	/* Cleanup ourselves */
+	cleanup_cpu_state();
 
 	/* Set our state to active */
 	this_cpu()->state = cpu_state_active;
+
+	/* Poke the consoles (see comments in the code there) */
+	fsp_console_reset();
 
 	/* Reset/EOI the PSI interrupt */
 	fsp_psi_irq_reset();
@@ -262,5 +276,9 @@ void fast_reboot(void)
 	/* Reset CEC */
 	cec_reset();
 
+	/* Clear memory */
+#ifdef FAST_REBOOT_CLEARS_MEMORY
+	memory_reset();
+#endif
 	load_and_boot_kernel(true);
 }

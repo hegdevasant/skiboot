@@ -980,3 +980,32 @@ void pci_add_nodes(struct phb *phb, struct pci_lsi_state *lstate)
 		pci_add_one_node(phb, pd, lstate, 0);
 }
 
+static void __pci_reset(struct list_head *list)
+{
+	struct pci_device *pd;
+
+	while ((pd = list_pop(list, struct pci_device, link)) != NULL) {
+		__pci_reset(&pd->children);
+		free(pd);
+	}
+}
+
+void pci_reset(void)
+{
+	unsigned int i;
+
+	printf("PCI: Clearing all devices...\n");
+
+	lock(&pci_lock);
+
+	/* XXX Do those in parallel (at least the power up
+	 * state machine could be done in parallel)
+	 */
+	for (i = 0; i < PCI_MAX_PHBs; i++) {
+		if (!phbs[i])
+			continue;
+		__pci_reset(&phbs[i]->devices);
+	}
+	unlock(&pci_lock);
+}
+

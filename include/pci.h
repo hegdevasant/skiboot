@@ -338,5 +338,6 @@ extern void pci_std_swizzle_irq_map(struct pci_device *pd,
 
 /* Initialize all PCI slots */
 extern void pci_init_slots(void);
+extern void pci_reset(void);
 
 #endif /* __PCI_H */
