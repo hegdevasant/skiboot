@@ -10,6 +10,8 @@
 #include <opal.h>
 #include <elf.h>
 #include <cec.h>
+#include <libfdt/libfdt.h>
+
 
 /*
  * Boot semaphore, incremented by each CPU calling in
@@ -147,6 +149,7 @@ void load_and_boot_kernel(bool is_reboot)
 
 	printf("INIT: Starting kernel at 0x%llx\n", kernel_entry);
 
+	fdt_set_boot_cpuid_phys(fdt, this_cpu()->pir);
 	start_kernel(kernel_entry, fdt, mem_top);
 }
 
