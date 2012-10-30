@@ -736,12 +736,19 @@ void add_opal_console_nodes(void)
 
 void add_stdout_path(void)
 {
-	/* XXX FIXME: For now we set T1 as default if it exist and is open */
-	if (fsp_serials[1].open)
-		dt_property_string("linux,stdout-path",
-				   "/ibm,opal/consoles/serial@1");
-	else 
+	/* If DVS is connected, use that as a console. Else, check for
+	 * available serial ports, and finally if nothing's connected,
+	 * leave the command line alone and let the kernel pick whatever
+	 * it wants
+	 */
+	if (fsp_serials[0].open)
 		dt_property_string("linux,stdout-path",
 				   "/ibm,opal/consoles/serial@0");
+	else if (fsp_serials[1].open)
+		dt_property_string("linux,stdout-path",
+				   "/ibm,opal/consoles/serial@1");
+	else if (fsp_serials[2].open)
+		dt_property_string("linux,stdout-path",
+				   "/ibm,opal/consoles/serial@2");
 }
 
