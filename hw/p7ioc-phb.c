@@ -1465,9 +1465,9 @@ static void p7ioc_phb_sync_perst(struct p7ioc_phb *p)
 
 	/* Disable link to avoid training issues */
 	reg = in_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL);
-	PHBDBG("[PERST] old TRAIN_CTL: 0x%016llx\n", reg);
+	PHBDBG(p, "[PERST] old TRAIN_CTL: 0x%016llx\n", reg);
 	reg |= PHB_PCIE_DLP_TCTX_DISABLE;
-	PHBDBG("[PERST] wr  TRAIN_CTL: 0x%016llx\n", reg);
+	PHBDBG(p, "[PERST] wr  TRAIN_CTL: 0x%016llx\n", reg);
 	out_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL, reg);
 
 	/* Wait for link disabled status */
@@ -1478,7 +1478,7 @@ static void p7ioc_phb_sync_perst(struct p7ioc_phb *p)
 		time_wait_ms(10);
 	}
 
-	PHBDBG("[PERST] new TRAIN_CTL: 0x%016llx\n", reg);
+	PHBDBG(p, "[PERST] new TRAIN_CTL: 0x%016llx\n", reg);
 
 	/* Link disable not set, what do we do ? We seem to hit that
 	 * when doing the boot-time PERST and so far nothing bad
@@ -2070,6 +2070,72 @@ void p7ioc_phb_add_nodes(struct p7ioc_phb *p)
 
 void p7ioc_phb_reset(struct p7ioc_phb *p)
 {
-	p7ioc_ioda_reset(&p->phb);
+	struct p7ioc *ioc = p->ioc;
+	uint64_t fence, fbits, ci_idx, rreg;
+	unsigned int i;
+
+	/* Check our fence status. The fence bits we care about are
+	 * two bits per PHB at IBM bit location 14 and 15 + 4*phb
+	 */
+	fbits = 0x0003000000000000 >> (p->index * 4);
+	fence = in_be64(ioc->regs + P7IOC_CHIP_FENCE_SHADOW);
+	PHBDBG(p, "PHB reset... fence=%llx fbit=%llx\n", fence, fbits);
+
+	/* If not fenced and already functional, let's do an IODA reset
+	 * to clear pending DMAs and wait a bit for thing to settle
+	 */
+	if (p->state == P7IOC_PHB_STATE_FUNCTIONAL && !(fence & fbits)) {
+		PHBDBG(p, "  ioda reset ...\n");
+		p7ioc_ioda_reset(&p->phb);
+		time_wait_ms(100);
+	}
+
+	/* CI port index */
+	ci_idx = p->index + 2;
+
+	/* Reset register bits for this PHB */
+	rreg =  0;/*PPC_BIT(8 + ci_idx * 2);*/	/* CI port config reset */
+	rreg |= PPC_BIT(9 + ci_idx * 2);	/* CI port func reset */
+	rreg |= PPC_BIT(32 + p->index);		/* PHBn config reset */
+
+	/* Mask various errors during reset and clear pending errors */
+	out_be64(ioc->regs + P7IOC_CIn_LEM_ERR_MASK(ci_idx),
+		 0xa4f4000000000000ul);
+	out_be64(p->regs_asb + PHB_LEM_ERROR_MASK, 0xadb650c9808dd051ul);
+	out_be64(ioc->regs + P7IOC_CIn_LEM_FIR(ci_idx), 0);
+
+	/* We need to retry in case the fence doesn't lift due to a
+	 * problem with lost credits (HW guys). How many times ?
+	 */
+#define MAX_PHB_RESET_RETRIES	5
+	for (i = 0; i < MAX_PHB_RESET_RETRIES; i++) {
+		PHBDBG(p, "  reset try %d...\n", i);
+		/* Apply reset */
+		out_be64(ioc->regs + P7IOC_CCRR, rreg);
+		time_wait_ms(1);
+		out_be64(ioc->regs + P7IOC_CCRR, 0);
+
+		/* Check if fence lifed */
+		fence = in_be64(ioc->regs + P7IOC_CHIP_FENCE_SHADOW);
+		PHBDBG(p, "  fence: %llx...\n", fence);
+		if (!(fence & fbits))
+			break;
+	}
+
+	/* Reset failed, not much to do, maybe add an error return */
+	if (fence & fbits) {
+		PHBERR(p, "Reset failed, fence still set !\n");
+		p->state = P7IOC_PHB_STATE_BROKEN;
+		return;
+	}
+
+	/* Wait a bit */
+	time_wait_ms(100);
+
+	/* Re-initialize the PHB */
+	p7ioc_phb_init(p);
+
+	/* Restore the CI error mask */
+	out_be64(ioc->regs + P7IOC_CIn_LEM_ERR_MASK_AND(ci_idx), 0);
 }
 

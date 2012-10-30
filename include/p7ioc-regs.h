@@ -51,6 +51,19 @@
 #define P7IOC_CI_UPSTREAM_PORT		0
 #define P7IOC_CI_RGC_PORT		1
 
+/* Other random chip registers */
+#define P7IOC_CHIP_FENCE_SHADOW		0x3ec010
+#define P7IOC_CCRR			0x3e1c00
+
+/* CI registers */
+#define P7IOC_CIn_BASE(n)		(0x3d0000 | ((n) * 0x1000))
+#define P7IOC_CIn_LEM_FIR(n)		(P7IOC_CIn_BASE(n) + 0x200)
+#define P7IOC_CIn_LEM_FIR_AND(n)	(P7IOC_CIn_BASE(n) + 0x208)
+#define P7IOC_CIn_LEM_FIR_OR(n)		(P7IOC_CIn_BASE(n) + 0x210)
+#define P7IOC_CIn_LEM_ERR_MASK(n)	(P7IOC_CIn_BASE(n) + 0x218)
+#define P7IOC_CIn_LEM_ERR_MASK_AND(n)	(P7IOC_CIn_BASE(n) + 0x220)
+#define P7IOC_CIn_LEM_ERR_MASK_OR(n)	(P7IOC_CIn_BASE(n) + 0x228)
+
 /*
  * PHB registers
  */
