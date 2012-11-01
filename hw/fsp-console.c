@@ -663,8 +663,8 @@ static void reopen_all_hvsi(void)
 			continue;
 		printf("FSP: Deassociating HVSI console %d\n", i);
 		got_deassoc_resp = false;
-		fsp_sync_msg(fsp_mkmsg(FSP_CMD_UNASSOC_SERIAL, 2,
-				       (fs->rsrc_id << 16) | 1, i), true);
+		fsp_sync_msg(fsp_mkmsg(FSP_CMD_UNASSOC_SERIAL, 1,
+				       (i << 16) | 1), true);
 		/* XXX add timeout ? */
 		while(!got_deassoc_resp)
 			fsp_poll();
