@@ -66,7 +66,7 @@ vpath %.S $(SRC)
 default: all
 
 include/asm-offsets.h: asm/asm-offsets.s
-	$(call Q,GN, ./make_offsets $< >$@, $@)
+	$(call Q,GN, ./make_offsets.sh $< >$@, $@)
 
 TARGET = skiboot
 
