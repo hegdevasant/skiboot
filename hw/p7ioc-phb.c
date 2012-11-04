@@ -1227,7 +1227,7 @@ static int64_t p7ioc_ioda_reset(struct phb *phb)
 	for (i = 0; i < 8; i++) {
 		out_be64(p->regs + PHB_IODA_DATA0,
 			 SETFIELD(IODA_XIVT_PRIORITY, 0ull, 0xff));
-		p->xive_cache[i] = SETFIELD(IODA_XIVT_PRIORITY, 0ull, 0xff);
+		p->lxive_cache[i] = SETFIELD(IODA_XIVT_PRIORITY, 0ull, 0xff);
 	}
 
 	/* Init_22..23: Cleanup the MXIVT
@@ -1240,7 +1240,7 @@ static int64_t p7ioc_ioda_reset(struct phb *phb)
 	for (i = 0; i < 256; i++) {
 		out_be64(p->regs + PHB_IODA_DATA0,
 			 SETFIELD(IODA_XIVT_PRIORITY, 0ull, 0xff));
-		p->xive_cache[i+8] = SETFIELD(IODA_XIVT_PRIORITY, 0ull, 0xff);
+		p->mxive_cache[i] = SETFIELD(IODA_XIVT_PRIORITY, 0ull, 0xff);
 	}
 
 	/* Init_24..25: Cleanup the MVT */
@@ -1352,10 +1352,10 @@ int64_t p7ioc_phb_get_xive(struct p7ioc_phb *p, uint32_t isn,
 		/* Unused LSIs */
 		if (irq > 7 || irq == 6)
 			return OPAL_PARAMETER;
-		xcache = &p->xive_cache[irq];
+		xcache = &p->lxive_cache[irq];
 	} else if (fbuid >= p->buid_msi && fbuid < (p->buid_msi + 0x10)) {
 		irq = isn & 0xff;
-		xcache = &p->xive_cache[irq + 8];
+		xcache = &p->mxive_cache[irq];
 	} else
 		return OPAL_PARAMETER;
 
@@ -1381,11 +1381,11 @@ int64_t p7ioc_phb_set_xive(struct p7ioc_phb *p, uint32_t isn,
 		/* Unused LSIs */
 		if (irq > 7 || irq == 6)
 			return OPAL_PARAMETER;
-		xcache = &p->xive_cache[irq];
+		xcache = &p->lxive_cache[irq];
 	} else if (fbuid >= p->buid_msi && fbuid < (p->buid_msi + 0x10)) {
 		table = IODA_TBL_MXIVT;
 		irq = isn & 0xff;
-		xcache = &p->xive_cache[irq + 8];
+		xcache = &p->mxive_cache[irq];
 	} else
 		return OPAL_PARAMETER;
 
