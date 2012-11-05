@@ -1,3 +1,4 @@
+/* CC0 (Public domain) - see LICENSE file for details */
 #ifndef CCAN_CHECK_TYPE_H
 #define CCAN_CHECK_TYPE_H
 #include "config.h"
@@ -11,7 +12,7 @@
  * argument is of the expected type.  No type promotion of the expression is
  * done: an unsigned int is not the same as an int!
  *
- * check_type() always evaluates to 1.
+ * check_type() always evaluates to 0.
  *
  * If your compiler does not support typeof, then the best we can do is fail
  * to compile if the sizes of the types are unequal (a less complete check).
@@ -38,7 +39,7 @@
  *
  * Example:
  *	// Do subtraction to get to enclosing type, but make sure that
- *	// pointer is of correct type for that member. 
+ *	// pointer is of correct type for that member.
  *	#define container_of(mbr_ptr, encl_type, mbr)			\
  *		(check_types_match((mbr_ptr), &((encl_type *)0)->mbr),	\
  *		 ((encl_type *)						\
