@@ -68,6 +68,10 @@ struct dt_node *dt_next(const struct dt_node *root, const struct dt_node *prev);
 struct dt_property *dt_find_property(const struct dt_node *node,
 				     const char *name);
 
+/* Find a property by name, check if it's the same as val. */
+bool dt_has_node_property(const struct dt_node *node,
+			  const char *name, const char *val);
+
 /* Free a node (and any children). */
 void dt_free(struct dt_node *node);
 

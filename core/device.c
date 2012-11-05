@@ -155,6 +155,17 @@ struct dt_property *dt_find_property(const struct dt_node *node,
 	return NULL;
 }
 
+bool dt_has_node_property(const struct dt_node *node,
+			  const char *name, const char *val)
+{
+	struct dt_property *p = dt_find_property(node, name);
+
+	if (!p)
+		return false;
+
+	return p->len == strlen(val) + 1 && memcmp(p->prop, val, p->len) == 0;
+}
+
 void dt_free(struct dt_node *node)
 {
 	struct dt_node *child;

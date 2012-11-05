@@ -100,6 +100,13 @@ int main(void)
 	ggc1 = dt_new(root, __rodata_start);
 	assert(ggc1->name == __rodata_start);
 
+	/* Test string node. */
+	dt_add_property_string(ggc1, "somestring", "someval");
+	assert(dt_has_node_property(ggc1, "somestring", "someval"));
+	assert(!dt_has_node_property(ggc1, "somestrin", "someval"));
+	assert(!dt_has_node_property(ggc1, "somestring", "someva"));
+	assert(!dt_has_node_property(ggc1, "somestring", "somevale"));
+
 	/* No leaks for valgrind! */
 	dt_free(root);
 	return 0;
