@@ -14,7 +14,7 @@ SUBDIRS += $(LIBCDIR)/string
 
 STRING_OBJS = strcat.o strchr.o strcmp.o strcpy.o strlen.o strncmp.o \
 	      strncpy.o strstr.o memset.o memcpy.o memmove.o memchr.o \
-	      memcmp.o strcasecmp.o strncasecmp.o strtok.o
+	      memcmp.o strcasecmp.o strncasecmp.o strtok.o strdup.o
 STRING = $(LIBCDIR)/string/built-in.o
 $(STRING): $(STRING_OBJS:%=$(LIBCDIR)/string/%)
 
