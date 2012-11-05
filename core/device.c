@@ -94,18 +94,9 @@ struct dt_property *dt_add_property_string(struct dt_node *node,
 	return dt_add_property(node, name, value, strlen(value)+1);
 }
 
-struct dt_property *dt_add_property_cell(struct dt_node *node,
-					 const char *name,
-					 u32 cell)
-{
-	/* Big-endian, like FDT. */
-	cell = cpu_to_fdt32(cell);
-	return dt_add_property(node, name, &cell, sizeof(cell));
-}
-
-struct dt_property *dt_add_property_multicell(struct dt_node *node,
-					      const char *name,
-					      int count, ...)
+struct dt_property *__dt_add_property_cell(struct dt_node *node,
+					   const char *name,
+					   int count, ...)
 {
 	struct dt_property *p;
 	u32 *val;

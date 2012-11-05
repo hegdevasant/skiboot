@@ -79,6 +79,15 @@ int main(void)
 	}
 	assert(n == 6);
 
+	dt_add_property_cell(c1, "some-property", 1, 2, 3);
+	p = dt_find_property(c1, "some-property");
+	assert(p);
+	assert(strcmp(p->name, "some-property") == 0);
+	assert(p->len == sizeof(u32) * 3);
+	assert(fdt32_to_cpu(*(u32 *)p->prop) == 1);
+	assert(fdt32_to_cpu(*((u32 *)p->prop + 1)) == 2);
+	assert(fdt32_to_cpu(*((u32 *)p->prop + 2)) == 3);
+
 	/* Test freeing a single node */
 	assert(!list_empty(&gc1->children));
 	dt_free(ggc1);
