@@ -19,6 +19,9 @@
 /* Special ELF sections */
 #define __force_data		__section(".force.data")
 
+/* Readonly section start and end. */
+extern char __rodata_start[], __rodata_end[];
+
 /* General utilities */
 #define prerror(fmt...)	do { fprintf(stderr, fmt); } while(0)
 

@@ -7,6 +7,9 @@
  * An in-memory representation of a node in the device tree.
  *
  * This is trivially flattened into an fdt.
+ *
+ * Note that the add_* routines will make a copy of the name if it's not
+ * a read-only string (ie. usually a string literal).
  */
 struct dt_property {
 	struct list_node list;
@@ -33,11 +36,10 @@ struct dt_node *dt_new_root(const char *name);
 /* Graft a root node into this tree. */
 void dt_attach_root(struct dt_node *parent, struct dt_node *root);
 
-/* Add a child node: uses name in place. */
+/* Add a child node. */
 struct dt_node *dt_new(struct dt_node *parent, const char *name);
 
-/* Add a property node, various forms: uses name in place,
- * but val is copied. */
+/* Add a property node, various forms. */
 struct dt_property *dt_add_property(struct dt_node *node,
 				    const char *name,
 				    const void *val, size_t size);

@@ -3,6 +3,26 @@
 #include <skiboot.h>
 #include <libfdt/libfdt.h>
 
+static bool is_rodata(const void *p)
+{
+	return ((char *)p >= __rodata_start && (char *)p < __rodata_end);
+}
+
+static const char *take_name(const char *name)
+{
+	if (!is_rodata(name) && !(name = strdup(name))) {
+		prerror("Failed to allocate copy of name");
+		abort();
+	}
+	return name;
+}
+
+static void free_name(const char *name)
+{
+	if (!is_rodata(name))
+		free((char *)name);
+}
+
 static struct dt_node *new_node(const char *name)
 {
 	struct dt_node *node = malloc(sizeof *node);
@@ -11,7 +31,7 @@ static struct dt_node *new_node(const char *name)
 		abort();
 	}
 
-	node->name = name;
+	node->name = take_name(name);
 	node->parent = NULL;
 	list_head_init(&node->properties);
 	list_head_init(&node->children);
@@ -51,7 +71,7 @@ static struct dt_property *new_property(struct dt_node *node,
 		abort();
 	}
 	assert(!dt_find_property(node, name));
-	p->name = name;
+	p->name = take_name(name);
 	p->priv = NULL;
 	p->len = size;
 	list_add_tail(&node->properties, &p->list);
@@ -152,11 +172,14 @@ void dt_free(struct dt_node *node)
 	while ((child = list_top(&node->children, struct dt_node, list)))
 		dt_free(child);
 
-	while ((p = list_pop(&node->properties, struct dt_property, list)))
+	while ((p = list_pop(&node->properties, struct dt_property, list))) {
+		free_name(p->name);
 		free(p);
+	}
 
 	if (node->parent)
 		list_del_from(&node->parent->children, &node->list);
+	free_name(node->name);
 	free(node);
 }
 

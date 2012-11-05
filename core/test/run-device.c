@@ -1,3 +1,10 @@
+#include <skiboot.h>
+
+/* Override this for testing. */
+char __rodata_start[16];
+
+#define __rodata_end (__rodata_start + sizeof(__rodata_start))
+
 #include "../device.c"
 #include <assert.h>
 
@@ -76,6 +83,13 @@ int main(void)
 	assert(!list_empty(&gc1->children));
 	dt_free(ggc1);
 	assert(list_empty(&gc1->children));
+
+	/* Test rodata logic. */
+	assert(!is_rodata("hello"));
+	assert(is_rodata(__rodata_start));
+	strcpy(__rodata_start, "name");
+	ggc1 = dt_new(root, __rodata_start);
+	assert(ggc1->name == __rodata_start);
 
 	/* No leaks for valgrind! */
 	dt_free(root);
