@@ -241,6 +241,7 @@ void cpu_bringup(void)
 		if (!stack) {
 			prerror("CPU: Failed to allocate stack !\n");
 			t->state = cpu_state_unavailable;
+			cpu_remove_node(t);
 			break;
 		}
 		cpu_stacks[t->pir] = t->stack = stack + STACK_SIZE - 256;
@@ -260,7 +261,7 @@ void cpu_bringup(void)
 		    t->state != cpu_state_active)
 			continue;
 
-		/* Add a callin timeout ? */
+		/* Add a callin timeout ?  If so, call cpu_remove_node(t). */
 		while (t->state != cpu_state_active) {
 			smt_very_low();
 			sync();

@@ -123,6 +123,9 @@ extern void cpu_bringup(void);
 /* This is called by secondaries as they call in */
 extern void cpu_callin(struct cpu_thread *cpu);
 
+/* For cpus which fail to call in. */
+extern void cpu_remove_node(const struct cpu_thread *t);
+
 extern struct cpu_thread *find_cpu_by_chip_id(u32 id);
 extern struct cpu_thread *find_active_cpu_by_chip_id(u32 id);
 extern struct cpu_thread *find_cpu_by_pir(u32 pir);

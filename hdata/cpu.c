@@ -324,6 +324,30 @@ static bool __cpu_parse(void)
 	return true;
 }	
 
+/* FIXME: Move this out to core/cpu.c */
+void cpu_remove_node(const struct cpu_thread *t)
+{
+	struct dt_node *cpus, *i;
+
+	cpus = find_cpus();
+
+	/* Find this cpu node */
+	for (i = dt_first(cpus); i; i = dt_next(cpus, i)) {
+		struct dt_property *p;
+
+		if (!dt_has_node_property(i, "device_type", "cpu"))
+			continue;
+		p = dt_find_property(i, "reg");
+		if (dt_property_get_cell(p, 0) == t->id->process_interrupt_line) {
+			dt_free(i);
+			return;
+		}
+	}
+	prerror("CPU: Could not find cpu node %i to remove!\n",
+		t->id->process_interrupt_line);
+	abort();
+}
+
 void cpu_parse(void)
 {
 	if (!__cpu_parse()) {
