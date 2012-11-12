@@ -1,8 +1,8 @@
 #ifndef __MEMORY_H
 #define __MEMORY_H
 
-/* This populates msareas list. */
-extern uint64_t memory_parse(void);
+/* This populate the @memory dt nodes. */
+extern void memory_parse(void);
 
 extern void memory_reset(void);
 

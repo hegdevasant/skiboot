@@ -10,6 +10,7 @@
 #include <opal.h>
 #include <elf.h>
 #include <cec.h>
+#include <device.h>
 #include <libfdt/libfdt.h>
 
 
@@ -22,7 +23,6 @@ enum ipl_state ipl_state = ipl_initial;
 
 static uint64_t kernel_entry;
 static uint64_t kernel_top;
-static uint64_t mem_top;
 static void *fdt;
 bool cec_ipl_temp_side;
 struct dt_node *dt_root;
@@ -116,6 +116,13 @@ static bool load_kernel(void)
 
 void load_and_boot_kernel(bool is_reboot)
 {
+	uint64_t mem_top;
+	struct dt_property *memprop;
+
+	memprop = dt_find_property(dt_root, DT_PRIVATE "maxmem");
+	mem_top = (u64)dt_property_get_cell(memprop, 0) << 32
+		| dt_property_get_cell(memprop, 1);
+
 	op_display(OP_LOG, OP_MOD_INIT, 0x0006);
 
 	/* Load kernel LID */
@@ -168,7 +175,7 @@ void main_cpu_entry(void)
 	init_locks();
 
 	/* Get the machine description (sets dt_root) */
-	parse_machine(&mem_top);
+	parse_machine();
 
 	/* Collect some global parameters from SPIRA */
 	fetch_global_params();

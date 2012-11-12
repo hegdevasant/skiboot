@@ -183,7 +183,7 @@ static void get_msareas(struct dt_node *root,
 	}
 }
 
-uint64_t __memory_parse(struct dt_node *root)
+bool __memory_parse(struct dt_node *root)
 {
 	struct HDIF_common_hdr *ms_vpd;
 	const struct msvpd_ms_addr_config *msac;
@@ -194,13 +194,13 @@ uint64_t __memory_parse(struct dt_node *root)
 	if (!ms_vpd || !HDIF_check(ms_vpd, MSVPD_HDIF_SIG)) {
 		prerror("MS VPD: invalid id field at %p\n", ms_vpd);
 		op_display(OP_FATAL, OP_MOD_MEM, 0x0000);
-		return 0;
+		return false;
 	}
 	if (spira.ntuples.ms_vpd.act_len < sizeof(*ms_vpd)) {
 		prerror("MS VPD: invalid size %u\n",
 			spira.ntuples.ms_vpd.act_len);
 		op_display(OP_FATAL, OP_MOD_MEM, 0x0001);
-		return 0;
+		return false;
 	}
 
 	printf("MS VPD: is at %p\n", ms_vpd);
@@ -209,15 +209,18 @@ uint64_t __memory_parse(struct dt_node *root)
 	if (!CHECK_SPPTR(msac) || size < sizeof(*msac)) {
 		prerror("MS VPD: bad msac size %u @ %p\n", size, msac);
 		op_display(OP_FATAL, OP_MOD_MEM, 0x0002);
-		return 0;
+		return false;
 	}
 	printf("MS VPD: MSAC is at %p\n", msac);
+
+	dt_add_property_u64(dt_root, DT_PRIVATE "maxmem",
+			    msac->max_configured_ms_address);
 
 	tcms = HDIF_get_idata(ms_vpd, MSVPD_IDATA_TOTAL_CONFIG_MS, &size);
 	if (!CHECK_SPPTR(tcms) || size < sizeof(*tcms)) {
 		prerror("MS VPD: Bad tcms size %u @ %p\n", size, tcms);
 		op_display(OP_FATAL, OP_MOD_MEM, 0x0003);
-		return 0;
+		return false;
 	}
 	printf("MS VPD: TCMS is at %p\n", tcms);
 
@@ -230,19 +233,15 @@ uint64_t __memory_parse(struct dt_node *root)
 
 	printf("MS VPD: Total MB of RAM: 0x%llx\n", tcms->total_in_mb);
 
-	return msac->max_configured_ms_address;
+	return true;
 }
 
-uint64_t memory_parse(void)
+void memory_parse(void)
 {
-	uint64_t max_addr;
-
-	max_addr = __memory_parse(dt_root);
-	if (!max_addr) {
+	if (!__memory_parse(dt_root)) {
 		prerror("MS VPD: Failed memory init !\n");
 		abort();
 	}
-	return max_addr;
 }
 
 #ifdef FAST_REBOOT_CLEARS_MEMORY

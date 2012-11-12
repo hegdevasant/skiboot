@@ -64,12 +64,10 @@ bool spira_check_ptr(const void *ptr, const char *file, unsigned int line)
 	return false;
 }
 
-void parse_machine(uint64_t *mem_top)
+void parse_machine(void)
 {
 	dt_root = dt_new_root("");
 
 	cpu_parse();
-	*mem_top = memory_parse();
-	if (!*mem_top)
-		abort();
+	memory_parse();
 }

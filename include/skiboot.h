@@ -76,7 +76,7 @@ extern void start_kernel(uint64_t entry, void* fdt,
 extern void start_kernel_secondary(uint64_t entry) __noreturn;
 
 /* Get description of machine (eg. from paca).  Initializes dt_root. */
-extern void parse_machine(uint64_t *mem_top);
+extern void parse_machine(void);
 
 /* Root of device tree. */
 extern struct dt_node *dt_root;
