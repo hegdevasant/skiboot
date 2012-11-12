@@ -3,6 +3,7 @@
 #include <opal.h>
 #include <lock.h>
 #include <device_tree.h>
+#include <device.h>
 
 //#define DBG(fmt...)	printf("RTC: " fmt)
 #define DBG(fmt...)	do { } while(0)
@@ -349,11 +350,12 @@ void fsp_nvram_wait_open(void)
 		fsp_poll();
 }
 
-void add_opal_nvram_node(void)
+void add_opal_nvram_node(struct dt_node *opal)
 {
-	dt_begin_node("nvram");
-	dt_property_cell("#bytes", nvram_size);
-	dt_property_string("compatible", "ibm,opal-nvram");
-	dt_end_node();
+	struct dt_node *nvram;
+
+	nvram = dt_new(opal, "nvram");
+	dt_add_property_cell(nvram, "#bytes", nvram_size);
+	dt_add_property_string(nvram, "compatible", "ibm,opal-nvram");
 }
 

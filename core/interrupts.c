@@ -34,50 +34,6 @@ uint32_t get_psi_interrupt(uint32_t chip_id)
 	return irq;
 }
 
-void add_icp_nodes(void)
-{
-	struct cpu_thread *t;
-	char name[sizeof("interrupt-controller@")
-		  + STR_MAX_CHARS(t->id->ibase)];
-	static const char p7_icp_compat[] =
-		"IBM,ppc-xicp\0IBM,power7-xicp";
-
-	/* XXX FIXME: Hard coded #threads */
-	for_each_available_cpu(t) {
-		u32 irange[2];
-		u64 reg[2 * 4];
-
-		if (t->id->verify_exists_flags & CPU_ID_SECONDARY_THREAD)
-			continue;
-
-		/* One page is enough for a handful of regs. */
-		reg[0] = cleanup_addr(t->id->ibase);
-		reg[1] = 4096;
-		reg[2] = cleanup_addr(t->id->ibase + 0x1000);
-		reg[3] = 4096;
-		reg[4] = cleanup_addr(t->id->ibase + 0x2000);
-		reg[5] = 4096;
-		reg[6] = cleanup_addr(t->id->ibase + 0x3000);
-		reg[7] = 4096;
-
-		sprintf(name, "interrupt-controller@%llx", reg[0]);
-		dt_begin_node(name);
-		dt_property("compatible", p7_icp_compat, sizeof(p7_icp_compat));
-
-		irange[0] = t->id->process_interrupt_line; /* Index */
-		irange[1] = 4;				   /* num servers */
-		dt_property("ibm,interrupt-server-ranges",
-			    irange, sizeof(irange));
-		dt_property("interrupt-controller", NULL, 0);
-		dt_property("reg", reg, sizeof(reg));
-		dt_property_cell("#address-cells", 0);
-		dt_property_cell("#interrupt-cells", 1);
-		dt_property_string("device_type",
-				   "PowerPC-External-Interrupt-Presentation");
-		dt_end_node();
-	}
-}
-
 uint32_t get_ics_phandle(void)
 {
 	struct dt_node *i;
@@ -90,7 +46,7 @@ uint32_t get_ics_phandle(void)
 	abort();
 }
 
-void add_opal_interrupts(void)
+void add_opal_interrupts(struct dt_node *opal)
 {
 	/* We support up to 32 chips, thus 32 PSI interrupts */
 #define MAX_PSI_IRQS	32
@@ -108,7 +64,7 @@ void add_opal_interrupts(void)
 	/* The opal-interrupts property has one cell per interrupt,
 	 * it is not a standard interrupt property
 	 */
-	dt_property("opal-interrupts", irqs, psi_irq_count * 4);
+	dt_add_property(opal, "opal-interrupts", irqs, psi_irq_count * 4);
 }
 
 /* This is called on a fast reboot to sanitize the ICP. We set our priority

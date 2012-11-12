@@ -558,7 +558,7 @@ extern int fsp_fetch_data(uint8_t flags, uint16_t id, uint32_t sub_id,
 extern void fsp_console_preinit(void);
 extern void fsp_console_init(void);
 extern void fsp_console_poll(void);
-extern void add_opal_console_nodes(void);
+extern void add_opal_console_nodes(struct dt_node *opal);
 extern void add_stdout_path(void);
 extern void fsp_console_reset(void);
 
@@ -571,7 +571,7 @@ extern void fsp_psi_irq_reset(void);
 
 /* NVRAM */
 extern void fsp_nvram_init(void);
-extern void add_opal_nvram_node(void);
+extern void add_opal_nvram_node(struct dt_node *opal);
 extern void fsp_nvram_wait_open(void);
 
 #endif /* __FSP_H */

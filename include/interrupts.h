@@ -124,7 +124,7 @@ extern uint32_t get_psi_interrupt(uint32_t chip_id);
 
 extern void add_icp_nodes(void);
 extern void add_ics_node(void);
-extern void add_opal_interrupts(void);
+extern void add_opal_interrupts(struct dt_node *opal);
 extern uint32_t get_ics_phandle(void);
 
 extern void reset_cpu_icp(void);

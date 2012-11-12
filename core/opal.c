@@ -7,6 +7,7 @@
 #include <cpu.h>
 #include <interrupts.h>
 #include <op-panel.h>
+#include <device.h>
 
 /* Pending events to signal via opal_poll_events */
 uint64_t opal_pending_events;
@@ -58,28 +59,25 @@ void add_opal_nodes(void)
 {
 	uint64_t base, entry, size;
 	extern uint32_t opal_entry;
+	struct dt_node *opal;
 
 	base = SKIBOOT_BASE;
 	size = SKIBOOT_SIZE;
 	entry = (uint64_t)&opal_entry;
 
-	dt_begin_node("ibm,opal");
-	dt_property_cell("#address-cells", 0);
-	dt_property_cell("#size-cells", 0);
-	dt_property_string("compatible", "ibm,opal-v2");
-	dt_property_cells("opal-base-address", 2, base >> 32,
-			  base & 0xffffffff);
-	dt_property_cells("opal-entry-address", 2, entry >> 32,
-			  entry & 0xffffffff);
-	dt_property_cells("opal-runtime-size", 2, size >> 32,
-			  size & 0xffffffff);
-	add_opal_interrupts();
-	add_opal_console_nodes();
-	add_opal_nvram_node();
-	add_opal_oppanel_node();
+	opal = dt_new(dt_root, "ibm,opal");
+	dt_add_property_cell(opal, "#address-cells", 0);
+	dt_add_property_cell(opal, "#size-cells", 0);
+	dt_add_property_string(opal, "compatible", "ibm,opal-v2");
+	dt_add_property_u64(opal, "opal-base-address", base);
+	dt_add_property_u64(opal, "opal-entry-address", entry);
+	dt_add_property_u64(opal, "opal-runtime-size", size);
+	add_opal_interrupts(opal);
+	add_opal_console_nodes(opal);
+	add_opal_nvram_node(opal);
+	add_opal_oppanel_node(opal);
 	//add_opal_firmware_node();
 	//add_opal_errlog_node();
-	dt_end_node();
 }
 
 void opal_update_pending_evt(uint64_t evt_mask, uint64_t evt_values)

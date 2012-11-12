@@ -162,8 +162,6 @@ void *create_dtb(const struct dt_node *root)
 		/* Interrupt, CPU and memory nodes are in dt root. */
 		from_dt_node(root);
 
-		add_icp_nodes();
-		add_opal_nodes();
 		add_cec_nodes();
 		add_chosen_node();
 		dt_end_node();

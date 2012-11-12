@@ -199,6 +199,9 @@ void main_cpu_entry(void)
 	/* Create the OPAL call table */
 	opal_table_init();
 
+	/* Add OPAL-specific node to dt_root. */
+	add_opal_nodes();
+
 	load_and_boot_kernel(false);
 }
 

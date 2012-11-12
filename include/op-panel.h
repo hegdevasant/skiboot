@@ -45,6 +45,7 @@ enum op_module {
 extern void op_display(enum op_severity, enum op_module, uint16_t code);
 
 extern void op_panel_disable_src_echo(void);
-extern void add_opal_oppanel_node(void);
+struct dt_node;
+extern void add_opal_oppanel_node(struct dt_node *opal);
 
 #endif /* __OP_PANEL_H */
