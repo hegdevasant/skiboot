@@ -55,30 +55,6 @@ static const char *cpu_state(u32 flags)
 	return "**UNKNOWN**";
 }
 
-static struct cpu_thread *populate_cpu_thread(const struct HDIF_cpu_id *id,
-					      unsigned int index)
-{
-	u32 state;
-	enum cpu_thread_state st;
-
-	state = (id->verify_exists_flags & CPU_ID_VERIFY_MASK) >>
-		CPU_ID_VERIFY_SHIFT;
-	switch(state) {
-	case CPU_ID_VERIFY_USABLE_NO_FAILURES:
-	case CPU_ID_VERIFY_USABLE_FAILURES:
-		printf("CPU[%i]: PIR=%i RES=%i OK\n",
-		       index, id->pir, id->process_interrupt_line);
-		st = cpu_state_present;
-		break;
-	default:
-		printf("CPU[%i]: PIR=%i RES=%i UNAVAILABLE\n",
-		       index, id->pir, id->process_interrupt_line);
-		st = cpu_state_unavailable;
-	}
-
-	return init_cpu_thread(id->pir, st, id);
-}
-
 static struct dt_node *add_cpu_node(struct dt_node *cpus,
 				 const struct HDIF_common_hdr *paca,
 				 const struct HDIF_cpu_id *id)
@@ -171,20 +147,11 @@ static struct dt_node *add_cpu_node(struct dt_node *cpus,
 	return cpu;
 }
 
-static struct dt_node *dt_root;
-
-void early_init_boot_cpu_thread(void)
+const struct HDIF_cpu_id *get_boot_id(void)
 {
 	const struct HDIF_common_hdr *paca = spira.ntuples.paca.addr;
 	const struct HDIF_cpu_id *id = NULL;
 	uint32_t boot_pir = mfspr(SPR_PIR);
-	struct cpu_thread *t;
-	struct dt_node *cpus, *cpu;
-
-	dt_root = dt_new_root("cpus-root");
-	cpus = dt_new(dt_root, "cpus");
-	dt_add_property_cell(cpus, "#address-cells", 2);
-	dt_add_property_cell(cpus, "#size-cells", 1);
 
 	if (boot_pir > SPR_PIR_MASK) {
 		prerror("Invalid boot pir %u\n", boot_pir);
@@ -218,32 +185,14 @@ void early_init_boot_cpu_thread(void)
 			abort();
 		}
 		if (id->pir == boot_pir)
-			break;
+			return id;
 	}
 
-	if (paca_index(paca) == spira.ntuples.paca.act_cnt) {
-		prerror("Boot cpu PIR %u not found!\n", boot_pir);
-		abort();
-	}
-
-	cpu = add_cpu_node(cpus, paca, id);
-	if (!cpu)
-		abort();
-
-	t = populate_cpu_thread(id, paca_index(paca));
-	if (!t)
-		abort();
-
-	if (t->state != cpu_state_present) {
-		prerror("CPU: Boot CPU unavailable!\n");
-		abort();
-	}
-
-	t->state = cpu_state_active;
-	t->stack = boot_stack_top;
-	cpu_stacks[t->pir] = t->stack;
-	__this_cpu = boot_cpu = t;
+	prerror("Boot cpu PIR %u not found!\n", boot_pir);
+	abort();
 }
+
+static struct dt_node *dt_root;
 
 static struct dt_node *find_cpus(void)
 {
@@ -295,8 +244,13 @@ static void add_u32_sorted(u32 arr[], u32 new, unsigned num)
 static bool __cpu_parse(void)
 {
 	const struct HDIF_common_hdr *paca;
+	struct dt_node *cpus;
 	uint32_t boot_pir = mfspr(SPR_PIR);
-	struct dt_node *cpus = find_cpus();
+
+	dt_root = dt_new_root("cpus-root");
+	cpus = dt_new(dt_root, "cpus");
+	dt_add_property_cell(cpus, "#address-cells", 2);
+	dt_add_property_cell(cpus, "#size-cells", 1);
 
 	paca = spira.ntuples.paca.addr;
 	if (!HDIF_check(paca, "SPPACA")) {
@@ -315,7 +269,7 @@ static bool __cpu_parse(void)
 
 	for_each_paca(paca) {
 		const struct HDIF_cpu_id *id;
-		u32 size;
+		u32 size, state;
 
 		id = HDIF_get_idata(paca, 2, &size);
 
@@ -334,15 +288,26 @@ static bool __cpu_parse(void)
 			return false;
 		}
 
-		/* This one is already done. */
-		if (id->pir == boot_pir)
-			continue;
+		switch ((id->verify_exists_flags & CPU_ID_VERIFY_MASK) >>
+			CPU_ID_VERIFY_SHIFT) {
+		case CPU_ID_VERIFY_USABLE_NO_FAILURES:
+		case CPU_ID_VERIFY_USABLE_FAILURES:
+			state = cpu_state_present;
+			break;
+		default:
+			state = cpu_state_unavailable;
+		}
 
-		if (!populate_cpu_thread(id, paca_index(paca)))
-			return false;
+		printf("CPU[%i]: PIR=%i RES=%i %s\n",
+		       paca_index(paca), id->pir, id->process_interrupt_line,
+		       state == cpu_state_present ? "OK" : "UNAVAILABLE");
 
-		/* Only cpus we found. */
-		if (cpu_threads[id->pir].state != cpu_state_present)
+		/* Don't re-init boot thread; that's done by core. */
+		if (id->pir != boot_pir)
+			init_cpu_thread(id->pir, state, id);
+
+		/* Only cpus we have/will bring up get a node. */
+		if (state != cpu_state_present)
 			continue;
 
 		/* Secondary threads don't get their own node. */

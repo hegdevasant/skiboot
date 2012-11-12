@@ -108,15 +108,14 @@ struct cpu_thread {
  */
 extern unsigned long cpu_secondary_start;
 
-/* Boot CPU, set after early_init_boot_cpu_thread(). */
+/* Boot CPU. */
 extern struct cpu_thread *boot_cpu;
 
 /* Initialize cpu_threads[pir] */
 struct cpu_thread *init_cpu_thread(u32 pir, enum cpu_thread_state state,
 				   const struct HDIF_cpu_id *id);
 
-/* This sets up the cpu_thread structure for the boot cpu. */
-extern void early_init_boot_cpu_thread(void);
+extern const struct HDIF_cpu_id *get_boot_id(void);
 
 /* This sets up the cpu_thread structures for everyone else. */
 extern void cpu_parse(void);

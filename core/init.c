@@ -158,7 +158,10 @@ void main_cpu_entry(void)
 	printf("SkiBoot starting...\n");
 
 	/* Initialize boot cpu's cpu_thread struct. */
-	early_init_boot_cpu_thread();
+	__this_cpu = boot_cpu = init_cpu_thread(mfspr(SPR_PIR),
+						cpu_state_active,
+						get_boot_id());
+	cpu_stacks[boot_cpu->pir] = boot_cpu->stack = boot_stack_top;
 
 	/* Now locks can be used */
 	init_locks();
