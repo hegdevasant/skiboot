@@ -118,6 +118,13 @@ void dt_del_property(struct dt_node *node, struct dt_property *prop)
 	free(prop);
 }
 
+u32 dt_property_get_cell(const struct dt_property *prop, u32 index)
+{
+	assert(prop->len >= (index+1)*sizeof(u32));
+	/* Always aligned, so this works. */
+	return fdt32_to_cpu(((u32 *)prop->prop)[index]);
+}
+
 /* First child of this node. */
 struct dt_node *dt_first(const struct dt_node *root)
 {

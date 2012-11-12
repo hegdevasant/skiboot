@@ -58,6 +58,8 @@ struct dt_property *__dt_add_property_cell(struct dt_node *node,
 					   int count, ...);
 void dt_del_property(struct dt_node *node, struct dt_property *prop);
 
+u32 dt_property_get_cell(const struct dt_property *prop, u32 index);
+
 /* First child of this node. */
 struct dt_node *dt_first(const struct dt_node *root);
 
