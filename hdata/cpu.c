@@ -149,9 +149,8 @@ static struct dt_node *add_cpu_node(struct dt_node *cpus,
 	dt_add_property(cpu, "ibm,segment-page-sizes", p7_sps, sizeof(p7_sps));
 	dt_add_property(cpu, "ibm,processor-segment-sizes",
 			p7_pss, sizeof(p7_pss));
-	/* XXX FIXME: Don't hardcode... */
-	dt_add_property_cell(cpu, "ibm,ppc-interrupt-server#s",
-			  no, no + 1, no + 2, no + 3);
+	/* We append the secondary cpus in __cpu_parse */
+	dt_add_property_cell(cpu, "ibm,ppc-interrupt-server#s", no);
 	dt_add_property_cell(cpu, "ibm,slb-size", 0x20);
 	dt_add_property_cell(cpu, "ibm,vmx", 0x2);
 
@@ -171,6 +170,9 @@ static struct dt_node *add_cpu_node(struct dt_node *cpus,
 
 	/* FIXME: Hardcoding is bad. */
 	dt_add_property_cell(cpu, "timebase-frequency", 512000000);
+
+	dt_add_property_cell(cpu, DT_PRIVATE "hw_proc_id",
+			     id->hardware_proc_id);
 	return cpu;
 }
 
@@ -261,6 +263,40 @@ static struct dt_node *find_cpus(void)
 	return cpus;
 }
 
+static struct dt_node *find_cpu_by_hardware_proc_id(struct dt_node *root,
+						 u32 hw_proc_id)
+{
+	struct dt_node *i;
+
+	for (i = dt_first(root); i; i = dt_next(root, i)) {
+		struct dt_property *prop;
+
+		if (!dt_has_node_property(i, "device_type", "cpu"))
+			continue;
+
+		prop = dt_find_property(i, DT_PRIVATE "hw_proc_id");
+		if (*(u32 *)prop->prop == hw_proc_id)
+			return i;
+	}
+	return NULL;
+}
+
+/* Note that numbers are small. */
+static void add_u32_sorted(u32 arr[], u32 new, unsigned num)
+{
+	unsigned int i;
+
+	/* Walk until we find where we belong (insertion sort). */
+	for (i = 0; i < num; i++) {
+		if (new < arr[i]) {
+			u32 tmp = arr[i];
+			arr[i] = new;
+			new = tmp;
+		}
+	}
+	arr[i] = new;
+}
+
 static bool __cpu_parse(void)
 {
 	const struct HDIF_common_hdr *paca;
@@ -320,6 +356,54 @@ static bool __cpu_parse(void)
 
 		if (!add_cpu_node(cpus, paca, id))
 			return false;
+	}
+
+	/* Now account for secondaries. */
+	for_each_paca(paca) {
+		const struct HDIF_cpu_id *id;
+		u32 size, state, num;
+		struct dt_node *cpu;
+		struct dt_property *prop;
+		u32 *new_prop;
+
+		id = HDIF_get_idata(paca, 2, &size);
+		state = (id->verify_exists_flags & CPU_ID_VERIFY_MASK) >>
+			CPU_ID_VERIFY_SHIFT;
+		switch (state) {
+		case CPU_ID_VERIFY_USABLE_NO_FAILURES:
+		case CPU_ID_VERIFY_USABLE_FAILURES:
+			break;
+		default:
+			continue;
+		}
+
+		/* Only interested in secondary threads. */
+		if (!(id->verify_exists_flags & CPU_ID_SECONDARY_THREAD))
+			continue;
+
+		cpu = find_cpu_by_hardware_proc_id(cpus,
+						   id->hardware_proc_id);
+		if (!cpu) {
+			prerror("CPU[%i]: could not find primary hwid %i\n",
+				paca_index(paca), id->hardware_proc_id);
+			return false;
+		}
+
+		/* Add the cpu #. */
+		prop = dt_find_property(cpu, "ibm,ppc-interrupt-server#s");
+		num = prop->len / sizeof(u32);
+		new_prop = malloc((num + 1) * sizeof(u32));
+		if (!new_prop) {
+			prerror("Property allocation length %lu failed\n",
+				(num + 1) * sizeof(u32));
+			return false;
+		}
+		memcpy(new_prop, prop->prop, prop->len);
+		add_u32_sorted(new_prop, id->process_interrupt_line, num);
+		dt_del_property(cpu, prop);
+		dt_add_property(cpu, "ibm,ppc-interrupt-server#s",
+				new_prop, (num + 1) * sizeof(u32));
+		free(new_prop);
 	}
 	return true;
 }	
