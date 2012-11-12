@@ -91,6 +91,18 @@ static void fetch_global_params(void)
 
 }
 
+void add_interrupt_controller(void)
+{
+	struct dt_node *ics = dt_new(dt_root, "interrupt-controller@0");
+	dt_add_property_cell(ics, "reg", 0, 0, 0, 0);
+	dt_add_property_string(ics, "compatible", "IBM,ppc-xics");
+	dt_add_property_cell(ics, "#address-cells", 0);
+	dt_add_property_cell(ics, "#interrupt-cells", 1);
+	dt_add_property_string(ics, "device_type",
+			       "PowerPC-Interrupt-Source-Controller");
+	dt_add_property(ics, "interrupt-controller", NULL, 0);
+}
+
 void parse_machine(void)
 {
 	dt_root = dt_new_root("");
@@ -103,6 +115,7 @@ void parse_machine(void)
 	dt_add_property_cell(dt_root, "#address-cells", 2);
 	dt_add_property_cell(dt_root, "#size-cells", 2);
 
+	add_interrupt_controller();
 	cpu_parse();
 	memory_parse();
 }

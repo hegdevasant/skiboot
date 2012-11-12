@@ -6,6 +6,7 @@
 #include <opal.h>
 #include <io.h>
 #include <cec.h>
+#include <device.h>
 #include <ccan/str/str.h>
 
 /* ICP registers */
@@ -13,8 +14,6 @@
 #define ICP_CPPR		0x4	/* 8-bit access */
 #define ICP_MFRR		0xc	/* 8-bit access */
 
-
-static uint32_t ics_phandle;
 
 /*
  * This takes a 5-bit chip id (node:3 + chip:2) and returns a 20 bit
@@ -79,24 +78,16 @@ void add_icp_nodes(void)
 	}
 }
 
-void add_ics_node(void)
-{
-	ics_phandle = dt_begin_node("interrupt-controller@0");
-	dt_property_cells("reg", 4, 0, 0, 0, 0);
-	dt_property_string("compatible", "IBM,ppc-xics");
-	dt_property_cell("#address-cells", 0);
-	dt_property_cell("#interrupt-cells", 1);
-	dt_property_string("device_type",
-			   "PowerPC-Interrupt-Source-Controller");
-	dt_property("interrupt-controller", NULL, 0);
-	dt_end_node();
-}
-
 uint32_t get_ics_phandle(void)
 {
-	assert(ics_phandle != 0);
+	struct dt_node *i;
 
-	return ics_phandle;
+	for (i = dt_first(dt_root); i; i = dt_next(dt_root, i)) {
+		if (streq(i->name, "interrupt-controller@0")) {
+			return i->phandle;
+		}
+	}
+	abort();
 }
 
 void add_opal_interrupts(void)

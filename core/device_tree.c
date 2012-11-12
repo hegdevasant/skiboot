@@ -159,14 +159,8 @@ void *create_dtb(const struct dt_node *root)
 		save_err(fdt_finish_reservemap(fdt));
 
 		dt_begin_node("");
-		/* CPU and memory nodes are in dt root. */
+		/* Interrupt, CPU and memory nodes are in dt root. */
 		from_dt_node(root);
-
-		/* The ICS node must come before anything that wants to
-		 * reference its phandle (ie, anything with interrupt-parent
-		 * or interrupt-map properties
-		 */
-		add_ics_node();
 
 		add_icp_nodes();
 		add_opal_nodes();
