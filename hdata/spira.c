@@ -2,6 +2,7 @@
 #include <spira.h>
 #include <cpu.h>
 #include <memory.h>
+#include <vpd.h>
 
 /* Processor Initialization structure, contains
  * the initial NIA and MSR values for the entry
@@ -94,7 +95,14 @@ void parse_machine(void)
 {
 	dt_root = dt_new_root("");
 
+	/* We need to know if we're booting from temp size before vpd access */
+	fetch_global_params();
+
+	add_dtb_model();
+	dt_add_property_string(dt_root, "compatible", "ibm,powernv");
+	dt_add_property_cell(dt_root, "#address-cells", 2);
+	dt_add_property_cell(dt_root, "#size-cells", 2);
+
 	cpu_parse();
 	memory_parse();
-	fetch_global_params();
 }

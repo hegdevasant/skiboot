@@ -118,25 +118,6 @@ static void add_chosen_node(void)
 	dt_end_node();
 }
 
-static void add_dtb_model(void)
-{
-	const char *model;
-	char *str;
-	uint8_t sz;
-
-	model = vpd_find_from_spira(&spira.ntuples.system_vpd,
-				    SYSVPD_IDATA_KW_VPD,
-				    "VSYS", "TM", &sz);
-	if (!model) {
-		dt_property_string("model", "Unknown");
-		return;
-	}
-	str = zalloc(sz + 1);
-	memcpy(str, model, sz);
-	dt_property_string("model", str);
-	free(str);
-}
-
 static void from_dt_node(const struct dt_node *root)
 {
 	const struct dt_node *i;
@@ -178,19 +159,14 @@ void *create_dtb(const struct dt_node *root)
 		save_err(fdt_finish_reservemap(fdt));
 
 		dt_begin_node("");
-		add_dtb_model();
-		dt_property_string("compatible", "ibm,powernv");
-		dt_property_cell("#address-cells", 2);
-		dt_property_cell("#size-cells", 2);
+		/* CPU and memory nodes are in dt root. */
+		from_dt_node(root);
 
 		/* The ICS node must come before anything that wants to
 		 * reference its phandle (ie, anything with interrupt-parent
 		 * or interrupt-map properties
 		 */
 		add_ics_node();
-
-		/* CPU and memory nodes are in dt root. */
-		from_dt_node(root);
 
 		add_icp_nodes();
 		add_opal_nodes();

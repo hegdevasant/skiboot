@@ -7,8 +7,14 @@
 
 #define CHECK_SPACE(_p, _n, _e) (((_e) - (_p)) >= (_n))
 
-const void *vpd_find_keyword(const void *rec, size_t rec_sz,
-			     const char *kw, uint8_t *kw_size)
+/* Locate a keyword in a record in a VPD blob
+ *
+ * Note: This works with VPD LIDs. It will scan until it finds
+ * the first 0x84, so it will skip all those 0's that the VPD
+ * LIDs seem to contain
+ */
+static const void *vpd_find_keyword(const void *rec, size_t rec_sz,
+				    const char *kw, uint8_t *kw_size)
 {
 	const uint8_t *p = rec, *end = rec + rec_sz;
 
@@ -27,9 +33,13 @@ const void *vpd_find_keyword(const void *rec, size_t rec_sz,
 	return NULL;
 }
 
-const void *vpd_find(const void *vpd, size_t vpd_size,
-		     const char *record, const char *keyword,
-		     uint8_t *sz)
+/* Low level keyword search in a record. Can be used when we
+ * need to find the next keyword of a given type, for example
+ * when having multiple MF/SM keyword pairs
+ */
+static const void *vpd_find(const void *vpd, size_t vpd_size,
+			    const char *record, const char *keyword,
+			    uint8_t *sz)
 {
 	const uint8_t *p = vpd, *end = vpd + vpd_size;
 	bool first_start = true;
@@ -79,7 +89,9 @@ const void *vpd_find(const void *vpd, size_t vpd_size,
 	return NULL;
 }
 
-const void *vpd_lid_load(const uint8_t *lx, uint8_t lxrn, size_t *size)
+/* Helper to load a VPD LID. Pass a ptr to the corresponding LX keyword */
+#define VPD_LOAD_LXRN_VINI	0xff
+static const void *vpd_lid_load(const uint8_t *lx, uint8_t lxrn, size_t *size)
 {
 	/* Now this is a guess game as we don't have the info from the
 	 * pHyp folks. But basically, it seems to boil down to loading
@@ -148,9 +160,10 @@ const void *vpd_lid_load(const uint8_t *lx, uint8_t lxrn, size_t *size)
 	return NULL;
 }
 
-const void *vpd_find_from_spira(struct spira_ntuple *np, unsigned int idata,
-				const char *record, const char *keyword,
-				uint8_t *size)
+static const void *vpd_find_from_spira(struct spira_ntuple *np,
+				       unsigned int idata,
+				       const char *record, const char *keyword,
+				       uint8_t *size)
 {
 	const void *idptr;
 	unsigned int idsz;
@@ -162,4 +175,23 @@ const void *vpd_find_from_spira(struct spira_ntuple *np, unsigned int idata,
 		return NULL;
 
 	return vpd_find(idptr, idsz, record, keyword, size);
+}
+
+void add_dtb_model(void)
+{
+	const char *model;
+	char *str;
+	uint8_t sz;
+
+	model = vpd_find_from_spira(&spira.ntuples.system_vpd,
+				    SYSVPD_IDATA_KW_VPD,
+				    "VSYS", "TM", &sz);
+	if (!model) {
+		dt_add_property_string(dt_root, "model", "Unknown");
+		return;
+	}
+	str = zalloc(sz + 1);
+	memcpy(str, model, sz);
+	dt_add_property_string(dt_root, "model", str);
+	free(str);
 }
