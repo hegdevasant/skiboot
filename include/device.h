@@ -3,6 +3,9 @@
 #include <ccan/list/list.h>
 #include <ccan/short_types/short_types.h>
 
+/* Any property or node with this prefix will not be passed to the kernel. */
+#define DT_PRIVATE	"skiboot,"
+
 /*
  * An in-memory representation of a node in the device tree.
  *

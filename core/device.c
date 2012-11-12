@@ -205,6 +205,9 @@ static int node_to_fdt(void *fdt, const struct dt_node *node)
 	const struct dt_property *p;
 	const struct dt_node *child;
 
+	if (strstarts(node->name, DT_PRIVATE))
+		return 0;
+
 	err = fdt_begin_node(fdt, node->name);
 	if (err)
 		return err;
@@ -214,6 +217,9 @@ static int node_to_fdt(void *fdt, const struct dt_node *node)
 		return err;
 
 	list_for_each(&node->properties, p, list) {
+		if (strstarts(p->name, DT_PRIVATE))
+			continue;
+			
 		err = fdt_property(fdt, p->name, p->prop, p->len);
 		if (err)
 			return err;
