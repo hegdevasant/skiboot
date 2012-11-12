@@ -58,30 +58,25 @@ static const char *cpu_state(u32 flags)
 static struct cpu_thread *populate_cpu_thread(const struct HDIF_cpu_id *id,
 					      unsigned int index)
 {
-	struct cpu_thread *t;
 	u32 state;
+	enum cpu_thread_state st;
 
-	t = &cpu_threads[id->pir];
-	init_lock(&t->job_lock);
-	list_head_init(&t->job_queue);
-	t->pir = id->pir;
-	t->id = id;
-
-	state = (t->id->verify_exists_flags & CPU_ID_VERIFY_MASK) >>
+	state = (id->verify_exists_flags & CPU_ID_VERIFY_MASK) >>
 		CPU_ID_VERIFY_SHIFT;
 	switch(state) {
 	case CPU_ID_VERIFY_USABLE_NO_FAILURES:
 	case CPU_ID_VERIFY_USABLE_FAILURES:
 		printf("CPU[%i]: PIR=%i RES=%i OK\n",
 		       index, id->pir, id->process_interrupt_line);
-		t->state = cpu_state_present;
+		st = cpu_state_present;
 		break;
 	default:
 		printf("CPU[%i]: PIR=%i RES=%i UNAVAILABLE\n",
 		       index, id->pir, id->process_interrupt_line);
-		t->state = cpu_state_unavailable;
+		st = cpu_state_unavailable;
 	}
-	return t;
+
+	return init_cpu_thread(id->pir, st, id);
 }
 
 static struct dt_node *add_cpu_node(struct dt_node *cpus,
