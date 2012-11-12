@@ -100,8 +100,6 @@ struct cpu_thread {
 
 	/* SPIRA structures */
 	const struct HDIF_cpu_id *id;
-	const struct HDIF_cpu_timebase *timebase;
-	const struct HDIF_cpu_cache *cache;
 };
 
 /* This global is set to 1 to allow secondaries to callin,
@@ -202,7 +200,7 @@ static inline void cpu_give_self_os(void)
 	__this_cpu->state = cpu_state_os;
 }
 
-extern void add_cpu_nodes(void);
+extern bool add_cpu_nodes(void);
 
 extern unsigned int cpu_max_pir;
 extern struct cpu_thread cpu_threads[SPR_PIR_MASK + 1];

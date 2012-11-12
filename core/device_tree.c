@@ -156,7 +156,8 @@ void *create_dtb(void)
 		 * or interrupt-map properties
 		 */
 		add_ics_node();
-		add_cpu_nodes();
+		if (!add_cpu_nodes())
+			abort();
 		add_memory_nodes();
 		add_icp_nodes();
 		add_opal_nodes();
