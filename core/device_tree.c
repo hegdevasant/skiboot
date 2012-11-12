@@ -14,6 +14,7 @@
 static int fdt_error;
 static void *fdt;
 static u32 lphandle;
+static char indent[30];
 
 static void save_err(int err)
 {
@@ -25,6 +26,8 @@ uint32_t dt_begin_node(const char *name)
 {
 	save_err(fdt_begin_node(fdt, name));
 
+	printf("%s%s:\n", indent, name);
+	strcat(indent, " ");
 	dt_property_cell("linux,phandle", ++lphandle);
 
 	return lphandle;
@@ -32,11 +35,13 @@ uint32_t dt_begin_node(const char *name)
 
 void dt_property_string(const char *name, const char *value)
 {
+	printf("%s%s=%s\n", indent, name, value);
 	save_err(fdt_property_string(fdt, name, value));
 }
 
 void dt_property_cell(const char *name, u32 cell)
 {
+	printf("%s%s=%u\n", indent, name, cell);
 	save_err(fdt_property_cell(fdt, name, cell));
 }
 
@@ -44,6 +49,7 @@ void dt_property_cells(const char *name, int count, ...)
 {
 	va_list args;
 
+	printf("%s%s=%u...\n", indent, name, count);
 	va_start(args, count);
 	save_err(fdt_property_cells_v(fdt, name, count, args));
 	va_end(args);
@@ -51,16 +57,19 @@ void dt_property_cells(const char *name, int count, ...)
 
 void dt_property(const char *name, const void *val, size_t size)
 {
+	printf("%s%s=[%lu]\n", indent, name, size);
 	save_err(fdt_property(fdt, name, val, size));
 }
 
 void dt_end_node(void)
 {
+	indent[strlen(indent)-1] = '\0';
 	save_err(fdt_end_node(fdt));
 }
 
 static void dump_fdt(void)
 {
+#if 0
 	int i, off, depth, err;
 
 	printf("Device tree %u@%p\n", fdt_totalsize(fdt), fdt);
@@ -97,6 +106,7 @@ static void dump_fdt(void)
 		}
 		printf("name: %s [%u]\n", name, off);
 	}
+#endif
 }
 
 static void add_chosen_node(void)
