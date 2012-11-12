@@ -110,11 +110,14 @@ struct cpu_thread {
  */
 extern unsigned long cpu_secondary_start;
 
-/* Boot CPU, set after init_cpu_threads() */
+/* Boot CPU, set after early_init_boot_cpu_thread(). */
 extern struct cpu_thread *boot_cpu;
 
-/* This populates cpu_threads array. */
-extern void init_cpu_threads(void);
+/* This sets up the cpu_thread structure for the boot cpu. */
+extern void early_init_boot_cpu_thread(void);
+
+/* This sets up the cpu_thread structures for everyone else. */
+extern void cpu_parse(void);
 
 /* This brings up our secondaries */
 extern void cpu_bringup(void);

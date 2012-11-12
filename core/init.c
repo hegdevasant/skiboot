@@ -157,17 +157,14 @@ void main_cpu_entry(void)
 {
 	printf("SkiBoot starting...\n");
 
-	/* First we Parse the PACA/PCIA and create the per-CPU
-	 * structures. These are going to be needed everywhere
-	 * (locks etc...) so this needs to be done first
-	 */
-	init_cpu_threads();
-
-	/* Collect some global parameters from SPIRA */
-	fetch_global_params();
+	/* Initialize boot cpu's cpu_thread struct. */
+	early_init_boot_cpu_thread();
 
 	/* Now locks can be used */
 	init_locks();
+
+	/* Collect some global parameters from SPIRA */
+	fetch_global_params();
 
 	/* Initialize XSCOM */
 	xscom_init();
@@ -193,6 +190,10 @@ void main_cpu_entry(void)
 	/* Initialize nvram access */
 	fsp_nvram_init();
 
+	/* Now parse rest of device tree. */
+	cpu_parse();
+	mem_top = memory_parse();
+
 	/* Call in secondary CPUs */
 	cpu_bringup();
 
@@ -202,9 +203,6 @@ void main_cpu_entry(void)
 	chiptod_init();
 
 	op_display(OP_LOG, OP_MOD_INIT, 0x0003);
-
-	/* Parse the memory layout. */
-	mem_top = memory_parse();
 
 	op_display(OP_LOG, OP_MOD_INIT, 0x0004);
 
