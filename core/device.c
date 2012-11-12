@@ -23,6 +23,9 @@ static void free_name(const char *name)
 		free((char *)name);
 }
 
+/* Used to give unique handles. */
+static u32 phandle = 0;
+
 static struct dt_node *new_node(const char *name)
 {
 	struct dt_node *node = malloc(sizeof *node);
@@ -35,6 +38,8 @@ static struct dt_node *new_node(const char *name)
 	node->parent = NULL;
 	list_head_init(&node->properties);
 	list_head_init(&node->children);
+	/* FIXME: locking? */
+	node->phandle = ++phandle;
 	node->priv = NULL;
 	return node;
 }
@@ -71,6 +76,8 @@ static struct dt_property *new_property(struct dt_node *node,
 		abort();
 	}
 	assert(!dt_find_property(node, name));
+	assert(strcmp(name, "linux,phandle") != 0);
+	assert(strcmp(name, "phandle") != 0);
 	p->name = take_name(name);
 	p->priv = NULL;
 	p->len = size;
@@ -199,6 +206,10 @@ static int node_to_fdt(void *fdt, const struct dt_node *node)
 	const struct dt_node *child;
 
 	err = fdt_begin_node(fdt, node->name);
+	if (err)
+		return err;
+
+	err = fdt_property_cell(fdt, "phandle", node->phandle);
 	if (err)
 		return err;
 
