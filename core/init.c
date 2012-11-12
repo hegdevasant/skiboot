@@ -161,7 +161,7 @@ void main_cpu_entry(void)
 	 * structures. These are going to be needed everywhere
 	 * (locks etc...) so this needs to be done first
 	 */
-	cpu_parse();
+	init_cpu_threads();
 
 	/* Collect some global parameters from SPIRA */
 	fetch_global_params();

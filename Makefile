@@ -14,6 +14,11 @@ CROSS=powerpc64-linux-
 SRC=$(CURDIR)
 
 #
+# Where to get information about this machine (subdir name)
+#
+DEVSRC=hdata
+
+#
 # default config file, see include config_*.h for more specifics
 #
 CONFIG := config.h

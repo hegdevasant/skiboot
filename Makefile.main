@@ -76,10 +76,11 @@ include $(SRC)/hw/Makefile.inc
 include $(SRC)/libfdt/Makefile.inc
 include $(SRC)/libc/Makefile.inc
 include $(SRC)/ccan/Makefile.inc
+include $(SRC)/$(DEVSRC)/Makefile.inc
 
 all: $(SUBDIRS) $(TARGET).lid $(TARGET).map
 
-OBJS := $(ASM) $(CORE) $(HW) $(LIBFDT) $(LIBC) $(CCAN)
+OBJS := $(ASM) $(CORE) $(HW) $(LIBFDT) $(LIBC) $(CCAN) $(DEVSRC_OBJ)
 
 $(TARGET).lid: $(TARGET).elf
 	$(OBJCOPY) -O binary -S $^ $@

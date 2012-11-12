@@ -110,11 +110,11 @@ struct cpu_thread {
  */
 extern unsigned long cpu_secondary_start;
 
-/* Boot CPU, set after cpu_parse() */
+/* Boot CPU, set after init_cpu_threads() */
 extern struct cpu_thread *boot_cpu;
 
 /* This populates cpu_threads array. */
-extern void cpu_parse(void);
+extern void init_cpu_threads(void);
 
 /* This brings up our secondaries */
 extern void cpu_bringup(void);
@@ -145,7 +145,7 @@ extern struct cpu_thread *next_available_cpu(struct cpu_thread *cpu);
 #define for_each_available_cpu(cpu)	\
 	for (cpu = first_available_cpu(); cpu; cpu = next_available_cpu(cpu))
 
-/* Return the caller CPU (only after cpu_parse) */
+/* Return the caller CPU (only after init_cpu_threads) */
 register struct cpu_thread *__this_cpu asm("r13");
 static inline struct cpu_thread *this_cpu(void)
 {
@@ -200,4 +200,8 @@ static inline void cpu_give_self_os(void)
 }
 
 extern void add_cpu_nodes(void);
+
+extern unsigned int cpu_max_pir;
+extern struct cpu_thread cpu_threads[SPR_PIR_MASK + 1];
+extern void *cpu_stacks[SPR_PIR_MASK + 1];
 #endif /* __CPU_H */

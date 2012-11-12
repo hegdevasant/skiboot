@@ -117,9 +117,3 @@ struct HDIF_common_hdr *HDIF_child(const struct HDIF_common_hdr *hdif,
 
 	return ret;
 }
-		
-
-	
-
-	
-
