@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <skiboot.h>
 #include <libfdt/libfdt.h>
+#include <ccan/str/str.h>
 
 static bool is_rodata(const void *p)
 {

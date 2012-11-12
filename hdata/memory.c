@@ -2,9 +2,34 @@
 #include <memory.h>
 #include <cpu.h>
 #include <device_tree.h>
+#include <device.h>
 #include <ccan/str/str.h>
+#include <hdif.h>
+#include <libfdt/libfdt.h>
 
-struct list_head address_ranges = LIST_HEAD_INIT(address_ranges);
+struct HDIF_ram_area_id {
+	uint16_t id;
+#define RAM_AREA_INSTALLED	0x8000
+#define RAM_AREA_FUNCTIONAL	0x4000
+	uint16_t flags;
+};
+
+struct HDIF_ram_area_size {
+	uint64_t mb;
+};
+
+struct ram_area {
+	const struct HDIF_ram_area_id *raid;
+	const struct HDIF_ram_area_size *rasize;
+};
+
+struct HDIF_ms_area_address_range {
+	uint64_t start;
+	uint64_t end;
+	uint32_t chip;
+	uint32_t mirror_attr;
+	uint64_t mirror_start;
+};
 
 struct HDIF_ms_area_id {
 	uint16_t id;
@@ -16,115 +41,68 @@ struct HDIF_ms_area_id {
 	uint16_t share_id;
 };
 
-static struct address_range *find_shared(int share_id, 
-				 const struct HDIF_ms_area_address_range *ar)
+static struct dt_node *find_shared(struct dt_node *root, u16 id, u64 start, u64 len)
 {
-	struct address_range *i;
+	struct dt_node *i;
 
-	list_for_each(&address_ranges, i, list) {
-		if (i->share_id != share_id)
+	for (i = dt_first(root); i; i = dt_next(root, i)) {
+		u64 reg[2];
+		struct dt_property *shared, *type;
+
+		type = dt_find_property(i, "device-type");
+		if (!type || strcmp(type->prop, "memory") != 0)
 			continue;
-		if (i->arange->start != ar->start)
+
+		shared = dt_find_property(i, DT_PRIVATE "share-id");
+		if (!shared || fdt32_to_cpu(*(u32 *)shared->prop) != id)
 			continue;
-		if (i->arange->end != ar->end)
-			continue;
-		return i;
+
+		memcpy(reg, dt_find_property(i, "reg")->prop, sizeof(reg));
+		if (reg[0] == start && reg[1] == len)
+			break;
 	}
-	return NULL;
+	return i;
 }
 
-static bool add_address_range(const struct HDIF_common_hdr *msarea,
-			      const void *fruid, uint32_t fruidlen,
+static bool add_address_range(struct dt_node *root,
 			      const struct HDIF_ms_area_id *id,
-			      const struct HDIF_child_ptr *ramptr,
 			      const struct HDIF_ms_area_address_range *arange)
 {
-	unsigned int i;
-	struct address_range *new;
+	struct dt_node *mem;
+	u64 reg[2];
+	char name[sizeof("memory@") + STR_MAX_CHARS(reg[0])];
+	struct cpu_thread *attached;
 
-	new = malloc(sizeof(*new) + ramptr->count*sizeof(struct ram_area));
-	if (!new) {
-		prerror("MS VPD: Failed to allocate memory for %u ram areas\n",
-			ramptr->count);
-		return false;
+	/* reg contains start and length */
+	reg[0] = cleanup_addr(arange->start);
+	reg[1] = cleanup_addr(arange->end) - reg[0];
+
+	/* FIXME: Untested code! */
+	if (id->flags & MS_AREA_SHARED) {
+		/* Only enter shared nodes once. */ 
+		if (find_shared(root, id->share_id, reg[0], reg[1]))
+			return true;
 	}
+	sprintf(name, "memory@%llx", reg[0]);
 
-	printf("MS VPD:  Range 0x%llx - 0x%llx (chip %u)\n",
-	       arange->start, arange->end, arange->chip);
+	mem = dt_new(root, name);
+	dt_add_property_string(mem, "device_type", "memory");
+	dt_add_property(mem, "reg", reg, sizeof(reg));
+	if (id->flags & MS_AREA_SHARED)
+		dt_add_property_cell(mem, DT_PRIVATE "share-id", id->share_id);
 
-	new->msarea = msarea;
-	new->fru_id = fruid;
-	new->fru_id_len = fruidlen;
-	new->arange = arange;
-	new->attached = find_cpu_by_chip_id(arange->chip);
-	if (!new->attached) {
+	/* FIXME: Do numa properly using this! */
+	attached = find_cpu_by_chip_id(arange->chip);
+	if (!attached) {
 		prerror("MS VPD: could not find chip id %u\n", arange->chip);
 		return false;
 	}
-	list_head_init(&new->shared);
 
-	if (id->flags & MS_AREA_SHARED)
-		new->share_id = id->share_id;
-	else
-		new->share_id = -1;
-
-	new->num_ram_areas = ramptr->count;
-	for (i = 0; i < new->num_ram_areas; i++) {
-		const struct HDIF_common_hdr *ramarea;
-		unsigned int size;
-
-		ramarea = HDIF_child(msarea, ramptr, i, "RAM   ");
-		if (!CHECK_SPPTR(ramarea))
-			return false;
-
-		new->ram_areas[i].raid = HDIF_get_idata(ramarea, 2, &size);
-		if (!CHECK_SPPTR(new->ram_areas[i].raid))
-			return false;
-		if (size < sizeof(*new->ram_areas[i].raid)) {
-			prerror("MS VPD: msarea %p ramarea %i id too small\n",
-				msarea, i);
-			return false;
-		}
-
-		new->ram_areas[i].rasize = HDIF_get_idata(ramarea, 3, &size);
-		if (!new->ram_areas[i].rasize)
-			return false;
-		if (size < sizeof(*new->ram_areas[i].rasize)) {
-			prerror("MS VPD: msarea %p ramarea %i size too small\n",
-				msarea, i);
-				return false;
-		}
-
-		/* If not installed and functional, don't include. */
-		printf("MS VPD:    DIMM %u %s%s %lluMB\n",
-		       new->ram_areas[i].raid->id,
-		       new->ram_areas[i].raid->flags & RAM_AREA_INSTALLED
-		       ? "installed" : "not installed",
-		       new->ram_areas[i].raid->flags & RAM_AREA_FUNCTIONAL
-		       ? "functional" : "not functional",
-		       new->ram_areas[i].rasize->mb);
-
-		/* FIXME: Don't barf on non-functional DIMMs */
-		assert((new->ram_areas[i].raid->flags &
-			(RAM_AREA_INSTALLED|RAM_AREA_FUNCTIONAL))
-		       == (RAM_AREA_INSTALLED|RAM_AREA_FUNCTIONAL));
-	}
-
-	/* If it's shared, chain it off a previous one (if any) */
-	if (id->flags & MS_AREA_SHARED) {
-		/* FIXME: Untested code! */
-		struct address_range *sharer = find_shared(id->share_id, arange);
-		if (sharer) {
-			list_add_tail(&sharer->shared, &new->list);
-			return true;
-		}
-	}
-
-	list_add_tail(&address_ranges, &new->list);
 	return true;
 }
 
-static void get_msareas(const struct HDIF_common_hdr *ms_vpd)
+static void get_msareas(struct dt_node *root,
+			const struct HDIF_common_hdr *ms_vpd)
 {
 	unsigned int i;
 	const struct HDIF_child_ptr *msptr;
@@ -198,15 +176,14 @@ static void get_msareas(const struct HDIF_common_hdr *ms_vpd)
 		/* This offset is from the arr, not the header! */
 		arange = (void *)arr + arr->offset;
 		for (j = 0; j < arr->ecnt; j++) {
-			if (!add_address_range(msarea, fruid, size, id, ramptr,
-					       arange))
+			if (!add_address_range(root, id, arange))
 				return;
 			arange = (void *)arange + arr->esize;
 		}
 	}
 }
 
-uint64_t __memory_parse(void)
+uint64_t __memory_parse(struct dt_node *root)
 {
 	struct HDIF_common_hdr *ms_vpd;
 	const struct msvpd_ms_addr_config *msac;
@@ -249,18 +226,22 @@ uint64_t __memory_parse(void)
 	printf("MS VPD: Maximum possible address: 0x%llx\n",
 	       msac->max_possible_ms_address);
 
-	get_msareas(ms_vpd);
+	get_msareas(root, ms_vpd);
 
 	printf("MS VPD: Total MB of RAM: 0x%llx\n", tcms->total_in_mb);
 
 	return msac->max_configured_ms_address;
 }
 
+static struct dt_node *dt_root;
+
 uint64_t memory_parse(void)
 {
 	uint64_t max_addr;
 
-	max_addr = __memory_parse();
+	dt_root = dt_new_root("memory-root");
+
+	max_addr = __memory_parse(dt_root);
 	if (!max_addr) {
 		prerror("MS VPD: Failed memory init !\n");
 		abort();
@@ -270,20 +251,14 @@ uint64_t memory_parse(void)
 
 void add_memory_nodes(void)
 {
-	struct address_range *i;
+	struct dt_node *i;
 
-	list_for_each(&address_ranges, i, list) {
-		u64 reg[2];
-		char name[sizeof("memory@") + STR_MAX_CHARS(reg[0])];
+	for (i = dt_first(dt_root); i; i = dt_next(dt_root, i)) {
+		struct dt_property *p;
 
-		/* reg contains start and length */
-		reg[0] = cleanup_addr(i->arange->start);
-		reg[1] = cleanup_addr(i->arange->end) - reg[0];
-
-		sprintf(name, "memory@%llx", reg[0]);
-		dt_begin_node(name);
-		dt_property_string("device_type", "memory");
-		dt_property("reg", reg, sizeof(reg));
+		dt_begin_node(i->name);
+		list_for_each(&i->properties, p, list)
+			dt_property(p->name, p->prop, p->len);
 		dt_end_node();
 	}
 }
