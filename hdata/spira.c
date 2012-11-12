@@ -64,10 +64,37 @@ bool spira_check_ptr(const void *ptr, const char *file, unsigned int line)
 	return false;
 }
 
+/* Adds private cec_ipl_temp_side property if we're booting from temp side. */
+static void fetch_global_params(void)
+{
+	/* Get CEC IPL side from IPLPARAMS */
+	const void *iplp = spira.ntuples.ipl_parms.addr;
+
+	if (iplp && HDIF_check(iplp, "IPLPMS")) {
+		const struct iplparams_iplparams *p;
+
+		p = HDIF_get_idata(iplp, IPLPARAMS_IPLPARAMS, NULL);
+		if (CHECK_SPPTR(p)) {
+			if (p->ipl_side & IPLPARAMS_CEC_FW_IPL_SIDE_TEMP) {
+				dt_add_property(dt_root,
+						DT_PRIVATE "cec_ipl_temp_side",
+						NULL, 0);
+				printf("FSP: CEC IPLed from Temp side\n");
+			} else {
+				printf("FSP: CEC IPLed from Perm side\n");
+			}
+		} else
+			prerror("FSP: Invalid IPL params, assuming P side\n");
+	} else
+		prerror("FSP: Can't find IPL params, assuming P side\n");
+
+}
+
 void parse_machine(void)
 {
 	dt_root = dt_new_root("");
 
 	cpu_parse();
 	memory_parse();
+	fetch_global_params();
 }

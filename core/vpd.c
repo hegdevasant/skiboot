@@ -3,6 +3,7 @@
 #include <string.h>
 #include <fsp.h>
 #include <spira.h>
+#include <device.h>
 
 #define CHECK_SPACE(_p, _n, _e) (((_e) - (_p)) >= (_n))
 
@@ -114,7 +115,7 @@ const void *vpd_lid_load(const uint8_t *lx, uint8_t lxrn, size_t *size)
 	}
 
 	/* Adjust LID number for flash side */
-	if (cec_ipl_temp_side)
+	if (dt_find_property(dt_root, DT_PRIVATE "cec_ipl_temp_side"))
 		lid_no |= 0x8000;
 
 	/* Load it from the FSP */

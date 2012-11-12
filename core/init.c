@@ -24,32 +24,7 @@ enum ipl_state ipl_state = ipl_initial;
 static uint64_t kernel_entry;
 static uint64_t kernel_top;
 static void *fdt;
-bool cec_ipl_temp_side;
 struct dt_node *dt_root;
-
-static void fetch_global_params(void)
-{
-	/* Get CEC IPL side from IPLPARAMS */
-	const void *iplp = spira.ntuples.ipl_parms.addr;
-
-	if (iplp && HDIF_check(iplp, "IPLPMS")) {
-		const struct iplparams_iplparams *p;
-
-		p = HDIF_get_idata(iplp, IPLPARAMS_IPLPARAMS, NULL);
-		if (CHECK_SPPTR(p)) {
-			if (p->ipl_side & IPLPARAMS_CEC_FW_IPL_SIDE_TEMP) {
-				cec_ipl_temp_side = true;
-				printf("FSP: CEC IPLed from Temp side\n");
-			} else {
-				cec_ipl_temp_side = false;
-				printf("FSP: CEC IPLed from Perm side\n");
-			}
-		} else
-			prerror("FSP: Invalid IPL params, assuming P side\n");
-	} else
-		prerror("FSP: Can't find IPL params, assuming P side\n");
-
-}
 
 /* LID numbers. For now we hijack some of pHyp's own until i figure
  * out the whole business with the MasterLID
@@ -66,7 +41,7 @@ static bool load_kernel(void)
 
 	ksize = KERNEL_LOAD_SIZE;
 	lid = KERNEL_LID;
-	if (cec_ipl_temp_side)
+	if (dt_find_property(dt_root, DT_PRIVATE "cec_ipl_temp_side"))
 		lid |= 0x8000;
 	fsp_fetch_data(0, FSP_DATASET_NONSP_LID, lid, 0,
 		       (void *)KERNEL_LOAD_BASE, &ksize);
@@ -176,9 +151,6 @@ void main_cpu_entry(void)
 
 	/* Get the machine description (sets dt_root) */
 	parse_machine();
-
-	/* Collect some global parameters from SPIRA */
-	fetch_global_params();
 
 	/* Initialize XSCOM */
 	xscom_init();
