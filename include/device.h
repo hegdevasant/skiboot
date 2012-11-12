@@ -56,6 +56,13 @@ struct dt_property *dt_add_property_string(struct dt_node *node,
 struct dt_property *__dt_add_property_cell(struct dt_node *node,
 					   const char *name,
 					   int count, ...);
+
+static inline struct dt_property *dt_add_property_u64(struct dt_node *node,
+						      const char *name, u64 val)
+{
+	return dt_add_property_cell(node, name, (u32)(val >> 32), (u32)val);
+}
+
 void dt_del_property(struct dt_node *node, struct dt_property *prop);
 
 u32 dt_property_get_cell(const struct dt_property *prop, u32 index);
