@@ -2,6 +2,7 @@
 #include <stdarg.h>
 #include <libfdt.h>
 #include <device_tree.h>
+#include <device.h>
 #include <cpu.h>
 #include <memory.h>
 #include <opal.h>
@@ -10,6 +11,7 @@
 #include <cec.h>
 #include <spira.h>
 #include <vpd.h>
+#include <ccan/str/str.h>
 
 static int fdt_error;
 static void *fdt;
@@ -135,7 +137,27 @@ static void add_dtb_model(void)
 	free(str);
 }
 
-void *create_dtb(void)
+static void from_dt_node(const struct dt_node *root)
+{
+	const struct dt_node *i;
+	const struct dt_property *p;
+
+	list_for_each(&root->properties, p, list) {
+		if (strstarts(p->name, DT_PRIVATE))
+			continue;
+		dt_property(p->name, p->prop, p->len);
+	}
+
+	list_for_each(&root->children, i, list) {
+		dt_begin_node(i->name);
+		dt_property_cell("phandle", i->phandle);
+
+		from_dt_node(i);
+		dt_end_node();
+	}
+}
+
+void *create_dtb(const struct dt_node *root)
 {
 	size_t len = DEVICE_TREE_MAX_SIZE;
 
@@ -166,9 +188,10 @@ void *create_dtb(void)
 		 * or interrupt-map properties
 		 */
 		add_ics_node();
-		if (!add_cpu_nodes())
-			abort();
-		add_memory_nodes();
+
+		/* CPU and memory nodes are in dt root. */
+		from_dt_node(root);
+
 		add_icp_nodes();
 		add_opal_nodes();
 		add_cec_nodes();

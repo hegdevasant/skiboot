@@ -192,8 +192,6 @@ const struct HDIF_cpu_id *get_boot_id(void)
 	abort();
 }
 
-static struct dt_node *dt_root;
-
 static struct dt_node *find_cpus(void)
 {
 	struct dt_node *cpus;
@@ -247,7 +245,6 @@ static bool __cpu_parse(void)
 	struct dt_node *cpus;
 	uint32_t boot_pir = mfspr(SPR_PIR);
 
-	dt_root = dt_new_root("cpus-root");
 	cpus = dt_new(dt_root, "cpus");
 	dt_add_property_cell(cpus, "#address-cells", 2);
 	dt_add_property_cell(cpus, "#size-cells", 1);

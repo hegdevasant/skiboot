@@ -75,6 +75,12 @@ extern void start_kernel(uint64_t entry, void* fdt,
 			 uint64_t mem_top) __noreturn;
 extern void start_kernel_secondary(uint64_t entry) __noreturn;
 
+/* Get description of machine (eg. from paca).  Initializes dt_root. */
+extern void parse_machine(uint64_t *mem_top);
+
+/* Root of device tree. */
+extern struct dt_node *dt_root;
+
 /* Fast reboot support */
 extern void fast_reset(void);
 extern void __secondary_cpu_entry(void);

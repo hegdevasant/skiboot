@@ -233,13 +233,9 @@ uint64_t __memory_parse(struct dt_node *root)
 	return msac->max_configured_ms_address;
 }
 
-static struct dt_node *dt_root;
-
 uint64_t memory_parse(void)
 {
 	uint64_t max_addr;
-
-	dt_root = dt_new_root("memory-root");
 
 	max_addr = __memory_parse(dt_root);
 	if (!max_addr) {
@@ -247,20 +243,6 @@ uint64_t memory_parse(void)
 		abort();
 	}
 	return max_addr;
-}
-
-void add_memory_nodes(void)
-{
-	struct dt_node *i;
-
-	for (i = dt_first(dt_root); i; i = dt_next(dt_root, i)) {
-		struct dt_property *p;
-
-		dt_begin_node(i->name);
-		list_for_each(&i->properties, p, list)
-			dt_property(p->name, p->prop, p->len);
-		dt_end_node();
-	}
 }
 
 #ifdef FAST_REBOOT_CLEARS_MEMORY

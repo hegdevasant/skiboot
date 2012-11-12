@@ -1,4 +1,7 @@
+#include <device.h>
 #include <spira.h>
+#include <cpu.h>
+#include <memory.h>
 
 /* Processor Initialization structure, contains
  * the initial NIA and MSR values for the entry
@@ -59,4 +62,14 @@ bool spira_check_ptr(const void *ptr, const char *file, unsigned int line)
 
 	prerror("SPIRA: Bad pointer %p at %s line %d\n", ptr, file, line);
 	return false;
+}
+
+void parse_machine(uint64_t *mem_top)
+{
+	dt_root = dt_new_root("");
+
+	cpu_parse();
+	*mem_top = memory_parse();
+	if (!*mem_top)
+		abort();
 }

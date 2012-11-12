@@ -5,7 +5,7 @@
 /* Note: Device tree creation has no locks. It's assumed to be done
  * by a single processor in a non racy way
  */
-void *create_dtb(void);
+void *create_dtb(const struct dt_node *root);
 
 /* Helpers to cache errors in fdt; use this instead of fdt_* */
 uint32_t dt_begin_node(const char *name); /* returns phandle */

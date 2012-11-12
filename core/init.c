@@ -25,6 +25,7 @@ static uint64_t kernel_top;
 static uint64_t mem_top;
 static void *fdt;
 bool cec_ipl_temp_side;
+struct dt_node *dt_root;
 
 static void fetch_global_params(void)
 {
@@ -134,7 +135,7 @@ void load_and_boot_kernel(bool is_reboot)
 	op_display(OP_LOG, OP_MOD_INIT, 0x0007);
 
 	/* Create the device tree blob to boot OS. */
-	fdt = create_dtb();
+	fdt = create_dtb(dt_root);
 	if (!fdt) {
 		op_display(OP_FATAL, OP_MOD_INIT, 2);
 		abort();
@@ -166,6 +167,9 @@ void main_cpu_entry(void)
 	/* Now locks can be used */
 	init_locks();
 
+	/* Get the machine description (sets dt_root) */
+	parse_machine(&mem_top);
+
 	/* Collect some global parameters from SPIRA */
 	fetch_global_params();
 
@@ -192,10 +196,6 @@ void main_cpu_entry(void)
 
 	/* Initialize nvram access */
 	fsp_nvram_init();
-
-	/* Now parse rest of device tree. */
-	cpu_parse();
-	mem_top = memory_parse();
 
 	/* Call in secondary CPUs */
 	cpu_bringup();
