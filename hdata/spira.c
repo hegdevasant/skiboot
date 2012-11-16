@@ -93,14 +93,28 @@ static void fetch_global_params(void)
 
 }
 
+static void add_ics_reg_property(struct dt_node *ics,
+				 u64 ibase,
+				 unsigned int num_threads)
+{
+	unsigned int i;
+	u64 reg[num_threads * 2];
+
+	for (i = 0; i < num_threads*2; i += 2) {
+		reg[i] = ibase;
+		/* One page is enough for a handful of regs. */
+		reg[i+1] = 4096;
+		ibase += reg[i+1];
+	}
+	dt_add_property(ics, "reg", reg, sizeof(reg));
+}
+
 void add_interrupt_controllers(void)
 {
 	static const char p7_icp_compat[] =
 		"IBM,ppc-xicp\0IBM,power7-xicp";
-	struct cpu_thread *t;
-	char name[sizeof("interrupt-controller@")
-		  + STR_MAX_CHARS(t->id->ibase)];
-	struct dt_node *ics;
+	char name[sizeof("interrupt-controller@") + STR_MAX_CHARS(u64)];
+	struct dt_node *cpu, *ics;
 
 	ics = dt_new(dt_root, "interrupt-controller@0");
 	dt_add_property_cell(ics, "reg", 0, 0, 0, 0);
@@ -111,35 +125,33 @@ void add_interrupt_controllers(void)
 			       "PowerPC-Interrupt-Source-Controller");
 	dt_add_property(ics, "interrupt-controller", NULL, 0);
 
-	/* XXX FIXME: Hard coded #threads */
-	for_each_available_cpu(t) {
+	for (cpu = dt_first(dt_root); cpu; cpu = dt_next(dt_root, cpu)) {
 		u32 irange[2];
-		u64 reg[2 * 4];
+		struct dt_property *intsrv;
+		u64 ibase;
+		unsigned int num_threads;
 
-		if (t->id->verify_exists_flags & CPU_ID_SECONDARY_THREAD)
+		if (!dt_has_node_property(cpu, "device_type", "cpu"))
 			continue;
 
-		/* One page is enough for a handful of regs. */
-		reg[0] = cleanup_addr(t->id->ibase);
-		reg[1] = 4096;
-		reg[2] = cleanup_addr(t->id->ibase + 0x1000);
-		reg[3] = 4096;
-		reg[4] = cleanup_addr(t->id->ibase + 0x2000);
-		reg[5] = 4096;
-		reg[6] = cleanup_addr(t->id->ibase + 0x3000);
-		reg[7] = 4096;
+		intsrv = dt_find_property(cpu, "ibm,ppc-interrupt-server#s");
+		ibase = dt_property_get_u64(dt_find_property(cpu,
+							     DT_PRIVATE
+							     "ibase"));
 
-		sprintf(name, "interrupt-controller@%llx", reg[0]);
+		num_threads = intsrv->len / sizeof(u32);
+
+		sprintf(name, "interrupt-controller@%llx", ibase);
 		ics = dt_new(dt_root, name);
 		dt_add_property(ics, "compatible",
 				p7_icp_compat, sizeof(p7_icp_compat));
 
-		irange[0] = t->id->process_interrupt_line; /* Index */
-		irange[1] = 4;				   /* num servers */
+		irange[0] = dt_property_get_cell(intsrv, 0); /* Index */
+		irange[1] = num_threads;		     /* num servers */
 		dt_add_property(ics, "ibm,interrupt-server-ranges",
 				irange, sizeof(irange));
 		dt_add_property(ics, "interrupt-controller", NULL, 0);
-		dt_add_property(ics, "reg", reg, sizeof(reg));
+		add_ics_reg_property(ics, ibase, num_threads);
 		dt_add_property_cell(ics, "#address-cells", 0);
 		dt_add_property_cell(ics, "#interrupt-cells", 1);
 		dt_add_property_string(ics, "device_type",
