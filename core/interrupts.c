@@ -67,15 +67,25 @@ void add_opal_interrupts(struct dt_node *opal)
 	dt_add_property(opal, "opal-interrupts", irqs, psi_irq_count * 4);
 }
 
+static u64 this_thread_ibase(void)
+{
+	u64 ibase;
+	struct dt_node *cpu = get_cpu_node(cpu_get_thread0(this_cpu()));
+
+	ibase = dt_property_get_u64(dt_find_property(cpu, DT_PRIVATE "ibase"));
+	
+	/* Adjust for thread */
+	ibase += 0x1000 * cpu_get_thread_index(this_cpu());
+
+	return ibase;
+}
+
 /* This is called on a fast reboot to sanitize the ICP. We set our priority
  * to 0 to mask all interrupts and make sure no IPI is on the way
  */
 void reset_cpu_icp(void)
 {
-	void *icp = (void *)this_cpu()->id->ibase;
-
-	/* Adjust for thread */
-	icp += 0x1000 * cpu_get_thread_index(this_cpu());
+	void *icp = (void *)this_thread_ibase();
 
 	/* Clear pending IPIs */
 	out_8(icp + ICP_MFRR, 0xff);
@@ -89,10 +99,7 @@ void reset_cpu_icp(void)
  */
 void icp_send_eoi(uint32_t interrupt)
 {
-	void *icp = (void *)this_cpu()->id->ibase;
-
-	/* Adjust for thread */
-	icp += 0x1000 * cpu_get_thread_index(this_cpu());
+	void *icp = (void *)this_thread_ibase();
 
 	/* Set priority to max, ignore all incoming interrupts */
 	out_be32(icp + ICP_XIRR, interrupt & 0xffffff);

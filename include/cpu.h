@@ -132,6 +132,7 @@ extern void cpu_remove_node(const struct cpu_thread *t);
 extern struct cpu_thread *find_cpu_by_chip_id(u32 id);
 extern struct cpu_thread *find_active_cpu_by_chip_id(u32 id);
 extern struct cpu_thread *find_cpu_by_pir(u32 pir);
+extern struct dt_node *get_cpu_node(u32 pir);
 
 /* Iterator */
 extern struct cpu_thread *first_cpu(void);

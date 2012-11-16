@@ -6,7 +6,7 @@
 #include <spira.h>
 #include <cpu.h>
 #include <fsp.h>
-#include <device_tree.h>
+#include <device.h>
 #include <opal.h>
 #include <ccan/str/str.h>
 
@@ -131,6 +131,22 @@ void cpu_process_jobs(void)
 		job->complete = true;
 	}
 	unlock(&cpu->job_lock);
+}
+
+struct dt_node *get_cpu_node(u32 pir)
+{
+	struct dt_node *cpu;
+
+	for (cpu = dt_first(dt_root); cpu; cpu = dt_next(dt_root, cpu)) {
+		struct dt_property *prop;
+
+		if (!dt_has_node_property(cpu, "device_type", "cpu"))
+			continue;
+		prop = dt_find_property(cpu, DT_PRIVATE "pir");
+		if (dt_property_get_cell(prop, 0) == pir)
+			break;
+	}
+	return cpu;
 }
 
 struct cpu_thread *find_cpu_by_chip_id(u32 id)
