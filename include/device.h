@@ -70,6 +70,13 @@ void dt_del_property(struct dt_node *node, struct dt_property *prop);
 
 u32 dt_property_get_cell(const struct dt_property *prop, u32 index);
 
+static inline u64 dt_property_get_u64(struct dt_property *prop)
+{
+	assert(prop->len == sizeof(u64));
+	return ((u64)dt_property_get_cell(prop, 0) << 32)
+		| dt_property_get_cell(prop, 1);
+}
+
 /* First child of this node. */
 struct dt_node *dt_first(const struct dt_node *root);
 
