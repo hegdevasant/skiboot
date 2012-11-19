@@ -214,6 +214,26 @@ struct cpu_thread *first_available_cpu(void)
 	return next_available_cpu(NULL);
 }
 
+void cpu_remove_node(const struct cpu_thread *t)
+{
+	struct dt_node *i;
+
+	/* Find this cpu node */
+	for (i = dt_first(dt_root); i; i = dt_next(dt_root, i)) {
+		struct dt_property *p;
+
+		if (!dt_has_node_property(i, "device_type", "cpu"))
+			continue;
+		p = dt_find_property(i, DT_PRIVATE "pir");
+		if (dt_property_get_cell(p, 0) == t->pir) {
+			dt_free(i);
+			return;
+		}
+	}
+	prerror("CPU: Could not find cpu node %i to remove!\n", t->pir);
+	abort();
+}
+
 void cpu_disable_all_threads(struct cpu_thread *cpu)
 {
 	unsigned int i;
