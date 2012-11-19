@@ -110,7 +110,7 @@ static struct dt_node *add_cpu_node(struct dt_node *cpus,
 	       cache->l35_dcache_size_kb);
 
 	/* FIXME: Don't hardcode this! */
-	sprintf(name, "PowerPC,POWER7@%u", no);
+	sprintf(name, "PowerPC,POWER7@%x", no);
 	cpu = dt_new(cpus, name);
 	*strchr(name, '@') = '\0';
 	dt_add_property_string(cpu, "name", name);
