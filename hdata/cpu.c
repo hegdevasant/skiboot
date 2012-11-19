@@ -146,6 +146,8 @@ static struct dt_node *add_cpu_node(struct dt_node *cpus,
 			     id->hardware_proc_id);
 	dt_add_property_u64(cpu, DT_PRIVATE "ibase", cleanup_addr(id->ibase));
 	dt_add_property_cell(cpu, DT_PRIVATE "pir", id->pir);
+	dt_add_property_cell(cpu, DT_PRIVATE "processor_chip_id",
+			     id->processor_chip_id);
 	return cpu;
 }
 

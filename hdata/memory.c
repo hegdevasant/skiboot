@@ -71,7 +71,6 @@ static bool add_address_range(struct dt_node *root,
 	struct dt_node *mem;
 	u64 reg[2];
 	char name[sizeof("memory@") + STR_MAX_CHARS(reg[0])];
-	struct cpu_thread *attached;
 
 	/* reg contains start and length */
 	reg[0] = cleanup_addr(arange->start);
@@ -91,13 +90,7 @@ static bool add_address_range(struct dt_node *root,
 	if (id->flags & MS_AREA_SHARED)
 		dt_add_property_cell(mem, DT_PRIVATE "share-id", id->share_id);
 
-	/* FIXME: Do numa properly using this! */
-	attached = find_cpu_by_chip_id(arange->chip);
-	if (!attached) {
-		prerror("MS VPD: could not find chip id %u\n", arange->chip);
-		return false;
-	}
-
+	/* FIXME: Do numa using arange->chip vs id->processor_chip_id */
 	return true;
 }
 

@@ -129,8 +129,8 @@ extern void cpu_callin(struct cpu_thread *cpu);
 /* For cpus which fail to call in. */
 extern void cpu_remove_node(const struct cpu_thread *t);
 
-extern struct cpu_thread *find_cpu_by_chip_id(u32 id);
-extern struct cpu_thread *find_active_cpu_by_chip_id(u32 id);
+extern struct dt_node *find_cpu_node_by_chip_id(u32 id);
+struct cpu_thread *find_cpu_by_node(struct dt_node *cpu);
 extern struct cpu_thread *find_cpu_by_pir(u32 pir);
 extern struct dt_node *get_cpu_node(u32 pir);
 

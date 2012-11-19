@@ -149,38 +149,27 @@ struct dt_node *get_cpu_node(u32 pir)
 	return cpu;
 }
 
-struct cpu_thread *find_cpu_by_chip_id(u32 id)
+/* This only covers primary, active cpus (they're the only ones in dt). */
+struct dt_node *find_cpu_node_by_chip_id(u32 id)
 {
-	unsigned int i;
+	struct dt_node *cpu;
 
-	for (i = 0; i <= cpu_max_pir; i++) {
-		struct cpu_thread *t = &cpu_threads[i];
+	for (cpu = dt_first(dt_root); cpu; cpu = dt_next(dt_root, cpu)) {
+		struct dt_property *prop;
 
-		if (t->state == cpu_state_no_cpu)
+		if (!dt_has_node_property(cpu, "device_type", "cpu"))
 			continue;
-		if (t->id->verify_exists_flags & CPU_ID_SECONDARY_THREAD)
-			continue;
-		if (t->id->processor_chip_id == id)
-			return t;
+		prop = dt_find_property(cpu, DT_PRIVATE "processor_chip_id");
+		if (dt_property_get_cell(prop, 0) == id)
+			break;
 	}
-	return NULL;
+	return cpu;
 }
 
-struct cpu_thread *find_active_cpu_by_chip_id(u32 id)
+struct cpu_thread *find_cpu_by_node(struct dt_node *cpu)
 {
-	unsigned int i;
-
-	for (i = 0; i <= cpu_max_pir; i++) {
-		struct cpu_thread *t = &cpu_threads[i];
-
-		if (t->state != cpu_state_active)
-			continue;
-		if (t->id->verify_exists_flags & CPU_ID_SECONDARY_THREAD)
-			continue;
-		if (t->id->processor_chip_id == id)
-			return t;
-	}
-	return NULL;
+	struct dt_property *prop = dt_find_property(cpu, DT_PRIVATE "pir");
+	return find_cpu_by_pir(dt_property_get_cell(prop, 0));
 }
 
 struct cpu_thread *find_cpu_by_pir(u32 pir)
