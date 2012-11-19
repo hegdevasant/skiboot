@@ -142,8 +142,7 @@ void main_cpu_entry(void)
 
 	/* Initialize boot cpu's cpu_thread struct. */
 	__this_cpu = boot_cpu = init_cpu_thread(mfspr(SPR_PIR),
-						cpu_state_active,
-						get_boot_id());
+						cpu_state_active);
 	cpu_stacks[boot_cpu->pir] = boot_cpu->stack = boot_stack_top;
 
 	/* Now locks can be used */

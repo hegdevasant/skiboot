@@ -228,8 +228,7 @@ void cpu_disable_all_threads(struct cpu_thread *cpu)
 	/* XXX Do something to actually stop the core */
 }
 
-struct cpu_thread *init_cpu_thread(u32 pir, enum cpu_thread_state state,
-				   const struct HDIF_cpu_id *id)
+struct cpu_thread *init_cpu_thread(u32 pir, enum cpu_thread_state state)
 {
 	struct cpu_thread *t;
 
@@ -238,8 +237,6 @@ struct cpu_thread *init_cpu_thread(u32 pir, enum cpu_thread_state state,
 	list_head_init(&t->job_queue);
 	t->pir = pir;
 	t->state = state;
-	assert(pir == id->pir);
-	t->id = id;
 
 	return t;
 }

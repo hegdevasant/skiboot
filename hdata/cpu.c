@@ -151,51 +151,6 @@ static struct dt_node *add_cpu_node(struct dt_node *cpus,
 	return cpu;
 }
 
-const struct HDIF_cpu_id *get_boot_id(void)
-{
-	const struct HDIF_common_hdr *paca = spira.ntuples.paca.addr;
-	const struct HDIF_cpu_id *id = NULL;
-	uint32_t boot_pir = mfspr(SPR_PIR);
-
-	if (boot_pir > SPR_PIR_MASK) {
-		prerror("Invalid boot pir %u\n", boot_pir);
-		abort();
-	}
-
-	if (!HDIF_check(paca, "SPPACA")) {
-		/* FIXME: PACA is deprecated in favor of PCIA */
-		prerror("Invalid PACA (PCIA = %p)\n", spira.ntuples.pcia.addr);
-		abort();
-	}
-
-	if (spira.ntuples.paca.act_len < sizeof(*paca)) {
-		prerror("PACA: invalid size %u\n",
-			spira.ntuples.paca.act_len);
-		abort();
-	}
-
-	for_each_paca(paca) {
-		u32 size;
-
-		id = HDIF_get_idata(paca, 2, &size);
-
-		/* The ID structure on Blade314 is only 0x54 long. We can
-		 * cope with it as we don't use all the additional fields.
-		 * The minimum size we support is  0x40
-		 */
-		if (!id || size < SPIRA_CPU_ID_MIN_SIZE) {
-			prerror("CPU[%i]: bad id size %u @ %p\n",
-				paca_index(paca), size, id);
-			abort();
-		}
-		if (id->pir == boot_pir)
-			return id;
-	}
-
-	prerror("Boot cpu PIR %u not found!\n", boot_pir);
-	abort();
-}
-
 static struct dt_node *find_cpus(void)
 {
 	struct dt_node *cpus;
@@ -305,7 +260,7 @@ static bool __cpu_parse(void)
 
 		/* Don't re-init boot thread; that's done by core. */
 		if (id->pir != boot_pir)
-			init_cpu_thread(id->pir, state, id);
+			init_cpu_thread(id->pir, state);
 
 		/* Only cpus we have/will bring up get a node. */
 		if (state != cpu_state_present)

@@ -97,9 +97,6 @@ struct cpu_thread {
 
 	struct lock		job_lock;
 	struct list_head	job_queue;
-
-	/* SPIRA structures */
-	const struct HDIF_cpu_id *id;
 };
 
 /* This global is set to 1 to allow secondaries to callin,
@@ -112,10 +109,7 @@ extern unsigned long cpu_secondary_start;
 extern struct cpu_thread *boot_cpu;
 
 /* Initialize cpu_threads[pir] */
-struct cpu_thread *init_cpu_thread(u32 pir, enum cpu_thread_state state,
-				   const struct HDIF_cpu_id *id);
-
-extern const struct HDIF_cpu_id *get_boot_id(void);
+struct cpu_thread *init_cpu_thread(u32 pir, enum cpu_thread_state state);
 
 /* This sets up the cpu_thread structures for everyone else. */
 extern void cpu_parse(void);
