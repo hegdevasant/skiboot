@@ -109,7 +109,7 @@ static void add_ics_reg_property(struct dt_node *ics,
 	dt_add_property(ics, "reg", reg, sizeof(reg));
 }
 
-void add_interrupt_controllers(void)
+static void add_interrupt_controllers(void)
 {
 	struct dt_node *cpu, *ics;
 
@@ -152,7 +152,7 @@ void add_interrupt_controllers(void)
 		dt_add_property_cell(ics, "#address-cells", 0);
 		dt_add_property_cell(ics, "#interrupt-cells", 1);
 		dt_add_property_string(ics, "device_type",
-				       "PowerPC-External-Interrupt-Presentation");
+				   "PowerPC-External-Interrupt-Presentation");
 	}
 }
 
