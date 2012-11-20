@@ -68,6 +68,19 @@ struct dt_node *dt_new(struct dt_node *parent, const char *name)
 	return new;
 }
 
+struct dt_node *dt_new_addr(struct dt_node *parent, const char *name,
+			    uint64_t addr)
+{
+	char lname[strlen(name) + STR_MAX_CHARS(addr) + 2];
+	struct dt_node *new;
+	assert(parent);
+
+	snprintf(lname, sizeof(lname), "%s@%llx", name, addr);
+	new = new_node(lname);
+	dt_attach_root(parent, new);
+	return new;
+}
+
 static struct dt_property *new_property(struct dt_node *node,
 					const char *name, size_t size)
 {
