@@ -222,6 +222,34 @@ bool dt_has_node_property(const struct dt_node *node,
 	return p->len == strlen(val) + 1 && memcmp(p->prop, val, p->len) == 0;
 }
 
+bool dt_node_is_compatible(const struct dt_node *node, const char *compat)
+{
+	const struct dt_property *p = dt_find_property(node, "compatible");
+	const char *c, *end;
+	if (!p)
+		return false;
+	c = p->prop;
+	end = c + p->len;
+
+	while(c < end) {
+		if (!strcmp(compat, c))
+			return true;
+		c += strlen(c) + 1;
+	}
+	return false;
+}
+
+struct dt_node *dt_find_compatible_node(const struct dt_node *root,
+					const char *compat)
+{
+	struct dt_node *node;
+
+	dt_for_each_node(root, node)
+		if (dt_node_is_compatible(node, compat))
+			return node;
+	return NULL;
+}
+
 u64 dt_prop_get_u64(const struct dt_node *node, const char *prop)
 {
 	const struct dt_property *p = dt_find_property(node, prop);

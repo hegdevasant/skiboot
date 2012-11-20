@@ -91,6 +91,13 @@ struct dt_node *dt_next(const struct dt_node *root, const struct dt_node *prev);
 #define dt_for_each_node(root, node) \
 	for (node = dt_first(root); node; node = dt_next(root, node))
 
+/* Check a compatible property */
+bool dt_node_is_compatible(const struct dt_node *node, const char *compat);
+
+/* Find a node based on compatible property */
+struct dt_node *dt_find_compatible_node(const struct dt_node *root,
+					const char *compat);
+
 /* Find a property by name. */
 const struct dt_property *dt_find_property(const struct dt_node *node,\
 					   const char *name);
