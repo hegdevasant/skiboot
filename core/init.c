@@ -91,8 +91,8 @@ static bool load_kernel(void)
 
 void load_and_boot_kernel(bool is_reboot)
 {
+	const struct dt_property *memprop;
 	uint64_t mem_top;
-	struct dt_property *memprop;
 
 	memprop = dt_find_property(dt_root, DT_PRIVATE "maxmem");
 	mem_top = (u64)dt_property_get_cell(memprop, 0) << 32

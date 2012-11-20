@@ -137,8 +137,8 @@ struct dt_node *get_cpu_node(u32 pir)
 {
 	struct dt_node *cpu;
 
-	for (cpu = dt_first(dt_root); cpu; cpu = dt_next(dt_root, cpu)) {
-		struct dt_property *prop;
+	dt_for_each_node(dt_root, cpu) {
+		const struct dt_property *prop;
 
 		if (!dt_has_node_property(cpu, "device_type", "cpu"))
 			continue;
@@ -154,8 +154,8 @@ struct dt_node *find_cpu_node_by_chip_id(u32 id)
 {
 	struct dt_node *cpu;
 
-	for (cpu = dt_first(dt_root); cpu; cpu = dt_next(dt_root, cpu)) {
-		struct dt_property *prop;
+	dt_for_each_node(dt_root, cpu) {
+		const struct dt_property *prop;
 
 		if (!dt_has_node_property(cpu, "device_type", "cpu"))
 			continue;
@@ -168,8 +168,9 @@ struct dt_node *find_cpu_node_by_chip_id(u32 id)
 
 struct cpu_thread *find_cpu_by_node(struct dt_node *cpu)
 {
-	struct dt_property *prop = dt_find_property(cpu, DT_PRIVATE "pir");
-	return find_cpu_by_pir(dt_property_get_cell(prop, 0));
+	u32 pir = dt_prop_get_u32(cpu, DT_PRIVATE "pir");
+
+	return find_cpu_by_pir(pir);
 }
 
 struct cpu_thread *find_cpu_by_pir(u32 pir)
@@ -219,8 +220,8 @@ void cpu_remove_node(const struct cpu_thread *t)
 	struct dt_node *i;
 
 	/* Find this cpu node */
-	for (i = dt_first(dt_root); i; i = dt_next(dt_root, i)) {
-		struct dt_property *p;
+	dt_for_each_node(dt_root, i) {
+		const struct dt_property *p;
 
 		if (!dt_has_node_property(i, "device_type", "cpu"))
 			continue;

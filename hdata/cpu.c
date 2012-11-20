@@ -169,7 +169,7 @@ static struct dt_node *find_cpus(void)
 	struct dt_node *cpus;
 
 	/* Find our cpus node */
-	for (cpus = dt_first(dt_root); cpus; cpus = dt_next(dt_root, cpus)) {
+	dt_for_each_node(dt_root, cpus) {
 		if (streq(cpus->name, "cpus"))
 			break;
 	}
@@ -178,12 +178,12 @@ static struct dt_node *find_cpus(void)
 }
 
 static struct dt_node *find_cpu_by_hardware_proc_id(struct dt_node *root,
-						 u32 hw_proc_id)
+						    u32 hw_proc_id)
 {
 	struct dt_node *i;
 
-	for (i = dt_first(root); i; i = dt_next(root, i)) {
-		struct dt_property *prop;
+	dt_for_each_node(root, i) {
+		const struct dt_property *prop;
 
 		if (!dt_has_node_property(i, "device_type", "cpu"))
 			continue;
@@ -289,10 +289,10 @@ static bool __cpu_parse(void)
 
 	/* Now account for secondaries. */
 	for_each_paca(paca) {
+		const struct dt_property *prop;
 		const struct HDIF_cpu_id *id;
 		u32 size, state, num;
 		struct dt_node *cpu;
-		struct dt_property *prop;
 		u32 *new_prop;
 
 		id = HDIF_get_idata(paca, 2, &size);
@@ -329,7 +329,7 @@ static bool __cpu_parse(void)
 		}
 		memcpy(new_prop, prop->prop, prop->len);
 		add_u32_sorted(new_prop, id->process_interrupt_line, num);
-		dt_del_property(cpu, prop);
+		dt_del_property(cpu, (struct dt_property *)prop);
 		dt_add_property(cpu, "ibm,ppc-interrupt-server#s",
 				new_prop, (num + 1) * sizeof(u32));
 		free(new_prop);

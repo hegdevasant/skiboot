@@ -200,10 +200,10 @@ struct dt_node *dt_next(const struct dt_node *root,
 	return NULL;
 }
 
-struct dt_property *dt_find_property(const struct dt_node *node,
-				     const char *name)
+const struct dt_property *dt_find_property(const struct dt_node *node,
+					   const char *name)
 {
-	struct dt_property *i;
+	const struct dt_property *i;
 
 	list_for_each(&node->properties, i, list)
 		if (strcmp(i->name, name) == 0)
@@ -214,12 +214,58 @@ struct dt_property *dt_find_property(const struct dt_node *node,
 bool dt_has_node_property(const struct dt_node *node,
 			  const char *name, const char *val)
 {
-	struct dt_property *p = dt_find_property(node, name);
+	const struct dt_property *p = dt_find_property(node, name);
 
 	if (!p)
 		return false;
 
 	return p->len == strlen(val) + 1 && memcmp(p->prop, val, p->len) == 0;
+}
+
+u64 dt_prop_get_u64(const struct dt_node *node, const char *prop)
+{
+	const struct dt_property *p = dt_find_property(node, prop);
+
+	assert(p);
+	assert(p->len == sizeof(u64));
+
+	return ((u64)dt_property_get_cell(p, 0) << 32)
+		| dt_property_get_cell(p, 1);
+}
+
+u64 dt_prop_get_u64_def(const struct dt_node *node, const char *prop, u64 def)
+{
+	const struct dt_property *p = dt_find_property(node, prop);
+
+	if (!p)
+		return def;
+
+	assert(p->len == sizeof(u64));
+
+	return ((u64)dt_property_get_cell(p, 0) << 32)
+		| dt_property_get_cell(p, 1);
+}
+
+u32 dt_prop_get_u32(const struct dt_node *node, const char *prop)
+{
+	const struct dt_property *p = dt_find_property(node, prop);
+
+	assert(p);
+	assert(p->len == sizeof(u32));
+
+	return dt_property_get_cell(p, 0);
+}
+
+u32 dt_prop_get_u32_def(const struct dt_node *node, const char *prop, u32 def)
+{
+	const struct dt_property *p = dt_find_property(node, prop);
+
+	if (!p)
+		return def;
+
+	assert(p->len == sizeof(u32));
+
+	return dt_property_get_cell(p, 0);
 }
 
 void dt_free(struct dt_node *node)

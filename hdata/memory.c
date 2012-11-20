@@ -47,7 +47,7 @@ static struct dt_node *find_shared(struct dt_node *root, u16 id, u64 start, u64 
 
 	for (i = dt_first(root); i; i = dt_next(root, i)) {
 		u64 reg[2];
-		struct dt_property *shared, *type;
+		const struct dt_property *shared, *type;
 
 		type = dt_find_property(i, "device-type");
 		if (!type || strcmp(type->prop, "memory") != 0)

@@ -122,9 +122,9 @@ static void add_interrupt_controllers(void)
 			       "PowerPC-Interrupt-Source-Controller");
 	dt_add_property(ics, "interrupt-controller", NULL, 0);
 
-	for (cpu = dt_first(dt_root); cpu; cpu = dt_next(dt_root, cpu)) {
+	dt_for_each_node(dt_root, cpu) {
 		u32 irange[2];
-		struct dt_property *intsrv;
+		const struct dt_property *intsrv;
 		u64 ibase;
 		unsigned int num_threads;
 
@@ -132,9 +132,7 @@ static void add_interrupt_controllers(void)
 			continue;
 
 		intsrv = dt_find_property(cpu, "ibm,ppc-interrupt-server#s");
-		ibase = dt_property_get_u64(dt_find_property(cpu,
-							     DT_PRIVATE
-							     "ibase"));
+		ibase = dt_prop_get_u64(cpu, DT_PRIVATE "ibase");
 
 		num_threads = intsrv->len / sizeof(u32);
 

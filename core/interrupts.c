@@ -69,10 +69,10 @@ void add_opal_interrupts(struct dt_node *opal)
 
 static u64 this_thread_ibase(void)
 {
-	u64 ibase;
 	struct dt_node *cpu = get_cpu_node(cpu_get_thread0(this_cpu()));
+	u64 ibase;
 
-	ibase = dt_property_get_u64(dt_find_property(cpu, DT_PRIVATE "ibase"));
+	ibase = dt_prop_get_u64(cpu, DT_PRIVATE "ibase");
 	
 	/* Adjust for thread */
 	ibase += 0x1000 * cpu_get_thread_index(this_cpu());

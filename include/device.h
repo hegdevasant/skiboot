@@ -81,22 +81,19 @@ void dt_del_property(struct dt_node *node, struct dt_property *prop);
 
 u32 dt_property_get_cell(const struct dt_property *prop, u32 index);
 
-static inline u64 dt_property_get_u64(struct dt_property *prop)
-{
-	assert(prop->len == sizeof(u64));
-	return ((u64)dt_property_get_cell(prop, 0) << 32)
-		| dt_property_get_cell(prop, 1);
-}
-
 /* First child of this node. */
 struct dt_node *dt_first(const struct dt_node *root);
 
 /* Return next node, or NULL. */
 struct dt_node *dt_next(const struct dt_node *root, const struct dt_node *prev);
 
+/* Iterate nodes */
+#define dt_for_each_node(root, node) \
+	for (node = dt_first(root); node; node = dt_next(root, node))
+
 /* Find a property by name. */
-struct dt_property *dt_find_property(const struct dt_node *node,
-				     const char *name);
+const struct dt_property *dt_find_property(const struct dt_node *node,\
+					   const char *name);
 
 /* Find a property by name, check if it's the same as val. */
 bool dt_has_node_property(const struct dt_node *node,
@@ -110,5 +107,12 @@ void *dt_flatten(const struct dt_node *root);
 
 /* Parse an initial fdt */
 void dt_expand(const void *fdt);
+
+/* Simplified accessors */
+u64 dt_prop_get_u64(const struct dt_node *node, const char *prop);
+u64 dt_prop_get_u64_def(const struct dt_node *node, const char *prop, u64 def);
+u32 dt_prop_get_u32(const struct dt_node *node, const char *prop);
+u32 dt_prop_get_u32_def(const struct dt_node *node, const char *prop, u32 def);
+
 
 #endif /* __DEVICE_H */
