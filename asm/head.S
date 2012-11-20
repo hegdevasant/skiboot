@@ -15,8 +15,9 @@
 	. = 0
 .global __head
 __head:
-	/* This entry point will be used when starting a runtime OPAL */
-	b	.
+	/* This entry point is used when booting with a flat device-tree */
+	mr	%r27,%r3
+	b	boot_entry
 
 	/* This is our boot semaphore used for CPUs to sync, it has to be
 	 * at an easy to locate address (without relocation) since we
@@ -37,6 +38,7 @@ boot_flag:
 
 	/* Entry point set by the FSP */
 	.= 0x180
+	li	%r27,0
 	b	boot_entry
 
 	/* More exception stubs */
@@ -200,6 +202,7 @@ boot_entry:
 	bdnz	1b
 
 	/* Jump to C */
+	mr	%r3,%r27
 	bl	main_cpu_entry
 	b	.
 

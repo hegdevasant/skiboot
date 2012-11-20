@@ -96,4 +96,8 @@ void dt_free(struct dt_node *node);
 
 /* Return an fdt. */
 void *dt_flatten(const struct dt_node *root);
+
+/* Parse an initial fdt */
+void dt_expand(const void *fdt);
+
 #endif /* __DEVICE_H */

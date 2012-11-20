@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <skiboot.h>
 #include <libfdt/libfdt.h>
+#include <libfdt/libfdt_internal.h>
 #include <ccan/str/str.h>
 
 static bool is_rodata(const void *p)
@@ -264,3 +265,52 @@ void *dt_flatten(const struct dt_node *root)
 	prerror("dtb: error %s\n", fdt_strerror(err));
 	return NULL;
 }
+
+static int dt_expand_node(struct dt_node *node, const void *fdt, int fdt_node)
+{
+	const struct fdt_property *prop;
+	int offset, nextoffset, err;
+	struct dt_node *child;
+	const char *name;
+	uint32_t tag;
+
+	if (((err = fdt_check_header(fdt)) != 0)
+	    || ((err = _fdt_check_node_offset(fdt, fdt_node)) < 0)) {
+		prerror("FDT: Error %d parsing node 0x%x\n", err, fdt_node);
+		return -1;
+	}
+
+	nextoffset = err;
+	do {
+		offset = nextoffset;
+
+		tag = fdt_next_tag(fdt, offset, &nextoffset);
+		switch (tag) {
+		case FDT_PROP:
+			prop = _fdt_offset_ptr(fdt, offset);
+			name = fdt_string(fdt, fdt32_to_cpu(prop->nameoff));
+			dt_add_property(node, name, prop->data,
+					fdt32_to_cpu(prop->len));
+			break;
+		case FDT_BEGIN_NODE:
+			name = fdt_get_name(fdt, offset, NULL);
+			child = dt_new(node, name);
+			nextoffset = dt_expand_node(child, fdt, offset);
+			break;
+		case FDT_END:
+			return -1;
+		}
+	} while (tag != FDT_END_NODE);
+
+	return nextoffset;
+}
+
+void dt_expand(const void *fdt)
+{
+	printf("FDT: Parsing fdt @%p\n", fdt);
+
+	dt_root = dt_new_root("/");
+
+	dt_expand_node(dt_root, fdt, 0);
+}
+

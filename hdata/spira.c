@@ -159,7 +159,7 @@ void add_interrupt_controllers(void)
 	}
 }
 
-void parse_machine(void)
+void parse_hdat(void)
 {
 	dt_root = dt_new_root("");
 

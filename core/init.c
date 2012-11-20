@@ -136,7 +136,7 @@ void load_and_boot_kernel(bool is_reboot)
 	start_kernel(kernel_entry, fdt, mem_top);
 }
 
-void main_cpu_entry(void)
+void main_cpu_entry(const void *fdt)
 {
 	printf("SkiBoot %s starting...\n", gitid);
 
@@ -148,8 +148,15 @@ void main_cpu_entry(void)
 	/* Now locks can be used */
 	init_locks();
 
-	/* Get the machine description (sets dt_root) */
-	parse_machine();
+	/*
+	 * If we are coming in with a flat device-tree, we expand it
+	 * now. Else look for HDAT and create a device-tree from them
+	 */
+
+	if (fdt)
+		dt_expand(fdt);
+	else
+		parse_hdat();
 
 	/* Initialize XSCOM */
 	xscom_init();
