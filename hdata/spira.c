@@ -154,6 +154,68 @@ static void add_interrupt_controllers(void)
 	}
 }
 
+static void add_xscom(void)
+{
+	const void *ms_vpd = spira.ntuples.ms_vpd.addr;
+	const struct msvpd_pmover_bsr_synchro *pmbs;
+	struct dt_node *xn;
+	unsigned int size;
+	uint64_t xscom_base, xscom_size;
+
+	if (!ms_vpd || !HDIF_check(ms_vpd, MSVPD_HDIF_SIG)) {
+		prerror("XSCOM: Can't find MS VPD\n");
+		return;
+	}
+
+	pmbs = HDIF_get_idata(ms_vpd, MSVPD_IDATA_PMOVER_SYNCHRO, &size);
+	if (!CHECK_SPPTR(pmbs) || size < sizeof(*pmbs)) {
+		prerror("XSCOM: absent or bad PMBS size %u @ %p\n", size, pmbs);
+		return;
+	}
+
+	if (!(pmbs->flags & MSVPD_PMS_FLAG_XSCOMBASE_VALID)) {
+		prerror("XSCOM: No XSCOM base in PMBS, using default\n");
+		return;
+	}
+
+	xscom_base = pmbs->xscom_addr;
+
+	/* Some FSP give me a crap base address for XSCOM (it has spurrious
+	 * bits set as far as I can tell). Since only 5 bits 18:22 can
+	 * be programmed in hardware, let's isolate these. This seems to
+	 * give me the right value on VPL1
+	 */
+	xscom_base &= 0x80003e0000000000ul;
+	printf("XSCOM: Found base address: 0x%llx\n", xscom_base);
+
+	xscom_base = cleanup_addr(xscom_base);
+
+	xn = dt_new_addr(dt_root, "xscom", xscom_base);
+	assert(xn);
+
+	/* We hard wire the XSCOM size for now, it seems to be the same
+	 * everywhere so far
+	 */
+	xscom_size = 0x400000000000;
+
+	/* XXX Use boot CPU PVR to decide on XSCOM type... */
+	switch(PVR_TYPE(mfspr(SPR_PVR))) {
+	case PVR_TYPE_P7:
+	case PVR_TYPE_P7P:
+		dt_add_property_strings(xn, "compatible",
+					"ibm,xscom", "ibm,power7-xscom");
+		break;
+	case PVR_TYPE_P8:
+		dt_add_property_strings(xn, "compatible",
+					"ibm,xscom", "ibm,power8-xscom");
+		break;
+	default:
+		dt_add_property_strings(xn, "compatible", "ibm,xscom");
+	}
+	dt_add_property_cells(xn, "reg", hi32(xscom_base), lo32(xscom_base),
+			      hi32(xscom_size), lo32(xscom_size));
+}
+
 void parse_hdat(void)
 {
 	dt_root = dt_new_root("");
@@ -169,4 +231,5 @@ void parse_hdat(void)
 	cpu_parse();
 	memory_parse();
 	add_interrupt_controllers();
+	add_xscom();
 }

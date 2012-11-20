@@ -2,6 +2,7 @@
 #include <io.h>
 #include <spira.h>
 #include <processor.h>
+#include <device.h>
 
 /* XSCOM base address default */
 #define XSCOM_DEFAULT_BASE	0x00001A0000000000UL
@@ -121,33 +122,22 @@ int xscom_write(uint32_t gcid, uint32_t pcb_addr, uint64_t val)
 
 void xscom_init(void)
 {
-	const void *ms_vpd = spira.ntuples.ms_vpd.addr;
-	const struct msvpd_pmover_bsr_synchro *pmbs;
-	unsigned int size;
+	struct dt_node *xn;
+	const struct dt_property *reg;
 
-	if (!ms_vpd || !HDIF_check(ms_vpd, MSVPD_HDIF_SIG)) {
-		prerror("XSCOM: Can't find MS VPD\n");
+	xn = dt_find_compatible_node(dt_root, "ibm,xscom");
+	if (!xn) {
+		prerror("XSCOM: No XSCOM node in device-tree\n");
 		return;
 	}
 
-	pmbs = HDIF_get_idata(ms_vpd, MSVPD_IDATA_PMOVER_SYNCHRO, &size);
-	if (!CHECK_SPPTR(pmbs) || size < sizeof(*pmbs)) {
-		prerror("XSCOM: absent or bad PMBS size %u @ %p\n", size, pmbs);
-		return;
-	}
-
-	if (!(pmbs->flags & MSVPD_PMS_FLAG_XSCOMBASE_VALID)) {
-		prerror("XSCOM: No XSCOM base in PMBS, using default\n");
-		return;
-	}
-
-	xscom_base = pmbs->xscom_addr;
-
-	/* Some FSP give me a crap base address for XSCOM (it has spurrious
-	 * bits set as far as I can tell). Since only 5 bits 18:22 can
-	 * be programmed in hardware, let's isolate these. This seems to
-	 * give me the right value on VPL1
+	/* XXX We need a proper address parsing. For now, we just
+	 * "know" that we are looking at a u64
 	 */
-	xscom_base &= 0x80003e0000000000ul;
-	printf("XSCOM: Found base address: 0x%llx\n", xscom_base);
+	reg = dt_find_property(xn, "reg");
+	assert(reg);
+	xscom_base = dt_translate_address(xn, 0, NULL);
+
+	printf("XSCOM: Found base address from device-tree: 0x%llx\n",
+	       xscom_base);
 }
