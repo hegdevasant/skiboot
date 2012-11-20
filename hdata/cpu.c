@@ -70,9 +70,9 @@ static struct dt_node *add_cpu_node(struct dt_node *cpus,
 	};
 	const struct HDIF_cpu_timebase *timebase;
 	const struct HDIF_cpu_cache *cache;
-	u32 no, size;
-	char name[sizeof("PowerPC,POWER7@") + STR_MAX_CHARS(no)];
 	struct dt_node *cpu;
+	const char *name;
+	u32 no, size;
 
 	/* We use the process_interrupt_line as the res id */
 	no = id->process_interrupt_line;
@@ -109,11 +109,24 @@ static struct dt_node *add_cpu_node(struct dt_node *cpus,
 	       cache->l3_dcache_size_kb,
 	       cache->l35_dcache_size_kb);
 
-	/* FIXME: Don't hardcode this! */
-	sprintf(name, "PowerPC,POWER7@%x", no);
-	cpu = dt_new(cpus, name);
-	*strchr(name, '@') = '\0';
-	dt_add_property_string(cpu, "name", name);
+	/* Use the boot CPU PVR to make up a CPU name in the device-tree
+	 * since the HDAT doesn't seem to tell....
+	 */
+	switch(PVR_TYPE(mfspr(SPR_PVR))) {
+	case PVR_TYPE_P7:
+		name = "PowerPC,POWER7";
+		break;
+	case PVR_TYPE_P7P:
+		name = "PowerPC,POWER7+";
+		break;
+	case PVR_TYPE_P8:
+		name = "PowerPC,POWER8";
+		break;
+	default:
+		name = "PowerPC,Unknown";
+	}
+
+	cpu = dt_new_addr(cpus, name, no);
 	dt_add_property_string(cpu, "device_type", "cpu");
 	dt_add_property_string(cpu, "status", "okay");
 	dt_add_property_cell(cpu, "reg", no);

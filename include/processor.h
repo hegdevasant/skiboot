@@ -122,6 +122,7 @@
 /* PVR definitions */
 #define PVR_TYPE_P7	0x003f
 #define PVR_TYPE_P7P	0x004a
+#define PVR_TYPE_P8	0x004b
 
 #ifdef __ASSEMBLY__
 
