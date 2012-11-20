@@ -75,8 +75,8 @@ void add_opal_nodes(void)
 	entry = (uint64_t)&opal_entry;
 
 	opal = dt_new(dt_root, "ibm,opal");
-	dt_add_property_cell(opal, "#address-cells", 0);
-	dt_add_property_cell(opal, "#size-cells", 0);
+	dt_add_property_cells(opal, "#address-cells", 0);
+	dt_add_property_cells(opal, "#size-cells", 0);
 	dt_add_property_string(opal, "compatible", "ibm,opal-v2");
 	dt_add_property_u64(opal, "opal-base-address", base);
 	dt_add_property_u64(opal, "opal-entry-address", entry);

@@ -129,37 +129,37 @@ static struct dt_node *add_cpu_node(struct dt_node *cpus,
 	cpu = dt_new_addr(cpus, name, no);
 	dt_add_property_string(cpu, "device_type", "cpu");
 	dt_add_property_string(cpu, "status", "okay");
-	dt_add_property_cell(cpu, "reg", no);
+	dt_add_property_cells(cpu, "reg", no);
 	dt_add_property(cpu, "ibm,segment-page-sizes", p7_sps, sizeof(p7_sps));
 	dt_add_property(cpu, "ibm,processor-segment-sizes",
 			p7_pss, sizeof(p7_pss));
 	/* We append the secondary cpus in __cpu_parse */
-	dt_add_property_cell(cpu, "ibm,ppc-interrupt-server#s", no);
-	dt_add_property_cell(cpu, "ibm,slb-size", 0x20);
-	dt_add_property_cell(cpu, "ibm,vmx", 0x2);
+	dt_add_property_cells(cpu, "ibm,ppc-interrupt-server#s", no);
+	dt_add_property_cells(cpu, "ibm,slb-size", 0x20);
+	dt_add_property_cells(cpu, "ibm,vmx", 0x2);
 
-	dt_add_property_cell(cpu, "d-cache-block-size", cache->dcache_block_size);
-	dt_add_property_cell(cpu, "i-cache-block-size", cache->icache_block_size);
-	dt_add_property_cell(cpu, "d-cache-size", cache->l1_dcache_size_kb*1024);
-	dt_add_property_cell(cpu, "i-cache-size", cache->icache_size_kb*1024);
+	dt_add_property_cells(cpu, "d-cache-block-size", cache->dcache_block_size);
+	dt_add_property_cells(cpu, "i-cache-block-size", cache->icache_block_size);
+	dt_add_property_cells(cpu, "d-cache-size", cache->l1_dcache_size_kb*1024);
+	dt_add_property_cells(cpu, "i-cache-size", cache->icache_size_kb*1024);
 
 	if (cache->icache_line_size != cache->icache_block_size)
-		dt_add_property_cell(cpu, "i-cache-line-size",
+		dt_add_property_cells(cpu, "i-cache-line-size",
 				  cache->icache_line_size);
 	if (cache->l1_dcache_line_size != cache->dcache_block_size)
-		dt_add_property_cell(cpu, "d-cache-line-size",
+		dt_add_property_cells(cpu, "d-cache-line-size",
 				  cache->l1_dcache_line_size);
-	dt_add_property_cell(cpu, "clock-frequency",
+	dt_add_property_cells(cpu, "clock-frequency",
 			  timebase->actual_clock_speed * 1000000);
 
 	/* FIXME: Hardcoding is bad. */
-	dt_add_property_cell(cpu, "timebase-frequency", 512000000);
+	dt_add_property_cells(cpu, "timebase-frequency", 512000000);
 
-	dt_add_property_cell(cpu, DT_PRIVATE "hw_proc_id",
+	dt_add_property_cells(cpu, DT_PRIVATE "hw_proc_id",
 			     id->hardware_proc_id);
 	dt_add_property_u64(cpu, DT_PRIVATE "ibase", cleanup_addr(id->ibase));
-	dt_add_property_cell(cpu, DT_PRIVATE "pir", id->pir);
-	dt_add_property_cell(cpu, DT_PRIVATE "processor_chip_id",
+	dt_add_property_cells(cpu, DT_PRIVATE "pir", id->pir);
+	dt_add_property_cells(cpu, DT_PRIVATE "processor_chip_id",
 			     id->processor_chip_id);
 	return cpu;
 }
@@ -218,8 +218,8 @@ static bool __cpu_parse(void)
 	uint32_t boot_pir = mfspr(SPR_PIR);
 
 	cpus = dt_new(dt_root, "cpus");
-	dt_add_property_cell(cpus, "#address-cells", 2);
-	dt_add_property_cell(cpus, "#size-cells", 1);
+	dt_add_property_cells(cpus, "#address-cells", 2);
+	dt_add_property_cells(cpus, "#size-cells", 1);
 
 	paca = spira.ntuples.paca.addr;
 	if (!HDIF_check(paca, "SPPACA")) {

@@ -62,19 +62,19 @@ struct dt_property *__dt_add_property_strings(struct dt_node *node,
 					      int count, ...);
 
 /* Given out enough GCC extensions, we will achieve enlightenment! */
-#define dt_add_property_cell(node, name, ...)				\
-	__dt_add_property_cell((node), ((name)),			\
+#define dt_add_property_cells(node, name, ...)				\
+	__dt_add_property_cells((node), ((name)),			\
 			    sizeof((u32[]) { __VA_ARGS__ })/sizeof(u32), \
 			    __VA_ARGS__)
 
-struct dt_property *__dt_add_property_cell(struct dt_node *node,
-					   const char *name,
-					   int count, ...);
+struct dt_property *__dt_add_property_cells(struct dt_node *node,
+					    const char *name,
+					    int count, ...);
 
 static inline struct dt_property *dt_add_property_u64(struct dt_node *node,
 						      const char *name, u64 val)
 {
-	return dt_add_property_cell(node, name, (u32)(val >> 32), (u32)val);
+	return dt_add_property_cells(node, name, (u32)(val >> 32), (u32)val);
 }
 
 void dt_del_property(struct dt_node *node, struct dt_property *prop);

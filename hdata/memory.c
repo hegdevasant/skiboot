@@ -88,7 +88,7 @@ static bool add_address_range(struct dt_node *root,
 	dt_add_property_string(mem, "device_type", "memory");
 	dt_add_property(mem, "reg", reg, sizeof(reg));
 	if (id->flags & MS_AREA_SHARED)
-		dt_add_property_cell(mem, DT_PRIVATE "share-id", id->share_id);
+		dt_add_property_cells(mem, DT_PRIVATE "share-id", id->share_id);
 
 	/* FIXME: Do numa using arange->chip vs id->processor_chip_id */
 	return true;

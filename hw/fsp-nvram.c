@@ -355,7 +355,7 @@ void add_opal_nvram_node(struct dt_node *opal)
 	struct dt_node *nvram;
 
 	nvram = dt_new(opal, "nvram");
-	dt_add_property_cell(nvram, "#bytes", nvram_size);
+	dt_add_property_cells(nvram, "#bytes", nvram_size);
 	dt_add_property_string(nvram, "compatible", "ibm,opal-nvram");
 }
 

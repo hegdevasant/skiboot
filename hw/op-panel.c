@@ -140,7 +140,7 @@ void add_opal_oppanel_node(struct dt_node *opal)
 	struct dt_node *oppanel;
 
 	oppanel = dt_new(opal, "oppanel");
-	dt_add_property_cell(oppanel, "#length", 16);
-	dt_add_property_cell(oppanel, "#lines", 2);
+	dt_add_property_cells(oppanel, "#length", 16);
+	dt_add_property_cells(oppanel, "#lines", 2);
 	dt_add_property_string(oppanel, "compatible", "ibm,opal-oppanel");
 }

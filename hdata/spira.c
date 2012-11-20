@@ -114,10 +114,10 @@ static void add_interrupt_controllers(void)
 	struct dt_node *cpu, *ics;
 
 	ics = dt_new_addr(dt_root, "interrupt-controller", 0);
-	dt_add_property_cell(ics, "reg", 0, 0, 0, 0);
+	dt_add_property_cells(ics, "reg", 0, 0, 0, 0);
 	dt_add_property_string(ics, "compatible", "IBM,ppc-xics");
-	dt_add_property_cell(ics, "#address-cells", 0);
-	dt_add_property_cell(ics, "#interrupt-cells", 1);
+	dt_add_property_cells(ics, "#address-cells", 0);
+	dt_add_property_cells(ics, "#interrupt-cells", 1);
 	dt_add_property_string(ics, "device_type",
 			       "PowerPC-Interrupt-Source-Controller");
 	dt_add_property(ics, "interrupt-controller", NULL, 0);
@@ -149,8 +149,8 @@ static void add_interrupt_controllers(void)
 				irange, sizeof(irange));
 		dt_add_property(ics, "interrupt-controller", NULL, 0);
 		add_ics_reg_property(ics, ibase, num_threads);
-		dt_add_property_cell(ics, "#address-cells", 0);
-		dt_add_property_cell(ics, "#interrupt-cells", 1);
+		dt_add_property_cells(ics, "#address-cells", 0);
+		dt_add_property_cells(ics, "#interrupt-cells", 1);
 		dt_add_property_string(ics, "device_type",
 				   "PowerPC-External-Interrupt-Presentation");
 	}
@@ -165,8 +165,8 @@ void parse_hdat(void)
 
 	add_dtb_model();
 	dt_add_property_string(dt_root, "compatible", "ibm,powernv");
-	dt_add_property_cell(dt_root, "#address-cells", 2);
-	dt_add_property_cell(dt_root, "#size-cells", 2);
+	dt_add_property_cells(dt_root, "#address-cells", 2);
+	dt_add_property_cells(dt_root, "#size-cells", 2);
 
 	cpu_parse();
 	memory_parse();

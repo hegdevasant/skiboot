@@ -67,7 +67,7 @@ int main(void)
 
 	for (n = 0, i = dt_first(root); i; i = dt_next(root, i), n++) {
 		assert(!list_top(&i->properties, struct dt_property, list));
-		dt_add_property_cell(i, "visited", 1);
+		dt_add_property_cells(i, "visited", 1);
 	}
 	assert(n == 6);
 
@@ -79,7 +79,7 @@ int main(void)
 	}
 	assert(n == 6);
 
-	dt_add_property_cell(c1, "some-property", 1, 2, 3);
+	dt_add_property_cells(c1, "some-property", 1, 2, 3);
 	p = dt_find_property(c1, "some-property");
 	assert(p);
 	assert(strcmp(p->name, "some-property") == 0);

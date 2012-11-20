@@ -711,8 +711,8 @@ void add_opal_console_nodes(struct dt_node *opal)
 	struct dt_node *consoles;
 
 	consoles = dt_new(opal, "consoles");
-	dt_add_property_cell(consoles, "#address-cells", 1);
-	dt_add_property_cell(consoles, "#size-cells", 0);
+	dt_add_property_cells(consoles, "#address-cells", 1);
+	dt_add_property_cells(consoles, "#size-cells", 0);
 	for (i = 0; i < MAX_SERIAL; i++) {
 		struct fsp_serial *fs = &fsp_serials[i];
 		struct dt_node *fs_node;
@@ -729,9 +729,9 @@ void add_opal_console_nodes(struct dt_node *opal)
 		else
 			dt_add_property_string(fs_node, "compatible",
 					       "ibm,opal-console-hvsi");
-		dt_add_property_cell(fs_node,
+		dt_add_property_cells(fs_node,
 				     "#write-buffer-size", SER_BUF_DATA_SIZE);
-		dt_add_property_cell(fs_node, "reg", i);
+		dt_add_property_cells(fs_node, "reg", i);
 		dt_add_property_string(fs_node, "device_type", "serial");
 	}
 }
