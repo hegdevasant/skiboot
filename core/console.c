@@ -81,17 +81,21 @@ bool flush_console(void)
 	return ret;
 }
 
-static void inmem_write(const char *buf, size_t count)
+static void inmem_write(char c)
 {
-	while(count--) {
-		con_buf[con_in++] = *(buf++);
-		if (con_in >= INMEM_CON_LEN)
-			con_in = 0;
+	con_buf[con_in++] = c;
+	if (con_in >= INMEM_CON_LEN)
+		con_in = 0;
 
-		/* If head reaches tail, push tail around & drop chars */
-		if (con_in == con_out)
-			con_out = (con_in + 1) % INMEM_CON_LEN;
-	}
+	/* If head reaches tail, push tail around & drop chars */
+	if (con_in == con_out)
+		con_out = (con_in + 1) % INMEM_CON_LEN;
+}
+
+static void write_char(char c)
+{
+	mambo_write(&c, 1);
+	inmem_write(c);
 }
 
 ssize_t write(int fd __unused, const void *buf, size_t count)
@@ -100,9 +104,14 @@ ssize_t write(int fd __unused, const void *buf, size_t count)
 	 * from fairly deep debug path
 	 */
 	bool need_unlock = lock_recursive(&con_lock);
+	const char *cbuf = buf;
 
-	mambo_write(buf, count);
-	inmem_write(buf, count);
+	while(count--) {
+		char c = *(cbuf++);
+		if (c == 10)
+			write_char(13);
+		write_char(c);
+	}
 
 	__flush_console();
 
