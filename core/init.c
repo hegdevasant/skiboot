@@ -138,7 +138,7 @@ void load_and_boot_kernel(bool is_reboot)
 
 void main_cpu_entry(void)
 {
-	printf("SkiBoot starting...\n");
+	printf("SkiBoot %s starting...\n", gitid);
 
 	/* Initialize boot cpu's cpu_thread struct. */
 	__this_cpu = boot_cpu = init_cpu_thread(mfspr(SPR_PIR),

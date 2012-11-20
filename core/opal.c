@@ -55,6 +55,15 @@ void opal_trace_entry(struct stack_frame *eframe)
 	       eframe->lr, eframe->gpr[1]);
 }
 
+static void add_opal_firmware_node(struct dt_node *opal)
+{
+	struct dt_node *firmware = dt_new(opal, "firmware");
+
+	dt_add_property_string(firmware, "compatible", "ibm,opal-firmware");
+	dt_add_property_string(firmware, "name", "firmware");
+	dt_add_property_string(firmware, "git-id", gitid);
+}
+
 void add_opal_nodes(void)
 {
 	uint64_t base, entry, size;
@@ -76,7 +85,7 @@ void add_opal_nodes(void)
 	add_opal_console_nodes(opal);
 	add_opal_nvram_node(opal);
 	add_opal_oppanel_node(opal);
-	//add_opal_firmware_node();
+	add_opal_firmware_node(opal);
 	//add_opal_errlog_node();
 }
 

@@ -81,6 +81,9 @@ extern void parse_machine(void);
 /* Root of device tree. */
 extern struct dt_node *dt_root;
 
+/* Generated git id. */
+extern const char gitid[];
+
 /* Fast reboot support */
 extern void fast_reset(void);
 extern void __secondary_cpu_entry(void);
