@@ -51,6 +51,15 @@ struct dt_property *dt_add_property(struct dt_node *node,
 struct dt_property *dt_add_property_string(struct dt_node *node,
 					   const char *name,
 					   const char *value);
+/* Given out enough GCC extensions, we will achieve enlightenment! */
+#define dt_add_property_strings(node, name, ...)			\
+	__dt_add_property_strings((node), ((name)),			\
+			    sizeof((const char *[]) { __VA_ARGS__ })/sizeof(const char *), \
+			    __VA_ARGS__)
+
+struct dt_property *__dt_add_property_strings(struct dt_node *node,
+					      const char *name,
+					      int count, ...);
 
 /* Given out enough GCC extensions, we will achieve enlightenment! */
 #define dt_add_property_cell(node, name, ...)				\

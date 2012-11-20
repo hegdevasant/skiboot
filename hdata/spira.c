@@ -111,8 +111,6 @@ static void add_ics_reg_property(struct dt_node *ics,
 
 void add_interrupt_controllers(void)
 {
-	static const char p7_icp_compat[] =
-		"IBM,ppc-xicp\0IBM,power7-xicp";
 	struct dt_node *cpu, *ics;
 
 	ics = dt_new_addr(dt_root, "interrupt-controller", 0);
@@ -141,8 +139,9 @@ void add_interrupt_controllers(void)
 		num_threads = intsrv->len / sizeof(u32);
 
 		ics = dt_new_addr(dt_root, "interrupt-controller", ibase);
-		dt_add_property(ics, "compatible",
-				p7_icp_compat, sizeof(p7_icp_compat));
+		dt_add_property_strings(ics, "compatible",
+					"IBM,ppc-xicp",
+					"IBM,power7-xicp");
 
 		irange[0] = dt_property_get_cell(intsrv, 0); /* Index */
 		irange[1] = num_threads;		     /* num servers */

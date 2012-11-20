@@ -122,7 +122,7 @@ struct dt_property *__dt_add_property_cell(struct dt_node *node,
 {
 	struct dt_property *p;
 	u32 *val;
-	int i;
+	unsigned int i;
 	va_list args;
 
 	p = new_property(node, name, count * sizeof(u32));
@@ -130,6 +130,33 @@ struct dt_property *__dt_add_property_cell(struct dt_node *node,
 	va_start(args, count);
 	for (i = 0; i < count; i++)
 		val[i] = cpu_to_fdt32(va_arg(args, u32));
+	va_end(args);
+	return p;
+}
+
+struct dt_property *__dt_add_property_strings(struct dt_node *node,
+					      const char *name,
+					      int count, ...)
+{
+	struct dt_property *p;
+	unsigned int i, size;
+	va_list args;
+	char *s;
+
+	va_start(args, count);
+	for (i = size = 0; i < count; i++)
+		size += strlen(va_arg(args, const char *)) + 1;
+	va_end(args);
+	if (!size)
+		size = 1;
+	p = new_property(node, name, size);
+	s = (char *)p->prop;
+	*s = 0;
+	va_start(args, count);
+	for (i = 0; i < count; i++) {
+		strcpy(s, va_arg(args, const char *));
+		s = s + strlen(s) + 1;
+	}
 	va_end(args);
 	return p;
 }
