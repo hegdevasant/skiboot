@@ -428,3 +428,64 @@ void dt_expand(const void *fdt)
 	dt_expand_node(dt_root, fdt, 0);
 }
 
+u64 dt_get_number(const void *pdata, unsigned int cells)
+{
+	const u32 *p = pdata;
+	u64 ret = 0;
+
+	while(cells--)
+		ret = (ret << 32) | *(p++);
+	return ret;
+}
+
+u32 dt_n_address_cells(const struct dt_node *node)
+{
+	if (!node->parent)
+		return 0;
+	return dt_prop_get_u32_def(node->parent, "#address-cells", 2);
+}
+
+u32 dt_n_size_cells(const struct dt_node *node)
+{
+	if (!node->parent)
+		return 0;
+	return dt_prop_get_u32_def(node->parent, "#size-cells", 1);
+}
+
+u64 dt_get_address(const struct dt_node *node, unsigned int index,
+		   u64 *out_size)
+{
+	const struct dt_property *p;
+	u32 na = dt_n_address_cells(node);
+	u32 ns = dt_n_size_cells(node);
+	u32 pos, n;
+
+	p = dt_find_property(node, "reg");
+	assert(p);
+	n = (na + ns) * sizeof(u32);
+	pos = n * index;
+	assert((pos + n) <= p->len);
+	if (out_size)
+		*out_size = dt_get_number(p->prop + pos + na * sizeof(u32), ns);
+	return dt_get_number(p->prop + pos, na);
+}
+
+unsigned int dt_count_addresses(const struct dt_node *node)
+{
+	const struct dt_property *p;
+	u32 na = dt_n_address_cells(node);
+	u32 ns = dt_n_size_cells(node);
+	u32 n;
+
+	p = dt_find_property(node, "reg");
+	assert(p);
+	n = (na + ns) * sizeof(u32);
+	return p->len / n;
+}
+
+u64 dt_translate_address(const struct dt_node *node, unsigned int index,
+			 u64 *out_size)
+{
+	/* XXX TODO */
+	return dt_get_address(node, index, out_size);
+}

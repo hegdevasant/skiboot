@@ -121,5 +121,29 @@ u64 dt_prop_get_u64_def(const struct dt_node *node, const char *prop, u64 def);
 u32 dt_prop_get_u32(const struct dt_node *node, const char *prop);
 u32 dt_prop_get_u32_def(const struct dt_node *node, const char *prop, u32 def);
 
+/* Parsing helpers */
+u32 dt_n_address_cells(const struct dt_node *node);
+u32 dt_n_size_cells(const struct dt_node *node);
+u64 dt_get_number(const void *pdata, unsigned int cells);
+
+/* Address accessors ("reg" properties parsing). No translation,
+ * only support "simple" address forms (1 or 2 cells). Asserts
+ * if address doesn't exist
+ */
+u64 dt_get_address(const struct dt_node *node, unsigned int index,
+		   u64 *out_size);
+
+/* Count "reg" property entries */
+unsigned int dt_count_addresses(const struct dt_node *node);
+
+/* Address translation
+ *
+ * WARNING: Current implementation is simplified and will not
+ * handle complex address formats with address space indicators
+ * nor will it handle "ranges" translations yet... (XX TODO)
+ */
+u64 dt_translate_address(const struct dt_node *node, unsigned int index,
+			 u64 *out_size);
+
 
 #endif /* __DEVICE_H */
