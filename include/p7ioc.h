@@ -184,6 +184,9 @@ enum p7ioc_phb_state {
 	/* Set if the PHB is for some reason unusable */
 	P7IOC_PHB_STATE_BROKEN,
 
+	/* Set if the PHB is fenced due to an error */
+	P7IOC_PHB_STATE_FENCED,
+
 	/* Slot Power up state machine */
 	P7IOC_PHB_STATE_SPUP_STABILIZE_DELAY,	/* Step 3 Delay 2s */
 	P7IOC_PHB_STATE_SPUP_SLOT_STATUS,	/* Step 4 waiting for status */
@@ -230,6 +233,7 @@ struct p7ioc_phb {
 	uint64_t			iod_cache[128];
 	uint64_t			m32d_cache[128];
 	uint64_t			m64d_cache[128];
+	bool				er_pending;
 	struct p7ioc			*ioc;
 	struct phb			phb;
 };

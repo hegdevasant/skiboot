@@ -624,6 +624,17 @@ static void p7ioc_eeh_read_phb_status(struct p7ioc_phb *p,
 		stat->pestB[i] = in_be64(p->regs + PHB_IODA_DATA0);
 }
 
+static bool p7ioc_phb_fenced(struct p7ioc_phb *p)
+{
+	struct p7ioc *ioc = p->ioc;
+	uint64_t fence, fbits;
+
+	fbits = 0x0003000000000000 >> (p->index * 4);
+	fence = in_be64(ioc->regs + P7IOC_CHIP_FENCE_SHADOW);
+
+	return (fence & fbits) != 0;
+}
+
 static int64_t p7ioc_eeh_freeze_status(struct phb *phb, uint64_t pe_number,
 				       uint8_t *freeze_state,
 				       uint16_t *pci_error_type,
@@ -637,8 +648,14 @@ static int64_t p7ioc_eeh_freeze_status(struct phb *phb, uint64_t pe_number,
 	*freeze_state = OPAL_EEH_STOPPED_NOT_FROZEN;
 	*pci_error_type = OPAL_EEH_PHB_NO_ERROR;
 
-	/* XXX Handle PHB status */
-	/* XXX We currently only check for PE freeze, not fence */
+	/* Check fence */
+	if (p7ioc_phb_fenced(p)) {
+		/* Should be OPAL_EEH_STOPPED_TEMP_UNAVAIL ? */
+		*freeze_state = OPAL_EEH_STOPPED_MMIO_DMA_FREEZE;
+		*pci_error_type = OPAL_EEH_PHB_FATAL;
+		p->state = P7IOC_PHB_STATE_FENCED;
+		goto bail;
+	}
 
 	/* Check the PEEV */
 	p7ioc_phb_ioda_sel(p, IODA_TBL_PEEV, 0, true);
@@ -647,6 +664,9 @@ static int64_t p7ioc_eeh_freeze_status(struct phb *phb, uint64_t pe_number,
 		peev = in_be64(p->regs + PHB_IODA_DATA0);
 	if (!(peev & peev_bit))
 		return OPAL_SUCCESS;
+
+	/* Indicate that we have an ER pending */
+	p->er_pending = true;
 
 	/* Read the PESTA & PESTB */
 	p7ioc_phb_ioda_sel(p, IODA_TBL_PESTA, pe_number, false);
@@ -666,6 +686,7 @@ static int64_t p7ioc_eeh_freeze_status(struct phb *phb, uint64_t pe_number,
 	else
 		*pci_error_type = OPAL_EEH_PCI_DMA_ERROR;
 
+ bail:
 	if (phb_status)
 		p7ioc_eeh_read_phb_status(p, (struct OpalIoP7IOCPhbErrorData *)
 					  phb_status);
@@ -676,6 +697,7 @@ static int64_t p7ioc_eeh_freeze_clear(struct phb *phb, uint64_t pe_number,
 				      uint64_t eeh_action_token)
 {
 	struct p7ioc_phb *p = phb_to_p7ioc_phb(phb);
+	uint64_t peev0, peev1;
 
 	/* XXX Now this is a heavy hammer, coming roughly from the P7IOC doc
 	 * and my old "pseudopal" code. It will need to be refined. In general
@@ -779,6 +801,12 @@ static int64_t p7ioc_eeh_freeze_clear(struct phb *phb, uint64_t pe_number,
 		p7ioc_phb_ioda_sel(p, IODA_TBL_PESTB, pe_number, false);
 		out_be64(p->regs + PHB_IODA_DATA0, 0);
 	}
+
+	/* Update ER pending indication */
+	p7ioc_phb_ioda_sel(p, IODA_TBL_PEEV, 0, true);
+	peev0 = in_be64(p->regs + PHB_IODA_DATA0);
+	peev1 = in_be64(p->regs + PHB_IODA_DATA0);
+	p->er_pending = (peev0 || peev1);
 
 	return OPAL_SUCCESS;
 }
@@ -1549,10 +1577,35 @@ static int64_t p7ioc_lsi_set_xive(void *data, uint32_t isn,
 static void p7ioc_phb_err_interrupt(void *data, uint32_t isn)
 {
 	struct p7ioc_phb *p = data;
+	uint64_t peev0, peev1;
 
 	PHBDBG(p, "Got interrupt 0x%04x\n", isn);
 
-	/* XXX TBI */
+	/*
+	 * If the PHB is broken, go away
+	 */
+	if (p->state == P7IOC_PHB_STATE_BROKEN)
+		return;
+
+	/*
+	 * Check if there's an error pending and update PHB fence state
+	 * and return, the ER error is drowned at this point
+	 */
+	lock(&p->lock);
+	if (p7ioc_phb_fenced(p)) {
+		p->state = P7IOC_PHB_STATE_FENCED;
+		PHBERR(p, "ER error ignored, PHB fenced\n");
+		unlock(&p->lock);
+		return;
+	}
+
+	/* Check the PEEV */
+	p7ioc_phb_ioda_sel(p, IODA_TBL_PEEV, 0, true);
+	peev0 = in_be64(p->regs + PHB_IODA_DATA0);
+	peev1 = in_be64(p->regs + PHB_IODA_DATA0);
+	if (peev0 || peev1)
+		p->er_pending = true;
+	unlock(&p->lock);
 }
 
 /* MSIs (OS owned) */
@@ -2239,15 +2292,16 @@ void p7ioc_phb_add_nodes(struct p7ioc_phb *p)
 void p7ioc_phb_reset(struct p7ioc_phb *p)
 {
 	struct p7ioc *ioc = p->ioc;
-	uint64_t fence, fbits, ci_idx, rreg;
+	uint64_t ci_idx, rreg;
 	unsigned int i;
+	bool fenced;
 
 	/* Check our fence status. The fence bits we care about are
 	 * two bits per PHB at IBM bit location 14 and 15 + 4*phb
 	 */
-	fbits = 0x0003000000000000 >> (p->index * 4);
-	fence = in_be64(ioc->regs + P7IOC_CHIP_FENCE_SHADOW);
-	PHBDBG(p, "PHB reset... fence=%llx fbit=%llx\n", fence, fbits);
+	fenced = p7ioc_phb_fenced(p);
+
+	PHBDBG(p, "PHB reset... (fenced: %d)\n", (int)fenced);
 
 	/*
 	 * If not fenced and already functional, let's do an IODA reset
@@ -2255,7 +2309,7 @@ void p7ioc_phb_reset(struct p7ioc_phb *p)
 	 * notable that the IODA table cache won't be emptied so that we
 	 * can restore them during error recovery.
 	 */
-	if (p->state == P7IOC_PHB_STATE_FUNCTIONAL && !(fence & fbits)) {
+	if (p->state == P7IOC_PHB_STATE_FUNCTIONAL && !fenced) {
 		PHBDBG(p, "  ioda reset ...\n");
 		p7ioc_ioda_reset(&p->phb, false);
 		time_wait_ms(100);
@@ -2287,14 +2341,14 @@ void p7ioc_phb_reset(struct p7ioc_phb *p)
 		out_be64(ioc->regs + P7IOC_CCRR, 0);
 
 		/* Check if fence lifed */
-		fence = in_be64(ioc->regs + P7IOC_CHIP_FENCE_SHADOW);
-		PHBDBG(p, "  fence: %llx...\n", fence);
-		if (!(fence & fbits))
+		fenced = p7ioc_phb_fenced(p);
+		PHBDBG(p, "  fenced: %d...\n", (int)fenced);
+		if (!fenced)
 			break;
 	}
 
 	/* Reset failed, not much to do, maybe add an error return */
-	if (fence & fbits) {
+	if (fenced) {
 		PHBERR(p, "Reset failed, fence still set !\n");
 		p->state = P7IOC_PHB_STATE_BROKEN;
 		return;
