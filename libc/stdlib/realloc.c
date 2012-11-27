@@ -21,13 +21,16 @@ realloc(void *ptr, size_t size)
 	struct chunk *header;
 	char *newptr, *start;
 
+	if (ptr == NULL)
+		return malloc(size);
+
 	header = (struct chunk *) ptr;
 	header--;
 
 	if (size <= header->length)
 		return ptr;
 
-	newptr = (char *) malloc(size);
+	newptr = malloc(size);
 	if (newptr == NULL)
 		return 0;
 
