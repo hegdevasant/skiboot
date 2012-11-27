@@ -1341,25 +1341,19 @@ static const struct phb_ops p7ioc_phb_ops = {
 };
 
 /* p7ioc_phb_get_xive - Interrupt control from OPAL */
-int64_t p7ioc_phb_get_xive(struct p7ioc_phb *p, uint32_t isn,
-			   uint16_t *server, uint8_t *prio)
+static int64_t p7ioc_msi_get_xive(void *data, uint32_t isn,
+				  uint16_t *server, uint8_t *prio)
 {
+	struct p7ioc_phb *p = data;
 	uint32_t irq, fbuid = IRQ_FBUID(isn);
-	uint64_t xive, *xcache;
+	uint64_t xive;
 
-	if (fbuid == p->buid_lsi) {
-		irq = isn & 0xf;
-		/* Unused LSIs */
-		if (irq > 7 || irq == 6)
-			return OPAL_PARAMETER;
-		xcache = &p->lxive_cache[irq];
-	} else if (fbuid >= p->buid_msi && fbuid < (p->buid_msi + 0x10)) {
-		irq = isn & 0xff;
-		xcache = &p->mxive_cache[irq];
-	} else
+	if (fbuid < p->buid_msi || fbuid >= (p->buid_msi + 0x10))
 		return OPAL_PARAMETER;
 
-	xive = *xcache;
+	irq = isn & 0xff;
+	xive = p->mxive_cache[irq];
+
 	*server = GETFIELD(IODA_XIVT_SERVER, xive);
 	*prio = GETFIELD(IODA_XIVT_PRIORITY, xive);
 
@@ -1367,37 +1361,25 @@ int64_t p7ioc_phb_get_xive(struct p7ioc_phb *p, uint32_t isn,
 }
 
 /* p7ioc_phb_set_xive - Interrupt control from OPAL */
-int64_t p7ioc_phb_set_xive(struct p7ioc_phb *p, uint32_t isn,
-			   uint16_t server, uint8_t prio)
+static int64_t p7ioc_msi_set_xive(void *data, uint32_t isn,
+				  uint16_t server, uint8_t prio)
 {
-	uint32_t fbuid = IRQ_FBUID(isn);
-	uint32_t table, irq;
-	uint64_t xive, *xcache;
-	uint64_t m_server, m_prio;
+	struct p7ioc_phb *p = data;
+	uint32_t irq, fbuid = IRQ_FBUID(isn);
+	uint64_t xive, m_server, m_prio;
 
-	if (fbuid == p->buid_lsi) {
-		table = IODA_TBL_LXIVT;
-		irq = isn & 0xf;
-		/* Unused LSIs */
-		if (irq > 7 || irq == 6)
-			return OPAL_PARAMETER;
-		xcache = &p->lxive_cache[irq];
-	} else if (fbuid >= p->buid_msi && fbuid < (p->buid_msi + 0x10)) {
-		table = IODA_TBL_MXIVT;
-		irq = isn & 0xff;
-		xcache = &p->mxive_cache[irq];
-	} else
+	if (fbuid < p->buid_msi || fbuid >= (p->buid_msi + 0x10))
 		return OPAL_PARAMETER;
-
-	p7ioc_phb_ioda_sel(p, table, irq, false);
 
 	/* We cache the arguments because we have to mangle
 	 * it in order to hijack 3 bits of priority to extend
 	 * the server number
 	 */
+	irq = isn & 0xff;
 	xive = SETFIELD(IODA_XIVT_SERVER, 0ull, server);
 	xive = SETFIELD(IODA_XIVT_PRIORITY, xive, prio);
-	*xcache = xive;
+
+	p->mxive_cache[irq] = xive;
 
 	/* Now we mangle the server and priority */
 	if (prio == 0xff) {
@@ -1409,6 +1391,7 @@ int64_t p7ioc_phb_set_xive(struct p7ioc_phb *p, uint32_t isn,
 	}
 
 	/* We use HRT entry 0 always for now */
+	p7ioc_phb_ioda_sel(p, IODA_TBL_MXIVT, irq, false);
 	xive = in_be64(p->regs + PHB_IODA_DATA0);
 	xive = SETFIELD(IODA_XIVT_SERVER, xive, m_server);
 	xive = SETFIELD(IODA_XIVT_PRIORITY, xive, m_prio);
@@ -1416,6 +1399,98 @@ int64_t p7ioc_phb_set_xive(struct p7ioc_phb *p, uint32_t isn,
 
 	return OPAL_SUCCESS;
 }
+
+/* p7ioc_phb_get_xive - Interrupt control from OPAL */
+static int64_t p7ioc_lsi_get_xive(void *data, uint32_t isn,
+				  uint16_t *server, uint8_t *prio)
+{
+	struct p7ioc_phb *p = data;
+	uint32_t irq, fbuid = IRQ_FBUID(isn);
+	uint64_t xive;
+
+	if (fbuid != p->buid_lsi)
+		return OPAL_PARAMETER;
+	irq = isn & 0xf;
+	if (irq > 7)
+		return OPAL_PARAMETER;
+
+	xive = p->lxive_cache[irq];
+
+	*server = GETFIELD(IODA_XIVT_SERVER, xive);
+	*prio = GETFIELD(IODA_XIVT_PRIORITY, xive);
+
+	return OPAL_SUCCESS;
+}
+
+/* p7ioc_phb_set_xive - Interrupt control from OPAL */
+static int64_t p7ioc_lsi_set_xive(void *data, uint32_t isn,
+				  uint16_t server, uint8_t prio)
+{
+	struct p7ioc_phb *p = data;
+	uint32_t irq, fbuid = IRQ_FBUID(isn);
+	uint64_t xive, m_server, m_prio;
+
+	if (fbuid != p->buid_lsi)
+		return OPAL_PARAMETER;
+	irq = isn & 0xf;
+	if (irq > 7)
+		return OPAL_PARAMETER;
+
+	xive = SETFIELD(IODA_XIVT_SERVER, 0ull, server);
+	xive = SETFIELD(IODA_XIVT_PRIORITY, xive, prio);
+	p->lxive_cache[irq] = xive;
+
+	/* We cache the arguments because we have to mangle
+	 * it in order to hijack 3 bits of priority to extend
+	 * the server number
+	 */
+
+	/* Now we mangle the server and priority */
+	if (prio == 0xff) {
+		m_server = 0;
+		m_prio = 0xff;
+	} else {
+		m_server = server >> 3;
+		m_prio = (prio >> 3) | ((server & 7) << 5);
+	}
+
+	/* We use HRT entry 0 always for now */
+	p7ioc_phb_ioda_sel(p, IODA_TBL_LXIVT, irq, false);
+	xive = in_be64(p->regs + PHB_IODA_DATA0);
+	xive = SETFIELD(IODA_XIVT_SERVER, xive, m_server);
+	xive = SETFIELD(IODA_XIVT_PRIORITY, xive, m_prio);
+	out_be64(p->regs + PHB_IODA_DATA0, xive);
+
+	return OPAL_SUCCESS;
+}
+
+static void p7ioc_phb_err_interrupt(void *data, uint32_t isn)
+{
+	struct p7ioc_phb *p = data;
+
+	PHBDBG(p, "Got interrupt 0x%04x\n", isn);
+
+	/* XXX TBI */
+}
+
+/* MSIs (OS owned) */
+static const struct irq_source_ops p7ioc_msi_irq_ops = {
+	.get_xive = p7ioc_msi_get_xive,
+	.set_xive = p7ioc_msi_set_xive,
+};
+
+/* LSIs (OS owned) */
+static const struct irq_source_ops p7ioc_lsi_irq_ops = {
+	.get_xive = p7ioc_lsi_get_xive,
+	.set_xive = p7ioc_lsi_set_xive,
+};
+
+/* PHB Errors (Ski owned) */
+static const struct irq_source_ops p7ioc_phb_err_irq_ops = {
+	.get_xive = p7ioc_lsi_get_xive,
+	.set_xive = p7ioc_lsi_set_xive,
+	.interrupt = p7ioc_phb_err_interrupt,
+};
 
 /* p7ioc_phb_setup - Setup a p7ioc_phb data structure
  *
@@ -1442,6 +1517,15 @@ void p7ioc_phb_setup(struct p7ioc *ioc, uint8_t index, bool active)
 	p->m64_base = ioc->mmio2_win_start + PHBn_M64_BASE(index);
 	p->state = P7IOC_PHB_STATE_UNINITIALIZED;
 	p->phb.scan_map = 0x1; /* Only device 0 to scan */
+
+
+	/* Register OS interrupt sources */
+	register_irq_source(&p7ioc_msi_irq_ops, p, p->buid_msi << 4, 256);
+	register_irq_source(&p7ioc_lsi_irq_ops, p, p->buid_lsi << 4, 4);
+
+	/* Register internal interrupt source (LSI 7) */
+	register_irq_source(&p7ioc_phb_err_irq_ops, p,
+			    (p->buid_lsi << 4) + 7, 1);
 
 	/* We register the PHB before we initialize it so we
 	 * get a useful OPAL ID for it

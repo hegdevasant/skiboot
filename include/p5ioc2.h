@@ -111,10 +111,6 @@ extern void p5ioc2_phb_setup(struct p5ioc2 *ioc, struct p5ioc2_phb *p,
 			     uint8_t ca, uint8_t index, bool active,
 			     uint32_t buid);
 extern void p5ioc2_phb_init(struct p5ioc2_phb *p);
-extern int64_t p5ioc2_phb_get_xive(struct p5ioc2_phb *p, uint32_t isn,
-				   uint16_t *server, uint8_t *prio);
-extern int64_t p5ioc2_phb_set_xive(struct p5ioc2_phb *p, uint32_t isn,
-				   uint16_t server, uint8_t prio);
 extern void p5ioc2_phb_add_nodes(struct p5ioc2_phb *p);
 
 /*

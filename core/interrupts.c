@@ -14,6 +14,73 @@
 #define ICP_CPPR		0x4	/* 8-bit access */
 #define ICP_MFRR		0xc	/* 8-bit access */
 
+struct irq_source {
+	uint32_t			start;
+	uint32_t			end;
+	const struct irq_source_ops	*ops;
+	void				*data;
+	struct list_node		link;
+};
+
+static LIST_HEAD(irq_sources);
+static struct lock irq_lock = LOCK_UNLOCKED;
+
+void register_irq_source(const struct irq_source_ops *ops, void *data,
+			 uint32_t start, uint32_t count)
+{
+	struct irq_source *is, *is1;
+
+	is = zalloc(sizeof(struct irq_source));
+	assert(is);
+	is->start = start;
+	is->end = start + count;
+	is->ops = ops;
+	is->data = data;
+
+	printf("IRQ: Registering %04x..%04x ops @%p (data %p) %s\n",
+	       start, start + count - 1, ops, data,
+	       ops->interrupt ? "[Internal]" : "[OS]");
+
+	lock(&irq_lock);
+	list_for_each(&irq_sources, is1, link) {
+		if (is->end >= is1->start && is->start < is1->end) {
+			prerror("register IRQ source overlap !\n");
+			prerror("  new: %x..%x old: %x..%x\n",
+				is->start, is->end - 1,
+				is1->start, is1->end - 1);
+			assert(0);
+		}
+	}
+	list_add_tail(&irq_sources, &is->link);
+	unlock(&irq_lock);
+}
+
+void unregister_irq_source(uint32_t start, uint32_t count)
+{
+	struct irq_source *is;
+
+	lock(&irq_lock);
+	list_for_each(&irq_sources, is, link) {
+		if (start >= is->start && start < is->end) {
+			if (start != is->start ||
+			    count != (is->end - is->start)) {
+				prerror("unregister IRQ source mismatch !\n");
+				prerror("start:%x, count: %x match: %x..%x\n",
+					start, count, is->start, is->end);
+				assert(0);
+			}
+			list_del(&is->link);
+			unlock(&irq_lock);
+			/* XXX Add synchronize / RCU */
+			free(is);
+			return;
+		}
+	}
+	unlock(&irq_lock);
+	prerror("unregister IRQ source not found !\n");
+	prerror("start:%x, count: %x\n", start, count);
+	assert(0);
+}
 
 /*
  * This takes a 5-bit chip id (node:3 + chip:2) and returns a 20 bit
@@ -48,23 +115,31 @@ uint32_t get_ics_phandle(void)
 
 void add_opal_interrupts(struct dt_node *opal)
 {
-	/* We support up to 32 chips, thus 32 PSI interrupts */
-#define MAX_PSI_IRQS	32
+	struct irq_source *is;
+	unsigned int i, count = 0;
+	uint32_t *irqs = NULL, isn;
 
-	uint32_t irqs[MAX_PSI_IRQS];
-	unsigned int psi_irq_count;
-
-	/* OPAL currently wants to be forwarded the PSI interrupts
-	 *
-	 * Later it might want to handle more interrupts, but for
-	 * now let's stick to those
-	 */
-	psi_irq_count = fsp_get_interrupts(irqs, MAX_PSI_IRQS);
+	lock(&irq_lock);
+	list_for_each(&irq_sources, is, link) {
+		/*
+		 * Add a source to opal-interrupts if it has an
+		 * ->interrupt callback
+		 */
+		if (!is->ops->interrupt)
+			continue;
+		for (isn = is->start; isn < is->end; isn++) {
+			i = count++;
+			irqs = realloc(irqs, 4 * count);
+			irqs[i] = isn;
+		}
+	}
+	unlock(&irq_lock);
 
 	/* The opal-interrupts property has one cell per interrupt,
 	 * it is not a standard interrupt property
 	 */
-	dt_add_property(opal, "opal-interrupts", irqs, psi_irq_count * 4);
+	if (irqs)
+		dt_add_property(opal, "opal-interrupts", irqs, count * 4);
 }
 
 static u64 this_thread_ibase(void)
@@ -105,40 +180,53 @@ void icp_send_eoi(uint32_t interrupt)
 	out_be32(icp + ICP_XIRR, interrupt & 0xffffff);
 }
 
+static struct irq_source *irq_find_source(uint32_t isn)
+{
+	struct irq_source *is;
+
+	lock(&irq_lock);
+	list_for_each(&irq_sources, is, link) {
+		if (isn >= is->start && isn < is->end) {
+			unlock(&irq_lock);
+			return is;
+		}
+	}
+	unlock(&irq_lock);
+
+	return NULL;
+}
+
 static int64_t opal_set_xive(uint32_t isn, uint16_t server, uint8_t priority)
 {
-	if (IRQ_BUID(isn) == PSI_IRQ_BUID)
-		return fsp_set_xive(isn, server, priority);
+	struct irq_source *is = irq_find_source(isn);
 
-	/* XXX Add NX */
+	if (!is || !is->ops->set_xive)
+		return OPAL_PARAMETER;
 
-	/* Everything else goes to the IOCs */
-	return cec_set_xive(isn, server, priority);
+	return is->ops->set_xive(is->data, isn, server, priority);
 }
 opal_call(OPAL_SET_XIVE, opal_set_xive);
 
 static int64_t opal_get_xive(uint32_t isn, uint16_t *server, uint8_t *priority)
 {
-	if (IRQ_BUID(isn) == PSI_IRQ_BUID)
-		return fsp_get_xive(isn, server, priority);
+	struct irq_source *is = irq_find_source(isn);
 
-	/* XXX Add NX */
+	if (!is || !is->ops->get_xive)
+		return OPAL_PARAMETER;
 
-	/* Everything else goes to the IOCs */
-	return cec_get_xive(isn, server, priority);
+	return is->ops->get_xive(is->data, isn, server, priority);
 }
 opal_call(OPAL_GET_XIVE, opal_get_xive);
 
 int64_t opal_handle_interrupt(uint32_t isn, uint64_t *outstanding_event_mask)
 {
-	/* We only support PSI interrupts atm */
-	if (IRQ_BUID(isn) != PSI_IRQ_BUID)
-		return OPAL_PARAMETER;
+	struct irq_source *is = irq_find_source(isn);
+	int64_t rc = OPAL_PARAMETER;
 
-	/* Handle the interrupt at the FSP level (somewhat equivalent
-	 * to fsp_poll(), see comments in the code for differences
-	 */
-	fsp_psi_interrupt(isn);
+	if (!is || !is->ops->interrupt)
+		goto bail;
+
+	is->ops->interrupt(is->data, isn);
 
 	/* Poll the console buffers on any interrupt since we don't
 	 * get send notifications
@@ -146,9 +234,10 @@ int64_t opal_handle_interrupt(uint32_t isn, uint64_t *outstanding_event_mask)
 	fsp_console_poll();
 
 	/* Update output events */
+ bail:
 	if (outstanding_event_mask)
 		*outstanding_event_mask = opal_pending_events;
 
-	return OPAL_SUCCESS;
+	return rc;
 }
 opal_call(OPAL_HANDLE_INTERRUPT, opal_handle_interrupt);

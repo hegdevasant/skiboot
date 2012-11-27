@@ -79,89 +79,9 @@ static void p5ioc2_add_nodes(struct io_hub *hub __unused)
 	dt_end_node();
 }
 
-
-static int64_t p5ioc2_get_xive(struct io_hub *hub, uint32_t isn,
-			       uint16_t *server, uint8_t *prio)
-{
-	struct p5ioc2 *ioc = iohub_to_p5ioc2(hub);
-	struct p5ioc2_phb *p;
-	uint32_t fbuid, ca, boff;
-	int64_t rc;
-
-	fbuid = IRQ_FBUID(isn);
-
-	/* XXX Internal hub, not supported */
-	if (BUID_BASE(fbuid) == 1 || BUID_BASE(fbuid) == 2)
-		return OPAL_UNSUPPORTED;
-
-	/* PCI */
-	if (fbuid >= (ioc->buid_base + P5IOC2_CA1_BUID)) {
-		ca = 1;
-		boff = fbuid - (ioc->buid_base + P5IOC2_CA1_BUID);
-	} else if (fbuid >= (ioc->buid_base + P5IOC2_CA0_BUID)) {
-		ca = 0;
-		boff = fbuid - (ioc->buid_base + P5IOC2_CA0_BUID);
-	} else
-		return OPAL_PARAMETER;
-
-	/* XXX CA own interrupt, not supported */
-	if (boff == 0)
-		return OPAL_UNSUPPORTED;
-	/* Out of range */
-	if (boff > 4)
-		return OPAL_PARAMETER;
-	p = ca ? &ioc->ca1_phbs[boff - 1] : &ioc->ca0_phbs[boff - 1];
-	p->phb.ops->lock(&p->phb);
-	rc = p5ioc2_phb_get_xive(p, isn, server, prio);
-	p->phb.ops->unlock(&p->phb);
-
-	return rc;
-}
-
-
-static int64_t p5ioc2_set_xive(struct io_hub *hub, uint32_t isn,
-			       uint16_t server, uint8_t prio)
-{
-	struct p5ioc2 *ioc = iohub_to_p5ioc2(hub);
-	struct p5ioc2_phb *p;
-	uint32_t fbuid, ca, boff;
-	int64_t rc;
-
-	fbuid = IRQ_FBUID(isn);
-
-	/* XXX Internal hub, not supported */
-	if (BUID_BASE(fbuid) == 1 || BUID_BASE(fbuid) == 2)
-		return OPAL_UNSUPPORTED;
-
-	/* PCI */
-	if (fbuid >= (ioc->buid_base + P5IOC2_CA1_BUID)) {
-		ca = 1;
-		boff = fbuid - (ioc->buid_base + P5IOC2_CA1_BUID);
-	} else if (fbuid >= (ioc->buid_base + P5IOC2_CA0_BUID)) {
-		ca = 0;
-		boff = fbuid - (ioc->buid_base + P5IOC2_CA0_BUID);
-	} else
-		return OPAL_PARAMETER;
-
-	/* XXX CA own interrupt, not supported */
-	if (boff == 0)
-		return OPAL_UNSUPPORTED;
-	/* Out of range */
-	if (boff > 4)
-		return OPAL_PARAMETER;
-	p = ca ? &ioc->ca1_phbs[boff - 1] : &ioc->ca0_phbs[boff - 1];
-	p->phb.ops->lock(&p->phb);
-	rc = p5ioc2_phb_set_xive(p, isn, server, prio);
-	p->phb.ops->unlock(&p->phb);
-
-	return rc;
-}
-
 static const struct io_hub_ops p5ioc2_hub_ops = {
 	.set_tce_mem	= p5ioc2_set_tce_mem,
 	.get_diag_data	= p5ioc2_get_diag_data,
-	.get_xive	= p5ioc2_get_xive,
-	.set_xive	= p5ioc2_set_xive,
 	.add_nodes	= p5ioc2_add_nodes,
 };
 

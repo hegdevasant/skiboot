@@ -729,9 +729,10 @@ static const struct phb_ops p5ioc2_phb_ops = {
 };
 
 /* p5ioc2_phb_get_xive - Interrupt control from OPAL */
-int64_t p5ioc2_phb_get_xive(struct p5ioc2_phb *p, uint32_t isn,
-			   uint16_t *server, uint8_t *prio)
+static int64_t p5ioc2_phb_get_xive(void *data, uint32_t isn,
+				   uint16_t *server, uint8_t *prio)
 {
+	struct p5ioc2_phb *p = data;
 	uint32_t irq, xivr, fbuid = IRQ_FBUID(isn);
 
 	if (fbuid != p->buid)
@@ -746,9 +747,10 @@ int64_t p5ioc2_phb_get_xive(struct p5ioc2_phb *p, uint32_t isn,
 }
 
 /* p5ioc2_phb_set_xive - Interrupt control from OPAL */
-int64_t p5ioc2_phb_set_xive(struct p5ioc2_phb *p, uint32_t isn,
-			   uint16_t server, uint8_t prio)
+static int64_t p5ioc2_phb_set_xive(void *data, uint32_t isn,
+				   uint16_t server, uint8_t prio)
 {
+	struct p5ioc2_phb *p = data;
 	uint32_t irq, xivr, fbuid = IRQ_FBUID(isn);
 
 	if (fbuid != p->buid)
@@ -779,6 +781,13 @@ int64_t p5ioc2_phb_set_xive(struct p5ioc2_phb *p, uint32_t isn,
 
 	return OPAL_SUCCESS;
 }
+
+/* IRQ ops for OS interrupts (not internal) */
+static const struct irq_source_ops p5ioc2_phb_os_irq_ops = {
+	.get_xive = p5ioc2_phb_get_xive,
+	.set_xive = p5ioc2_phb_set_xive,
+};
+
 
 static void p5ioc2_phb_init_utl(struct p5ioc2_phb *p __unused)
 {
@@ -985,6 +994,13 @@ void p5ioc2_phb_setup(struct p5ioc2 *ioc, struct p5ioc2_phb *p,
 	p->io_base = (uint64_t)p->ca_regs;
 	p->io_base += IO_PCI_SIZE * (index + 1);
 	p->state = P5IOC2_PHB_STATE_UNINITIALIZED;
+
+	/* Register all 16 interrupt sources for now as OS visible
+	 *
+	 * If we ever add some EEH, we might take out the error interrupts
+	 * and register them as OPAL internal interrupts instead
+	 */
+	register_irq_source(&p5ioc2_phb_os_irq_ops, p, p->buid << 4, 16);
 
 	/* We cannot query the PHB type yet as the registers aren't routed
 	 * so we'll do that in the inits, at which point we'll establish

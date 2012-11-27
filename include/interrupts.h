@@ -2,6 +2,7 @@
 #define __INTERRUPTS_H
 
 #include <stdint.h>
+#include <ccan/list/list.h>
 
 /*
  * Note about interrupt numbers
@@ -46,6 +47,10 @@
  *       looking around with the FSP getscom command, it appears
  *       that both pHyp and OPAL set this consistently to the same
  *       value that appears in the PHB configuration.
+ *
+ * => This is confirmed. The NX needs a similar configuration, this
+ *    tells the GX controller not to forward transactions for these
+ *    BUIDs down the GX bus.
  *
  * PCI interrupt numbering scheme:
  * -------------------------------
@@ -119,6 +124,24 @@
 
 /* Strip extension from BUID */
 #define BUID_BASE(buid)	((buid) & 0x1ff)
+
+
+/*
+ * IRQ sources register themselves here. If an "interrupts" callback
+ * is provided, then all interrupts in that source will appear in
+ * 'opal-interrupts' and will be handled by us.
+ */
+struct irq_source_ops {
+	int64_t (*set_xive)(void *data, uint32_t isn, uint16_t server,
+			    uint8_t priority);
+	int64_t (*get_xive)(void *data, uint32_t isn, uint16_t *server,
+			    uint8_t *priority);
+	void (*interrupt)(void *data, uint32_t isn);
+};
+
+extern void register_irq_source(const struct irq_source_ops *ops, void *data,
+				uint32_t start, uint32_t count);
+extern void unregister_irq_source(uint32_t start, uint32_t count);
 
 extern uint32_t get_psi_interrupt(uint32_t chip_id);
 

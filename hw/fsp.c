@@ -989,6 +989,90 @@ void fsp_tce_unmap(u32 offset, u32 size)
 		fsp_tce_table[offset++] = 0;
 }
 
+static void fsp_psi_interrupt(void *data __unused, uint32_t isn __unused)
+{
+	/* XXX We should decode the chip, find the link, etc...
+	 *
+	 * then we should handle PSI interrupts (link errors etc...)
+	 * vs. mailbox interrupts
+	 *
+	 * For now, we just poll the active FSP & clear the status bits
+	 */
+	__fsp_poll(true);
+}
+
+static int64_t fsp_psi_set_xive(void *data, uint32_t isn __unused,
+				uint16_t server, uint8_t priority)
+{
+	struct fsp_iopath *iop = data;
+	uint64_t xivr;
+
+	if (iop->link_status == SPSS_IO_PATH_PSI_LINK_BAD_FRU)
+		return OPAL_HARDWARE;
+
+	/* Populate the XIVR */
+	xivr  = (uint64_t)server << 40;
+	xivr |= (uint64_t)priority << 32;
+	xivr |=	IRQ_BUID(iop->interrupt) << 16;
+
+	out_be64(iop->gxhb_regs + PSIHB_XIVR, xivr);
+
+	return OPAL_SUCCESS;
+}
+
+static int64_t fsp_psi_get_xive(void *data, uint32_t isn __unused,
+				uint16_t *server, uint8_t *priority)
+{
+	struct fsp_iopath *iop = data;
+	uint64_t xivr;
+
+	if (iop->link_status == SPSS_IO_PATH_PSI_LINK_BAD_FRU)
+		return OPAL_HARDWARE;
+
+	/* Read & decode the XIVR */
+	xivr = in_be64(iop->gxhb_regs + PSIHB_XIVR);
+
+	*server = (xivr >> 40) & 0x7ff;
+	*priority = (xivr >> 32) & 0xff;
+
+	return OPAL_SUCCESS;
+}
+
+/* Called on a fast reset, make sure we aren't stuck with
+ * an accepted and never EOId PSI interrupt
+ */
+void fsp_psi_irq_reset(void)
+{
+	struct fsp_iopath *iop;
+	struct fsp *fsp;
+	unsigned int i;
+	uint64_t xivr;
+
+	printf("FSP: Hot reset !\n");
+
+	for (fsp = first_fsp; fsp; fsp = fsp->link) {
+		for (i = 0; i < fsp->iopath_count; i++) {
+			iop = &fsp->iopath[i];
+
+			/* Mask the interrupt & clean the XIVR */
+			xivr = 0x000000ff00000000;
+			xivr |=	IRQ_BUID(iop->interrupt) << 16;
+			out_be64(iop->gxhb_regs + PSIHB_XIVR, xivr);
+
+#if 0 /* Seems to checkstop ... */
+			/* Send a dummy EOI to make sure the ICP is clear */
+			icp_send_eoi(iop->interrupt);
+#endif
+		}
+	}
+}
+
+static const struct irq_source_ops fsp_psi_irq_ops = {
+	.get_xive = fsp_psi_get_xive,
+	.set_xive = fsp_psi_set_xive,
+	.interrupt = fsp_psi_interrupt,
+};
+
 static int fsp_psi_init_phb(struct fsp_iopath *fiop, bool active)
 {
 	u64 reg;
@@ -1069,6 +1153,9 @@ static int fsp_psi_init_phb(struct fsp_iopath *fiop, bool active)
 	/* Get the FSP register window */
 	reg = in_be64(fiop->gxhb_regs + PSIHB_FSPBAR);
 	fiop->fsp_regs = (void *)(reg | (1ULL << 63) | FSP1_REG_OFFSET);
+
+	/* Register the IRQ source */
+	register_irq_source(&fsp_psi_irq_ops, fiop, fiop->interrupt, 1);
 
 	return 0;
 }
@@ -1300,126 +1387,4 @@ int fsp_fetch_data(uint8_t flags, uint16_t id, uint32_t sub_id,
 	*length = total;
 
 	return 0;
-}
-
-unsigned int fsp_get_interrupts(uint32_t *psi_irqs, unsigned int max)
-{
-	struct fsp *fsp;
-	struct fsp_iopath *iop;
-
-#if 0 /* XXX We only support the one active link on the first FSP */
-	unsigned int idx = 0;
-
-	for (fsp = first_fsp; fsp; fsp = fsp->link) {
-		unsigned int i;
-
-		for (i = 0; i < fsp->iopath_count; i++) {
-			iop = &fsp->iopath[i];
-			psi_irqs[idx++] = iop->interrupt;
-			if (idx >= max)
-				goto bail;
-		}
-	}
- bail:
-	return idx;a
-#else
-	fsp = fsp_get_active();
-	if (!fsp || max == 0)
-		return 0;
-	iop = &fsp->iopath[fsp->active_iopath];
-	if (iop->link_status == SPSS_IO_PATH_PSI_LINK_BAD_FRU)
-		return 0;
-	
-	psi_irqs[0] = iop->interrupt;
-
-	return 1;
-#endif
-}
-
-void fsp_psi_interrupt(uint32_t isn __unused)
-{
-	/* XXX We should decode the chip, find the link, etc...
-	 *
-	 * then we should handle PSI interrupts (link errors etc...)
-	 * vs. mailbox interrupts
-	 *
-	 * For now, we just poll & clear the status bits
-	 */
-	__fsp_poll(true);
-}
-
-/*
- * XXX The functions below need to be fixed similarily to handle
- *     multiple links and target the right one !!!
- */
-int64_t fsp_set_xive(uint32_t isn __unused, uint16_t server, uint8_t priority)
-{
-	struct fsp *fsp = fsp_get_active(); /* XXX FIXME */
-	struct fsp_iopath *iop;
-	uint64_t xivr;
-
-	if (!fsp)
-		return OPAL_HARDWARE;
-	iop = &fsp->iopath[fsp->active_iopath];
-	if (iop->link_status == SPSS_IO_PATH_PSI_LINK_BAD_FRU)
-		return OPAL_HARDWARE;
-
-	/* Populate the XIVR */
-	xivr  = (uint64_t)server << 40;
-	xivr |= (uint64_t)priority << 32;
-	xivr |=	IRQ_BUID(iop->interrupt) << 16;
-
-	out_be64(iop->gxhb_regs + PSIHB_XIVR, xivr);
-
-	return OPAL_SUCCESS;
-}
-
-int64_t fsp_get_xive(uint32_t isn __unused, uint16_t *server, uint8_t *priority)
-{
-	struct fsp *fsp = fsp_get_active(); /* XXX FIXME */
-	struct fsp_iopath *iop;
-	uint64_t xivr;
-
-	if (!fsp)
-		return OPAL_HARDWARE;
-	iop = &fsp->iopath[fsp->active_iopath];
-	if (iop->link_status == SPSS_IO_PATH_PSI_LINK_BAD_FRU)
-		return OPAL_HARDWARE;
-
-	/* Read & decode the XIVR */
-	xivr = in_be64(iop->gxhb_regs + PSIHB_XIVR);
-
-	*server = (xivr >> 40) & 0x7ff;
-	*priority = (xivr >> 32) & 0xff;
-
-	return OPAL_SUCCESS;
-}
-
-/* Called on a fast reset, make sure we aren't stuck with
- * an accepted and never EOId PSI interrupt
- */
-void fsp_psi_irq_reset(void)
-{
-	struct fsp_iopath *iop;
-	struct fsp *fsp;
-	unsigned int i;
-	uint64_t xivr;
-
-	printf("FSP: Hot reset !\n");
-
-	for (fsp = first_fsp; fsp; fsp = fsp->link) {
-		for (i = 0; i < fsp->iopath_count; i++) {
-			iop = &fsp->iopath[i];
-
-			/* Mask the interrupt & clean the XIVR */
-			xivr = 0x000000ff00000000;
-			xivr |=	IRQ_BUID(iop->interrupt) << 16;
-			out_be64(iop->gxhb_regs + PSIHB_XIVR, xivr);
-
-#if 0 /* Seems to checkstop ... */
-			/* Send a dummy EOI to make sure the ICP is clear */
-			icp_send_eoi(iop->interrupt);
-#endif
-		}
-	}
 }

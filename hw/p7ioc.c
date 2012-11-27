@@ -46,8 +46,14 @@ static void p7ioc_add_nodes(struct io_hub *hub)
 	dt_end_node();
 }
 
+static const struct io_hub_ops p7ioc_hub_ops = {
+	.set_tce_mem	= NULL, /* No set_tce_mem for p7ioc, we use FMTC */
+	.get_diag_data	= p7ioc_get_diag_data,
+	.add_nodes	= p7ioc_add_nodes,
+	.reset		= p7ioc_reset,
+};
 
-static int64_t p7ioc_rgc_get_xive(struct p7ioc *ioc __unused,
+static int64_t p7ioc_rgc_get_xive(void *data __unused,
 				  uint32_t isn __unused,
 				  uint16_t *server __unused,
 				  uint8_t *prio __unused)
@@ -56,7 +62,7 @@ static int64_t p7ioc_rgc_get_xive(struct p7ioc *ioc __unused,
 	return OPAL_UNSUPPORTED;
 }
 
-static int64_t p7ioc_rgc_set_xive(struct p7ioc *ioc __unused,
+static int64_t p7ioc_rgc_set_xive(void *data __unused,
 				  uint32_t isn __unused,
 				  uint16_t server __unused,
 				  uint8_t prio __unused)
@@ -65,67 +71,15 @@ static int64_t p7ioc_rgc_set_xive(struct p7ioc *ioc __unused,
 	return OPAL_UNSUPPORTED;
 }
 
-static int64_t p7ioc_get_xive(struct io_hub *hub, uint32_t isn,
-			      uint16_t *server, uint8_t *prio)
+static void p7ioc_rgc_interrupt(void *data __unused, uint32_t isn __unused)
 {
-	struct p7ioc *ioc = iohub_to_p7ioc(hub);
-	struct p7ioc_phb *p;
-	uint32_t buid;
-	uint32_t phb_idx;
-	int64_t rc;
-
-	buid = IRQ_BUID(isn);
-
-	/* RGC */
-	if (buid == BUID_BASE(ioc->rgc_buid))
-		return p7ioc_rgc_get_xive(ioc, isn, server, prio);
-
-	/* PCI */
-	phb_idx	= BUID_TO_PHB(buid);
-	if (phb_idx >= P7IOC_NUM_PHBS)
-		return OPAL_PARAMETER;
-	p = &ioc->phbs[phb_idx];
-	p->phb.ops->lock(&p->phb);
-	rc = p7ioc_phb_get_xive(p, isn, server, prio);
-	p->phb.ops->unlock(&p->phb);
-
-	return rc;
+	/* XXX TODO */
 }
 
-static int64_t p7ioc_set_xive(struct io_hub *hub, uint32_t isn,
-			      uint16_t server, uint8_t prio)
-{
-	struct p7ioc *ioc = iohub_to_p7ioc(hub);
-	struct p7ioc_phb *p;
-	uint32_t buid;
-	uint32_t phb_idx;
-	int64_t rc;
-
-	buid = IRQ_BUID(isn);
-
-	/* RGC */
-	if (buid == BUID_BASE(ioc->rgc_buid))
-		return p7ioc_rgc_set_xive(ioc, isn, server, prio);
-
-	/* PCI */
-	phb_idx	= BUID_TO_PHB(buid);
-	if (phb_idx >= P7IOC_NUM_PHBS)
-		return OPAL_PARAMETER;
-	p = &ioc->phbs[phb_idx];
-	p->phb.ops->lock(&p->phb);
-	rc = p7ioc_phb_set_xive(p, isn, server, prio);
-	p->phb.ops->unlock(&p->phb);
-
-	return rc;
-}
-
-static const struct io_hub_ops p7ioc_hub_ops = {
-	.set_tce_mem	= NULL, /* No set_tce_mem for p7ioc, we use FMTC */
-	.get_diag_data	= p7ioc_get_diag_data,
-	.get_xive	= p7ioc_get_xive,
-	.set_xive	= p7ioc_set_xive,
-	.add_nodes	= p7ioc_add_nodes,
-	.reset		= p7ioc_reset,
+static const struct irq_source_ops p7ioc_rgc_irq_ops = {
+	.get_xive = p7ioc_rgc_get_xive,
+	.set_xive = p7ioc_rgc_set_xive,
+	.interrupt = p7ioc_rgc_interrupt,
 };
 
 struct io_hub *p7ioc_create_hub(const struct cechub_io_hub *hub, uint32_t id)
@@ -166,6 +120,13 @@ struct io_hub *p7ioc_create_hub(const struct cechub_io_hub *hub, uint32_t id)
 
 	ioc->buid_base = hub->buid_ext << 9;
 	ioc->rgc_buid = ioc->buid_base + RGC_BUID_OFFSET;
+
+	/*
+	 * Register RGC interrupts
+	 *
+	 * For now I assume all 16 are used, TBD
+	 */
+	register_irq_source(&p7ioc_rgc_irq_ops, ioc, ioc->rgc_buid << 4, 16);
 
 	/* Setup PHB structures (no HW access yet).
 	 *

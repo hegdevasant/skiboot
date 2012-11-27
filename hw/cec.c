@@ -29,40 +29,6 @@ struct io_hub *cec_get_hub_by_id(uint32_t hub_id)
 	return cec_iohubs[hub_id];
 }
 
-int64_t cec_get_xive(uint32_t isn, uint16_t *server, uint8_t *priority)
-{
-	struct io_hub *hub;
-	uint32_t id;
-
-	/* We index our hubs by BUID extension */
-	id = IRQ_BEXT(isn);
-	if (id >= MAX_IO_HUBS)
-		return OPAL_PARAMETER;
-
-	hub = cec_iohubs[id];
-	if (!hub)
-		return OPAL_PARAMETER;
-
-	return hub->ops->get_xive(hub, isn, server, priority);
-}
-
-int64_t cec_set_xive(uint32_t isn, uint16_t server, uint8_t priority)
-{
-	struct io_hub *hub;
-	uint32_t id;
-
-	/* We index our hubs by BUID extension */
-	id = IRQ_BEXT(isn);
-	if (id >= MAX_IO_HUBS)
-		return OPAL_PARAMETER;
-
-	hub = cec_iohubs[id];
-	if (!hub)
-		return OPAL_PARAMETER;
-
-	return hub->ops->set_xive(hub, isn, server, priority);
-}
-
 void add_cec_nodes(void)
 {
 	unsigned int i;
