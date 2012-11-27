@@ -1069,7 +1069,13 @@ static int64_t p7ioc_set_xive_pe(struct phb *phb, uint32_t pe_number,
 	if (pe_number > 127 || xive_num > 255)
 		return OPAL_PARAMETER;
 
-	p7ioc_phb_ioda_sel(p, IODA_TBL_MXIVT, xive_num, false);
+	/* Update MXIVE cache */
+	xive = p->mxive_cache[xive_num];
+	xive = SETFIELD(IODA_XIVT_PENUM, xive, pe_number);
+	p->mxive_cache[xive_num] = xive;
+
+	/* Update HW */
+	p7ioc_phb_ioda_sel(p, IODA_TBL_MXIVT, xive_num, false);	
 	xive = in_be64(p->regs + PHB_IODA_DATA0);
 	xive = SETFIELD(IODA_XIVT_PENUM, xive, pe_number);
 	out_be64(p->regs + PHB_IODA_DATA0, xive);
@@ -1376,9 +1382,9 @@ static int64_t p7ioc_msi_set_xive(void *data, uint32_t isn,
 	 * the server number
 	 */
 	irq = isn & 0xff;
-	xive = SETFIELD(IODA_XIVT_SERVER, 0ull, server);
+	xive = p->mxive_cache[irq];
+	xive = SETFIELD(IODA_XIVT_SERVER, xive, server);
 	xive = SETFIELD(IODA_XIVT_PRIORITY, xive, prio);
-
 	p->mxive_cache[irq] = xive;
 
 	/* Now we mangle the server and priority */
