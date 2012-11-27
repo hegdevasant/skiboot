@@ -469,13 +469,17 @@ static int64_t opal_pci_reset(uint64_t phb_id, uint8_t reset_scope,
 		return OPAL_PARAMETER;
 	phb->ops->lock(phb);
 
-	/* We currently only handle IODA reset */
+	/*
+	 * We currently only handle IODA reset. The IODA tables
+	 * as well as the table caches will be cleared since the
+	 * hypervisor will figure them out again.
+	 */
 	switch(reset_scope) {
 	case OPAL_PCI_IODA_TABLE_RESET:
 		if (assert_state != OPAL_ASSERT_RESET)
 			break;
 		if (phb->ops->ioda_reset)
-			phb->ops->ioda_reset(phb);
+			phb->ops->ioda_reset(phb, true);
 		break;
 	default:
 		rc = OPAL_UNSUPPORTED;

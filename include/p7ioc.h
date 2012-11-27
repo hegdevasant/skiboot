@@ -221,6 +221,15 @@ struct p7ioc_phb {
 	int64_t				aercap; /* cached AER ecap offset */
 	uint64_t			lxive_cache[8];
 	uint64_t			mxive_cache[256];
+	uint64_t			mve_cache[256];
+	uint64_t			peltm_cache[128];
+	uint64_t			peltv_lo_cache[128];
+	uint64_t			peltv_hi_cache[128];
+	uint64_t			tve_lo_cache[128];
+	uint64_t			tve_hi_cache[128];
+	uint64_t			iod_cache[128];
+	uint64_t			m32d_cache[128];
+	uint64_t			m64d_cache[128];
 	struct p7ioc			*ioc;
 	struct phb			phb;
 };

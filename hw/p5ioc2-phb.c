@@ -615,8 +615,11 @@ static uint8_t p5ioc2_choose_bus(struct phb *phb __unused,
  * This reset the IODA tables in the PHB. It is called at
  * initialization time, on PHB reset, and can be called
  * explicitly from OPAL
+ *
+ * Note: We don't handle EEH on p5ioc2, we use no cache
+ * and thus always purge
  */
-static int64_t p5ioc2_ioda_reset(struct phb *phb)
+static int64_t p5ioc2_ioda_reset(struct phb *phb, bool purge __unused)
 {
 	struct p5ioc2_phb *p = phb_to_p5ioc2_phb(phb);
 	unsigned int i;

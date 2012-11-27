@@ -180,7 +180,7 @@ struct phb_ops {
 			      uint32_t xive_num, uint8_t msi_range,
 			      uint64_t *msi_address, uint32_t *message_data);
 
-	int64_t (*ioda_reset)(struct phb *phb);
+	int64_t (*ioda_reset)(struct phb *phb, bool purge);
 
 	/*
 	 * P5IOC2 only

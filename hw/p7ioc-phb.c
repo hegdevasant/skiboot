@@ -828,6 +828,7 @@ static int64_t p7ioc_map_pe_mmio_window(struct phb *phb, uint16_t pe_number,
 {
 	struct p7ioc_phb *p = phb_to_p7ioc_phb(phb);
 	uint64_t tbl, index;
+	uint64_t *cache;
 
 	if (pe_number > 127)
 		return OPAL_PARAMETER;
@@ -838,12 +839,14 @@ static int64_t p7ioc_map_pe_mmio_window(struct phb *phb, uint16_t pe_number,
 			return OPAL_PARAMETER;
 		tbl = IODA_TBL_IODT;
 		index = segment_num;
+		cache = &p->iod_cache[index];
 		break;
 	case OPAL_M32_WINDOW_TYPE:
 		if (window_num != 0 || segment_num > 127)
 			return OPAL_PARAMETER;
 		tbl = IODA_TBL_M32DT;
 		index = segment_num;
+		cache = &p->m32d_cache[index];
 		break;
 	case OPAL_M64_WINDOW_TYPE:
 		if (window_num > 15 || segment_num > 7)
@@ -851,6 +854,7 @@ static int64_t p7ioc_map_pe_mmio_window(struct phb *phb, uint16_t pe_number,
 
 		tbl = IODA_TBL_M64DT;
 		index = window_num << 3 | segment_num;
+		cache = &p->m64d_cache[index];
 		break;
 	default:
 		return OPAL_PARAMETER;
@@ -859,6 +863,9 @@ static int64_t p7ioc_map_pe_mmio_window(struct phb *phb, uint16_t pe_number,
 	p7ioc_phb_ioda_sel(p, tbl, index, false);
 	out_be64(p->regs + PHB_IODA_DATA0,
 		 SETFIELD(IODA_XXDT_PE, 0ull, pe_number));
+
+	/* Update cache */
+	*cache = SETFIELD(IODA_XXDT_PE, 0ull, pe_number);
 
 	return OPAL_SUCCESS;
 }
@@ -871,6 +878,7 @@ static int64_t p7ioc_set_pe(struct phb *phb, uint64_t pe_number,
 {
 	struct p7ioc_phb *p = phb_to_p7ioc_phb(phb);
 	uint64_t pelt;
+	uint64_t *cache = &p->peltm_cache[pe_number];
 
 	if (pe_number > 127 || bdfn > 0xffff)
 		return OPAL_PARAMETER;
@@ -894,6 +902,9 @@ static int64_t p7ioc_set_pe(struct phb *phb, uint64_t pe_number,
 	p7ioc_phb_ioda_sel(p, IODA_TBL_PELTM, pe_number, false);
 	out_be64(p->regs + PHB_IODA_DATA0, pelt);
 
+	/* Update cache */
+	*cache = pelt;
+
 	return OPAL_SUCCESS;
 }
 
@@ -904,10 +915,12 @@ static int64_t p7ioc_set_peltv(struct phb *phb, uint32_t parent_pe,
 	struct p7ioc_phb *p = phb_to_p7ioc_phb(phb);
 	uint32_t reg;
 	uint64_t mask, peltv;
-
+	uint64_t *cache;
 	if (parent_pe > 127 || child_pe > 127)
 		return OPAL_PARAMETER;
 
+	cache = (child_pe >> 6) ? &p->peltv_hi_cache[parent_pe] :
+		&p->peltv_lo_cache[parent_pe];
 	reg = (child_pe >> 6) ? PHB_IODA_DATA1 : PHB_IODA_DATA0;
 	child_pe &= 0x2f;
 	mask = 1ull << (63 - child_pe);
@@ -919,6 +932,9 @@ static int64_t p7ioc_set_peltv(struct phb *phb, uint32_t parent_pe,
 	else
 		peltv &= ~mask;
 	out_be64(p->regs + reg, peltv);
+
+	/* Update cache */
+	*cache = peltv;
 
 	return OPAL_SUCCESS;
 }
@@ -932,9 +948,12 @@ static int64_t p7ioc_map_pe_dma_window(struct phb *phb, uint16_t pe_number,
 	struct p7ioc_phb *p = phb_to_p7ioc_phb(phb);
 	uint64_t tvt0, tvt1, t, pelt;
 	uint64_t dma_window_size;
+	uint64_t *cache_lo, *cache_hi;
 
 	if (pe_number > 127 || window_id > 255 || tce_levels != 1)
 		return OPAL_PARAMETER;
+	cache_lo = &p->tve_lo_cache[window_id];
+        cache_hi = &p->tve_hi_cache[window_id];
 
 	/* Encode table size */
 	dma_window_size = tce_page_size * (tce_table_size >> 3);
@@ -994,6 +1013,10 @@ static int64_t p7ioc_map_pe_dma_window(struct phb *phb, uint16_t pe_number,
 	out_be64(p->regs + PHB_IODA_DATA1, tvt1);
 	out_be64(p->regs + PHB_IODA_DATA0, tvt0);
 
+	/* Update cache */
+	*cache_lo = tvt0;
+	*cache_hi = tvt1;
+
 	return OPAL_SUCCESS;
 }
 
@@ -1012,6 +1035,7 @@ static int64_t p7ioc_set_mve(struct phb *phb, uint32_t mve_number,
 {
 	struct p7ioc_phb *p = phb_to_p7ioc_phb(phb);
 	uint64_t pelt, mve = 0;
+	uint64_t *cache = &p->mve_cache[mve_number];
 
 	if (pe_number > 127 || mve_number > 255)
 		return OPAL_PARAMETER;
@@ -1037,6 +1061,9 @@ static int64_t p7ioc_set_mve(struct phb *phb, uint32_t mve_number,
 	p7ioc_phb_ioda_sel(p, IODA_TBL_MVT, mve_number, false);
 	out_be64(p->regs + PHB_IODA_DATA0, mve);
 
+	/* Update cache */
+	*cache = mve;
+
 	return OPAL_SUCCESS;
 }
 
@@ -1045,6 +1072,7 @@ static int64_t p7ioc_set_mve_enable(struct phb *phb, uint32_t mve_number,
 {
 	struct p7ioc_phb *p = phb_to_p7ioc_phb(phb);
 	uint64_t mve;
+	uint64_t *cache = &p->mve_cache[mve_number];
 
 	if (mve_number > 255)
 		return OPAL_PARAMETER;
@@ -1056,6 +1084,9 @@ static int64_t p7ioc_set_mve_enable(struct phb *phb, uint32_t mve_number,
 	else
 		mve &= ~IODA_MVT_VALID;
 	out_be64(p->regs + PHB_IODA_DATA0, mve);
+
+	/* Update cache */
+	*cache = mve;
 
 	return OPAL_SUCCESS;
 }
@@ -1198,19 +1229,50 @@ static uint8_t p7ioc_choose_bus(struct phb *phb __unused,
 	return al;
 }
 
+/* p7ioc_phb_init_ioda_cache - Reset the IODA cache values
+ */
+static void p7ioc_phb_init_ioda_cache(struct p7ioc_phb *p)
+{
+	unsigned int i;
+
+	for (i = 0; i < 8; i++)
+		p->lxive_cache[i] = SETFIELD(IODA_XIVT_PRIORITY, 0ull, 0xff);
+	for (i = 0; i < 256; i++) {
+		p->mxive_cache[i] = SETFIELD(IODA_XIVT_PRIORITY, 0ull, 0xff);
+		p->mve_cache[i]   = 0;
+	}
+	for (i = 0; i < 127; i++) {
+		p->peltm_cache[i]	= 0;
+		p->peltv_lo_cache[i]	= 0;
+		p->peltv_hi_cache[i]	= 0;
+		p->tve_lo_cache[i]	= 0;
+		p->tve_hi_cache[i]	= 0;
+		p->iod_cache[i]		= 0;
+		p->m32d_cache[i]	= 0;
+		p->m64d_cache[i]	= 0;
+	}
+}
+
 /* p7ioc_phb_ioda_reset - Reset the IODA tables
  *
+ * @purge: If true, the cache is cleared and the cleared values
+ *         are applied to HW. If false, the cached values are
+ *         applied to HW
+ *
  * This reset the IODA tables in the PHB. It is called at
- * initiaopalization time, on PHB reset, and can be called
+ * initialization time, on PHB reset, and can be called
  * explicitly from OPAL
  */
-static int64_t p7ioc_ioda_reset(struct phb *phb)
+static int64_t p7ioc_ioda_reset(struct phb *phb, bool purge)
 {
 	struct p7ioc_phb *p = phb_to_p7ioc_phb(phb);
 	unsigned int i;
 	uint64_t reg64;
+	uint64_t data64, data64_hi;
 
-	/* XXX NOTE: Figure out the hub number & HRT business */
+	/* If the "purge" argument is set, we clear the table cache */
+	if (purge)
+		p7ioc_phb_init_ioda_cache(p);
 
 	/* Init_18..19: Setup the HRT
 	 *
@@ -1231,9 +1293,8 @@ static int64_t p7ioc_ioda_reset(struct phb *phb)
 	 */
 	p7ioc_phb_ioda_sel(p, IODA_TBL_LXIVT, 0, true);
 	for (i = 0; i < 8; i++) {
-		out_be64(p->regs + PHB_IODA_DATA0,
-			 SETFIELD(IODA_XIVT_PRIORITY, 0ull, 0xff));
-		p->lxive_cache[i] = SETFIELD(IODA_XIVT_PRIORITY, 0ull, 0xff);
+		data64 = p->lxive_cache[i];
+		out_be64(p->regs + PHB_IODA_DATA0, data64);
 	}
 
 	/* Init_22..23: Cleanup the MXIVT
@@ -1244,41 +1305,50 @@ static int64_t p7ioc_ioda_reset(struct phb *phb)
 	 */
 	p7ioc_phb_ioda_sel(p, IODA_TBL_MXIVT, 0, true);
 	for (i = 0; i < 256; i++) {
-		out_be64(p->regs + PHB_IODA_DATA0,
-			 SETFIELD(IODA_XIVT_PRIORITY, 0ull, 0xff));
-		p->mxive_cache[i] = SETFIELD(IODA_XIVT_PRIORITY, 0ull, 0xff);
+		data64 = p->mxive_cache[i];
+		out_be64(p->regs + PHB_IODA_DATA0, data64);
 	}
 
 	/* Init_24..25: Cleanup the MVT */
 	p7ioc_phb_ioda_sel(p, IODA_TBL_MVT, 0, true);
-	for (i = 0; i < 256; i++)
-		out_be64(p->regs + PHB_IODA_DATA0, 0);
+	for (i = 0; i < 256; i++) {
+		data64 = p->mve_cache[i];
+		out_be64(p->regs + PHB_IODA_DATA0, data64);
+	}
 
 	/* Init_26..27: Cleanup the PELTM
 	 *
 	 * A completely clear PELTM should make everything match PE 0
 	 */
 	p7ioc_phb_ioda_sel(p, IODA_TBL_PELTM, 0, true);
-	for (i = 0; i < 127; i++)
-		out_be64(p->regs + PHB_IODA_DATA0, 0);
+	for (i = 0; i < 127; i++) {
+		data64 = p->peltm_cache[i];
+		out_be64(p->regs + PHB_IODA_DATA0, data64);
+	}
 
 	/* Init_28..30: Cleanup the PELTV */
 	p7ioc_phb_ioda_sel(p, IODA_TBL_PELTV, 0, true);
 	for (i = 0; i < 127; i++) {
-		out_be64(p->regs + PHB_IODA_DATA1, 0);
-		out_be64(p->regs + PHB_IODA_DATA0, 0);
+		data64 = p->peltv_lo_cache[i];
+		data64_hi = p->peltv_hi_cache[i];
+		out_be64(p->regs + PHB_IODA_DATA1, data64_hi);
+		out_be64(p->regs + PHB_IODA_DATA0, data64);
 	}
 
 	/* Init_31..33: Cleanup the TVT */
 	p7ioc_phb_ioda_sel(p, IODA_TBL_TVT, 0, true);
 	for (i = 0; i < 127; i++) {
-		out_be64(p->regs + PHB_IODA_DATA1, 0);
-		out_be64(p->regs + PHB_IODA_DATA0, 0);
+		data64 = p->tve_lo_cache[i];
+		data64_hi = p->tve_hi_cache[i];
+		out_be64(p->regs + PHB_IODA_DATA1, data64_hi);
+		out_be64(p->regs + PHB_IODA_DATA0, data64);
 	}
 
 	/* Init_34..35: Cleanup the M64BT
 	 *
-	 * We don't enable M64 BARs by default
+	 * We don't enable M64 BARs by default. However,
+	 * we shouldn't purge the hw and cache for it in
+	 * future.
 	 */
 	p7ioc_phb_ioda_sel(p, IODA_TBL_M64BT, 0, true);
 	for (i = 0; i < 16; i++)
@@ -1286,18 +1356,24 @@ static int64_t p7ioc_ioda_reset(struct phb *phb)
 
 	/* Init_36..37: Cleanup the IODT */
 	p7ioc_phb_ioda_sel(p, IODA_TBL_IODT, 0, true);
-	for (i = 0; i < 127; i++)
-		out_be64(p->regs + PHB_IODA_DATA0, 0);
+	for (i = 0; i < 127; i++) {
+		data64 = p->iod_cache[i];
+		out_be64(p->regs + PHB_IODA_DATA0, data64);
+	}
 
 	/* Init_38..39: Cleanup the M32DT */
 	p7ioc_phb_ioda_sel(p, IODA_TBL_M32DT, 0, true);
-	for (i = 0; i < 127; i++)
-		out_be64(p->regs + PHB_IODA_DATA0, 0);
+	for (i = 0; i < 127; i++) {
+		data64 = p->m32d_cache[i];
+		out_be64(p->regs + PHB_IODA_DATA0, data64);
+	}
 
 	/* Init_40..41: Cleanup the M64DT */
 	p7ioc_phb_ioda_sel(p, IODA_TBL_M64DT, 0, true);
-	for (i = 0; i < 127; i++)
+	for (i = 0; i < 127; i++) {
+		data64 = p->m64d_cache[i];
 		out_be64(p->regs + PHB_IODA_DATA0, 0);
+	}
 
 	/* Clear up the TCE cache */
 	reg64 = in_be64(p->regs + PHB_PHB2_CONFIG);
@@ -1524,7 +1600,6 @@ void p7ioc_phb_setup(struct p7ioc *ioc, uint8_t index, bool active)
 	p->state = P7IOC_PHB_STATE_UNINITIALIZED;
 	p->phb.scan_map = 0x1; /* Only device 0 to scan */
 
-
 	/* Register OS interrupt sources */
 	register_irq_source(&p7ioc_msi_irq_ops, p, p->buid_msi << 4, 256);
 	register_irq_source(&p7ioc_lsi_irq_ops, p, p->buid_lsi << 4, 4);
@@ -1532,6 +1607,9 @@ void p7ioc_phb_setup(struct p7ioc *ioc, uint8_t index, bool active)
 	/* Register internal interrupt source (LSI 7) */
 	register_irq_source(&p7ioc_phb_err_irq_ops, p,
 			    (p->buid_lsi << 4) + 7, 1);
+
+	/* Initialize IODA table caches */
+	p7ioc_phb_init_ioda_cache(p);
 
 	/* We register the PHB before we initialize it so we
 	 * get a useful OPAL ID for it
@@ -1983,7 +2061,7 @@ int64_t p7ioc_phb_init(struct p7ioc_phb *p)
 		 PHB_PHB2C_64B_TCE_EN);
 
 	/* Init_18..xx: Reset all IODA tables */
-	p7ioc_ioda_reset(&p->phb);
+	p7ioc_ioda_reset(&p->phb, false);
 
 	/* Init_42..47: Clear UTL & DLP error log regs */
 	out_be64(p->regs + PHB_PCIE_UTL_ERRLOG1,	   0xffffffffffffffff);
@@ -2171,12 +2249,15 @@ void p7ioc_phb_reset(struct p7ioc_phb *p)
 	fence = in_be64(ioc->regs + P7IOC_CHIP_FENCE_SHADOW);
 	PHBDBG(p, "PHB reset... fence=%llx fbit=%llx\n", fence, fbits);
 
-	/* If not fenced and already functional, let's do an IODA reset
-	 * to clear pending DMAs and wait a bit for thing to settle
+	/*
+	 * If not fenced and already functional, let's do an IODA reset
+	 * to clear pending DMAs and wait a bit for thing to settle. It's
+	 * notable that the IODA table cache won't be emptied so that we
+	 * can restore them during error recovery.
 	 */
 	if (p->state == P7IOC_PHB_STATE_FUNCTIONAL && !(fence & fbits)) {
 		PHBDBG(p, "  ioda reset ...\n");
-		p7ioc_ioda_reset(&p->phb);
+		p7ioc_ioda_reset(&p->phb, false);
 		time_wait_ms(100);
 	}
 
