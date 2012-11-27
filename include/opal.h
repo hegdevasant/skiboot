@@ -86,7 +86,12 @@
 #define OPAL_SET_SLOT_LED_STATUS		55
 #define OPAL_GET_EPOW_STATUS			56
 #define OPAL_SET_SYSTEM_ATTENTION_LED		57
-#define OPAL_LAST				57
+#define OPAL_RESERVED1				58
+#define OPAL_RESERVED2				59
+#define OPAL_PCI_NEXT_ERROR			60
+#define OPAL_PCI_EEH_FREEZE_STATUS2		61
+#define OPAL_LAST				61
+
 
 #ifndef __ASSEMBLY__
 
@@ -98,6 +103,7 @@
 enum OpalVendorApiTokens {
 	OPAL_START_VENDOR_API_RANGE = 1000, OPAL_END_VENDOR_API_RANGE = 1999
 };
+
 enum OpalFreezeState {
 	OPAL_EEH_STOPPED_NOT_FROZEN = 0,
 	OPAL_EEH_STOPPED_MMIO_FREEZE = 1,
@@ -112,6 +118,7 @@ enum OpalEehFreezeActionToken {
 	OPAL_EEH_ACTION_CLEAR_FREEZE_DMA = 2,
 	OPAL_EEH_ACTION_CLEAR_FREEZE_ALL = 3
 };
+
 enum OpalPciStatusToken {
 	OPAL_EEH_PHB_NO_ERROR = 0,
 	OPAL_EEH_PHB_FATAL = 1,
@@ -122,12 +129,24 @@ enum OpalPciStatusToken {
 	OPAL_EEH_PCIEX_UR = 6,
 	OPAL_EEH_PCIEX_CA = 7,
 	OPAL_EEH_PCI_MMIO_ERROR = 8,
-	OPAL_EEH_PCI_DMA_ERROR = 9
+	OPAL_EEH_PCI_DMA_ERROR = 9,
+	OPAL_EEH_PCI_ANY_ER = 10,
 };
+
+enum OpalPciErrorSeverity {
+	OPAL_EEH_SEV_NO_ERROR = 0,
+	OPAL_EEH_SEV_INF = 1,		/* Informational only */
+	OPAL_EEH_SEV_DEV_ER = 2,	/* Individual PEs in error state */
+	OPAL_EEH_SEV_PHB_FENCED = 3,	/* PHB needs a reset */
+	OPAL_EEH_SEV_PHB_DEAD = 4,	/* Entire PHB dead (unrecoverable) */
+	OPAL_EEH_SEV_IOC_DEAD = 5,	/* Entire IOC dead */
+};
+
 enum OpalShpcAction {
 	OPAL_SHPC_GET_LINK_STATE = 0,
 	OPAL_SHPC_GET_SLOT_STATE = 1
 };
+
 enum OpalShpcLinkState {
 	OPAL_SHPC_LINK_DOWN = 0,
 	OPAL_SHPC_LINK_UP_x1 = 1,
@@ -164,7 +183,8 @@ enum OpalPendingState {
 	OPAL_EVENT_ERROR_LOG_AVAIL = 0x20,
 	OPAL_EVENT_ERROR_LOG = 0x40,
 	OPAL_EVENT_EPOW = 0x80,
-	OPAL_EVENT_LED_STATUS = 0x100
+	OPAL_EVENT_LED_STATUS = 0x100,
+	OPAL_EVENT_PCI_ERROR = 0x200,
 };
 
 /* Machine check related definitions */

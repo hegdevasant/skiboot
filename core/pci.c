@@ -171,11 +171,14 @@ static void pci_check_clear_freeze(struct phb *phb)
 {
 	int64_t rc;
 	uint8_t freeze_state;
-	uint16_t pci_error_type;
+	uint16_t pci_error_type, sev;
 
 	rc = phb->ops->eeh_freeze_status(phb, 0, &freeze_state,
-					 &pci_error_type, NULL);
+					 &pci_error_type, &sev, NULL);
 	if (rc)
+		return;
+	/* We can't handle anything worse than an ER here */
+	if (sev > OPAL_EEH_SEV_DEV_ER)
 		return;
 	if (freeze_state == OPAL_EEH_STOPPED_NOT_FROZEN)
 		return;

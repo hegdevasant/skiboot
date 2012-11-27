@@ -126,7 +126,7 @@ static int64_t opal_pci_eeh_freeze_status(uint64_t phb_id, uint64_t pe_number,
 		return OPAL_UNSUPPORTED;
 	phb->ops->lock(phb);
 	rc = phb->ops->eeh_freeze_status(phb, pe_number, freeze_state,
-					 pci_error_type, phb_status);
+					 pci_error_type, NULL, phb_status);
 	phb->ops->unlock(phb);
 	pci_put_phb(phb);
 
@@ -530,3 +530,50 @@ static int64_t opal_pci_get_phb_diag_data(uint64_t phb_id,
 	return rc;
 }
 opal_call(OPAL_PCI_GET_PHB_DIAG_DATA, opal_pci_get_phb_diag_data);
+
+static int64_t opal_pci_next_error(uint64_t phb_id, uint64_t *first_frozen_pe,
+				   uint16_t *pci_error_type, uint16_t *severity)
+{
+	struct phb *phb = pci_get_phb(phb_id);
+	int64_t rc;
+
+	if (!phb)
+		return OPAL_PARAMETER;
+	if (!phb->ops->next_error)
+		return OPAL_UNSUPPORTED;
+	phb->ops->lock(phb);
+
+	/* Any call to this function clears the error event */
+	opal_update_pending_evt(OPAL_EVENT_PCI_ERROR, 0);
+	rc = phb->ops->next_error(phb, first_frozen_pe, pci_error_type,
+				  severity);
+	phb->ops->unlock(phb);
+	pci_put_phb(phb);
+
+	return rc;
+}
+opal_call(OPAL_PCI_NEXT_ERROR, opal_pci_next_error);
+
+static int64_t opal_pci_eeh_freeze_status2(uint64_t phb_id, uint64_t pe_number,
+					   uint8_t *freeze_state,
+					   uint16_t *pci_error_type,
+					   uint16_t *severity,
+					   uint64_t *phb_status)
+{
+	struct phb *phb = pci_get_phb(phb_id);
+	int64_t rc;
+
+	if (!phb)
+		return OPAL_PARAMETER;
+	if (!phb->ops->eeh_freeze_status)
+		return OPAL_UNSUPPORTED;
+	phb->ops->lock(phb);
+	rc = phb->ops->eeh_freeze_status(phb, pe_number, freeze_state,
+					 pci_error_type, severity, phb_status);
+	phb->ops->unlock(phb);
+	pci_put_phb(phb);
+
+	return rc;
+}
+opal_call(OPAL_PCI_EEH_FREEZE_STATUS2, opal_pci_eeh_freeze_status2);
+

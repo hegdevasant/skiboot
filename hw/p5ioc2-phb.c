@@ -503,6 +503,7 @@ static int64_t p5ioc2_poll(struct phb *phb)
 static int64_t p5ioc2_eeh_freeze_status(struct phb *phb, uint64_t pe_number,
 					uint8_t *freeze_state,
 					uint16_t *pci_error_type,
+					uint16_t *severity,
 					uint64_t *phb_status __unused)
 {
 	struct p5ioc2_phb *p = phb_to_p5ioc2_phb(phb);
@@ -511,6 +512,8 @@ static int64_t p5ioc2_eeh_freeze_status(struct phb *phb, uint64_t pe_number,
 	/* Defaults: not frozen */
 	*freeze_state = OPAL_EEH_STOPPED_NOT_FROZEN;
 	*pci_error_type = OPAL_EEH_PHB_NO_ERROR;
+	if (severity)
+		*severity = OPAL_EEH_SEV_NO_ERROR;
 
 	if (pe_number != 0)
 		return OPAL_PARAMETER;
@@ -524,8 +527,29 @@ static int64_t p5ioc2_eeh_freeze_status(struct phb *phb, uint64_t pe_number,
 	if (cfgrw & CAP_PCFGRW_DMA_FROZEN)
 		*freeze_state |= OPAL_EEH_STOPPED_DMA_FREEZE;
 
+	if (severity &&
+	    (cfgrw & (CAP_PCFGRW_MMIO_FROZEN | CAP_PCFGRW_MMIO_FROZEN)))
+		*severity = OPAL_EEH_SEV_DEV_ER;
+
 	/* XXX Don't bother populating pci_error_type */
 	/* Should read the bits from PLSSR */
+
+	return OPAL_SUCCESS;
+}
+
+static int64_t p5ioc2_eeh_next_error(struct phb *phb, uint64_t *first_frozen_pe,
+				     uint16_t *pci_error_type, uint16_t *severity)
+{
+	struct p5ioc2_phb *p = phb_to_p5ioc2_phb(phb);
+	uint32_t cfgrw;
+
+	/* XXX Don't bother */
+	*pci_error_type = OPAL_EEH_PHB_NO_ERROR;
+	*first_frozen_pe = 0;
+
+	cfgrw = in_be32(p->regs + CAP_PCFGRW);
+	if (cfgrw & (CAP_PCFGRW_MMIO_FROZEN | CAP_PCFGRW_MMIO_FROZEN))
+		*severity = OPAL_EEH_SEV_DEV_ER;
 
 	return OPAL_SUCCESS;
 }
@@ -719,6 +743,7 @@ static const struct phb_ops p5ioc2_phb_ops = {
 	.choose_bus		= p5ioc2_choose_bus,
 	.eeh_freeze_status	= p5ioc2_eeh_freeze_status,
 	.eeh_freeze_clear	= p5ioc2_eeh_freeze_clear,
+	.next_error		= p5ioc2_eeh_next_error,
 	.get_msi_64		= p5ioc2_get_msi_64,
 	.ioda_reset		= p5ioc2_ioda_reset,
 	.set_phb_tce_memory	= p5ioc2_set_phb_tce_memory,

@@ -638,6 +638,7 @@ static bool p7ioc_phb_fenced(struct p7ioc_phb *p)
 static int64_t p7ioc_eeh_freeze_status(struct phb *phb, uint64_t pe_number,
 				       uint8_t *freeze_state,
 				       uint16_t *pci_error_type,
+				       uint16_t *severity,
 				       uint64_t *phb_status)
 {
 	struct p7ioc_phb *p = phb_to_p7ioc_phb(phb);
@@ -648,11 +649,22 @@ static int64_t p7ioc_eeh_freeze_status(struct phb *phb, uint64_t pe_number,
 	*freeze_state = OPAL_EEH_STOPPED_NOT_FROZEN;
 	*pci_error_type = OPAL_EEH_PHB_NO_ERROR;
 
+	/* Check dead */
+	if (p->state == P7IOC_PHB_STATE_BROKEN) {
+		*freeze_state = OPAL_EEH_STOPPED_MMIO_DMA_FREEZE;
+		*pci_error_type = OPAL_EEH_PHB_FATAL;
+		if (severity)
+			*severity = OPAL_EEH_SEV_PHB_DEAD;
+		goto bail;
+	}
+
 	/* Check fence */
 	if (p7ioc_phb_fenced(p)) {
 		/* Should be OPAL_EEH_STOPPED_TEMP_UNAVAIL ? */
 		*freeze_state = OPAL_EEH_STOPPED_MMIO_DMA_FREEZE;
 		*pci_error_type = OPAL_EEH_PHB_FATAL;
+		if (severity)
+			*severity = OPAL_EEH_SEV_PHB_FENCED;
 		p->state = P7IOC_PHB_STATE_FENCED;
 		goto bail;
 	}
@@ -667,6 +679,8 @@ static int64_t p7ioc_eeh_freeze_status(struct phb *phb, uint64_t pe_number,
 
 	/* Indicate that we have an ER pending */
 	p->er_pending = true;
+	if (severity)
+		*severity = OPAL_EEH_SEV_DEV_ER;
 
 	/* Read the PESTA & PESTB */
 	p7ioc_phb_ioda_sel(p, IODA_TBL_PESTA, pe_number, false);
@@ -690,6 +704,62 @@ static int64_t p7ioc_eeh_freeze_status(struct phb *phb, uint64_t pe_number,
 	if (phb_status)
 		p7ioc_eeh_read_phb_status(p, (struct OpalIoP7IOCPhbErrorData *)
 					  phb_status);
+	return OPAL_SUCCESS;
+}
+
+static int64_t p7ioc_eeh_next_error(struct phb *phb, uint64_t *first_frozen_pe,
+				    uint16_t *pci_error_type, uint16_t *severity)
+{
+	struct p7ioc_phb *p = phb_to_p7ioc_phb(phb);
+	uint64_t peev0, peev1;
+	unsigned int i;
+
+	*first_frozen_pe = (uint64_t)-1;
+
+	/* Check dead */
+	if (p->state == P7IOC_PHB_STATE_BROKEN) {
+		*pci_error_type = OPAL_EEH_PHB_FATAL;
+		*severity = OPAL_EEH_SEV_PHB_DEAD;
+		return OPAL_SUCCESS;
+	}
+
+	/* Check fence */
+	if (p7ioc_phb_fenced(p)) {
+		/* Should be OPAL_EEH_STOPPED_TEMP_UNAVAIL ? */
+		*pci_error_type = OPAL_EEH_PHB_FATAL;
+		*severity = OPAL_EEH_SEV_PHB_FENCED;
+		p->state = P7IOC_PHB_STATE_FENCED;
+		return OPAL_SUCCESS;
+	}
+
+	/* Check ERs */
+	p7ioc_phb_ioda_sel(p, IODA_TBL_PEEV, 0, true);
+	peev0 = in_be64(p->regs + PHB_IODA_DATA0);
+	peev1 = in_be64(p->regs + PHB_IODA_DATA0);
+	p->er_pending = (peev0 || peev1);
+	if (p->er_pending) {
+		*pci_error_type = OPAL_EEH_PCI_ANY_ER;
+		*severity = OPAL_EEH_SEV_DEV_ER;
+		/* XXX use cntlz */
+		for (i = 0 ; i < 64; i++) {
+			if (PPC_BIT(i) & peev1) {
+				*first_frozen_pe = i + 64;
+				break;
+			}
+		}
+		for (i = 0 ; i < 64; i++) {
+			if (PPC_BIT(i) & peev0) {
+				*first_frozen_pe = i;
+				break;
+			}
+		}
+		return OPAL_SUCCESS;
+	}
+
+	/* XXX Add INF */
+
+	*pci_error_type = OPAL_EEH_PHB_NO_ERROR;
+	*severity = OPAL_EEH_SEV_NO_ERROR;
 	return OPAL_SUCCESS;
 }
 
@@ -1427,6 +1497,7 @@ static const struct phb_ops p7ioc_phb_ops = {
 	.eeh_freeze_status	= p7ioc_eeh_freeze_status,
 	.eeh_freeze_clear	= p7ioc_eeh_freeze_clear,
 	.get_diag_data		= p7ioc_get_diag_data,
+	.next_error		= p7ioc_eeh_next_error,
 	.phb_mmio_enable	= p7ioc_phb_mmio_enable,
 	.set_phb_mem_window	= p7ioc_set_phb_mem_window,
 	.map_pe_mmio_window	= p7ioc_map_pe_mmio_window,
@@ -1580,6 +1651,8 @@ static void p7ioc_phb_err_interrupt(void *data, uint32_t isn)
 	uint64_t peev0, peev1;
 
 	PHBDBG(p, "Got interrupt 0x%04x\n", isn);
+
+	opal_update_pending_evt(OPAL_EVENT_PCI_ERROR, OPAL_EVENT_PCI_ERROR);
 
 	/*
 	 * If the PHB is broken, go away
