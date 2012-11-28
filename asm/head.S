@@ -105,11 +105,8 @@ boot_entry:
 1:	mflr	%r30
 	subi	%r30,%r30,(1b - __head)
 
-	/* Get ourselves a TOC */
+	/* Get ourselves a TOC & relocate it to our target address */
 	LOAD_IMM32(%r2,__toc_start - __head)
-	add	%r2,%r2,%r30
-
-	/* We might need relocation, update the TOC */
 	LOAD_IMM64(%r29, SKIBOOT_BASE)
 	add	%r2,%r2,%r29
 
@@ -146,7 +143,6 @@ boot_entry:
 	cmpd	%r29,%r30
 	beq	2f
 	LOAD_IMM32(%r3, _sbss - __head)
-	subf	%r3,%r30,%r3
 	srdi	%r3,%r3,3
 	mtctr	%r3
 	mr	%r4,%r30
