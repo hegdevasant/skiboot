@@ -26,11 +26,11 @@ static void cpu_find_max_pir(void)
 
 	/* Iterate all PACAs to locate the highest PIR value */
 	for_each_paca(paca) {
-		const struct HDIF_cpu_id *id;
+		const struct sppaca_cpu_id *id;
 		unsigned int size;
 
-		id = HDIF_get_idata(paca, 2, &size);
-		if (!CHECK_SPPTR(id) || size < sizeof(*id))
+		id = HDIF_get_idata(paca, SPPACA_IDATA_CPU_ID, &size);
+		if (!CHECK_SPPTR(id) || size < SPIRA_CPU_ID_MIN_SIZE)
 			continue;
 		if (id->pir > SPR_PIR_MASK)
 			continue;
@@ -57,7 +57,7 @@ static const char *cpu_state(u32 flags)
 
 static struct dt_node *add_cpu_node(struct dt_node *cpus,
 				 const struct HDIF_common_hdr *paca,
-				 const struct HDIF_cpu_id *id)
+				 const struct sppaca_cpu_id *id)
 {
 	static const uint32_t p7_sps[] = {
 		0x0c, 0x000, 1, 0x0c, 0x0000,
@@ -68,8 +68,8 @@ static struct dt_node *add_cpu_node(struct dt_node *cpus,
 	static const uint32_t p7_pss[] = {
 		0x1c, 0x28, 0xffffffff, 0xffffffff
 	};
-	const struct HDIF_cpu_timebase *timebase;
-	const struct HDIF_cpu_cache *cache;
+	const struct sppaca_cpu_timebase *timebase;
+	const struct sppaca_cpu_cache *cache;
 	struct dt_node *cpu;
 	const char *name;
 	u32 no, size;
@@ -88,14 +88,14 @@ static struct dt_node *add_cpu_node(struct dt_node *cpus,
 		 & CPU_ID_NUM_SECONDARY_THREAD_MASK)
 		>> CPU_ID_NUM_SECONDARY_THREAD_SHIFT) + 1);
 
-	timebase = HDIF_get_idata(paca, 3, &size);
+	timebase = HDIF_get_idata(paca, SPPACA_IDATA_TIMEBASE, &size);
 	if (!timebase || size < sizeof(*timebase)) {
 		prerror("CPU[%i]: bad timebase size %u @ %p\n",
 			paca_index(paca), size, timebase);
 		return NULL;
 	}
 
-	cache = HDIF_get_idata(paca, 4, &size);
+	cache = HDIF_get_idata(paca, SPPACA_IDATA_CACHE_SIZE, &size);
 	if (!cache || size < sizeof(*cache)) {
 		prerror("CPU[%i]: bad cache size %u @ %p\n",
 			paca_index(paca), size, cache);
@@ -237,10 +237,10 @@ static bool __cpu_parse(void)
 	cpu_find_max_pir();
 
 	for_each_paca(paca) {
-		const struct HDIF_cpu_id *id;
+		const struct sppaca_cpu_id *id;
 		u32 size, state;
 
-		id = HDIF_get_idata(paca, 2, &size);
+		id = HDIF_get_idata(paca, SPPACA_IDATA_CPU_ID, &size);
 
 		/* The ID structure on Blade314 is only 0x54 long. We can
 		 * cope with it as we don't use all the additional fields.
@@ -290,7 +290,7 @@ static bool __cpu_parse(void)
 	/* Now account for secondaries. */
 	for_each_paca(paca) {
 		const struct dt_property *prop;
-		const struct HDIF_cpu_id *id;
+		const struct sppaca_cpu_id *id;
 		u32 size, state, num;
 		struct dt_node *cpu;
 		u32 *new_prop;
