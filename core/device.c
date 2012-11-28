@@ -51,11 +51,24 @@ struct dt_node *dt_new_root(const char *name)
 	return new_node(name);
 }
 
-void dt_attach_root(struct dt_node *parent, struct dt_node *root)
+bool dt_attach_root(struct dt_node *parent, struct dt_node *root)
 {
+	struct dt_node *node;
+
+	/* Look for duplicates */
+
 	assert(!root->parent);
+	dt_for_each_child(parent, node) {
+		if (!strcmp(node->name, root->name)) {
+			prerror("DT: dt_attach_node failed, duplicate %s\n",
+				root->name);
+			return false;
+		}
+	}
 	list_add_tail(&parent->children, &root->list);
 	root->parent = parent;
+
+	return true;
 }
 	
 struct dt_node *dt_new(struct dt_node *parent, const char *name)
@@ -64,7 +77,11 @@ struct dt_node *dt_new(struct dt_node *parent, const char *name)
 	assert(parent);
 
 	new = new_node(name);
-	dt_attach_root(parent, new);
+	if (!dt_attach_root(parent, new)) {
+		free_name(new->name);
+		free(new);
+		return NULL;
+	}
 	return new;
 }
 
@@ -408,8 +425,16 @@ static int dt_expand_node(struct dt_node *node, const void *fdt, int fdt_node)
 			break;
 		case FDT_BEGIN_NODE:
 			name = fdt_get_name(fdt, offset, NULL);
-			child = dt_new(node, name);
+			child = dt_new_root(name);
+			assert(child);
 			nextoffset = dt_expand_node(child, fdt, offset);
+
+			/*
+			 * This may fail in case of duplicate, keep it
+			 * going for now, we may ultimately want to
+			 * assert
+			 */
+			(void)dt_attach_root(node, child);
 			break;
 		case FDT_END:
 			return -1;

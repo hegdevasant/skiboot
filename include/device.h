@@ -36,8 +36,9 @@ struct dt_node {
 
 /* Create a root node: ie. a parentless one. */
 struct dt_node *dt_new_root(const char *name);
+
 /* Graft a root node into this tree. */
-void dt_attach_root(struct dt_node *parent, struct dt_node *root);
+bool dt_attach_root(struct dt_node *parent, struct dt_node *root);
 
 /* Add a child node. */
 struct dt_node *dt_new(struct dt_node *parent, const char *name);
@@ -90,6 +91,9 @@ struct dt_node *dt_next(const struct dt_node *root, const struct dt_node *prev);
 /* Iterate nodes */
 #define dt_for_each_node(root, node) \
 	for (node = dt_first(root); node; node = dt_next(root, node))
+
+#define dt_for_each_child(parent, node) \
+	list_for_each(&parent->children, node, list)
 
 /* Check a compatible property */
 bool dt_node_is_compatible(const struct dt_node *node, const char *compat);
