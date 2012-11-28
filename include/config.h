@@ -31,6 +31,13 @@
 /* Enable this to hookup SkiBoot log to the DVS console */
 #define DVS_CONSOLE		1
 
+/* Enable this if building for P8 rather than P7
+ *
+ * XXX: This probably wants to change to runtime detection but
+ * for now it's used during early boot for the PIR format
+ */
+//#define P8_BUILD		1
+
 /* Enable this to disable setting of the output pending event when
  * sending things on the console. The FSP is very slow to consume
  * and older kernels wait after each character during early boot so

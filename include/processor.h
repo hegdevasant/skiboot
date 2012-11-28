@@ -24,10 +24,15 @@
 
 /* PIR
  *
- * XXX This will break on P8, will do for now
+ * XXX Turn this into runtime
  */
+#ifdef P8_BUILD
+#define SPR_PIR_THREAD_MASK	0x0007	/* Mask of thread bits */
+#define SPR_PIR_MASK		0x1fff	/* Mask of implemented bits */
+#else
 #define SPR_PIR_THREAD_MASK	0x0003	/* Mask of thread bits */
 #define SPR_PIR_MASK		0x03ff	/* Mask of implemented bits */
+#endif
 
 /* SPR register definitions */
 #define SPR_SDR1	0x019

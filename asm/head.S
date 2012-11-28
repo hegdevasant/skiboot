@@ -116,7 +116,7 @@ boot_entry:
 
 	/* Check our PIR, avoid threads */
 	mfspr	%r31,SPR_PIR
-	andi.	%r0,%r31,3
+	andi.	%r0,%r31,SPR_PIR_THREAD_MASK
 	bne	secondary_wait
 
 	/* Pick a boot CPU, cpu index in r31 */
