@@ -232,4 +232,27 @@ void parse_hdat(void)
 	memory_parse();
 	add_interrupt_controllers();
 	add_xscom();
+
+#if 0 /* Tests */
+	{
+		struct dt_node *n;
+
+		n = dt_find_by_path(dt_root, "/");
+		printf("test / %p [%s]\n", n, dt_get_path(n));
+		n = dt_find_by_path(dt_root, "/cpus");
+		printf("test /cpus %p [%s]\n", n, dt_get_path(n));
+		n = dt_find_by_path(dt_root, "/cpus/PowerPC,POWER7@10");
+		printf("test /cpus/PowerPC,POWER7@10 %p [%s]\n",
+		       n, dt_get_path(n));
+		n = dt_find_by_path(dt_root, "/cpus/@10");
+		printf("test /cpus/@10 %p [%s]\n", n, dt_get_path(n));
+		n = dt_find_by_path(dt_root, "/cpus/@30");
+		printf("test /cpus/@30 %p [%s]\n", n, dt_get_path(n));
+		n = dt_find_by_path(dt_root, "/cpus/@15");
+		printf("test /cpus/@15 %p [%s]\n", n, dt_get_path(n));
+		n = dt_find_by_path(dt_root, "/cpus/PowerPC,POWER7");
+		printf("test /cpus/PowerPC,POWER7 %p [%s]\n",
+		       n, dt_get_path(n));
+	}
+#endif
 }

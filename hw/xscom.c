@@ -125,7 +125,7 @@ void xscom_init(void)
 	struct dt_node *xn;
 	const struct dt_property *reg;
 
-	xn = dt_find_compatible_node(dt_root, "ibm,xscom");
+	xn = dt_find_compatible_node(dt_root, NULL, "ibm,xscom");
 	if (!xn) {
 		prerror("XSCOM: No XSCOM node in device-tree\n");
 		return;

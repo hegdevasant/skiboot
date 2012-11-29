@@ -5,6 +5,9 @@
 #include <libfdt/libfdt_internal.h>
 #include <ccan/str/str.h>
 
+/* Used to give unique handles. */
+static u32 next_phandle = 1;
+
 static bool is_rodata(const void *p)
 {
 	return ((char *)p >= __rodata_start && (char *)p < __rodata_end);
@@ -25,9 +28,6 @@ static void free_name(const char *name)
 		free((char *)name);
 }
 
-/* Used to give unique handles. */
-static u32 phandle = 0;
-
 static struct dt_node *new_node(const char *name)
 {
 	struct dt_node *node = malloc(sizeof *node);
@@ -41,7 +41,7 @@ static struct dt_node *new_node(const char *name)
 	list_head_init(&node->properties);
 	list_head_init(&node->children);
 	/* FIXME: locking? */
-	node->phandle = ++phandle;
+	node->phandle = ++next_phandle;
 	node->priv = NULL;
 	return node;
 }
@@ -98,18 +98,128 @@ struct dt_node *dt_new_addr(struct dt_node *parent, const char *name,
 	return new;
 }
 
+char *dt_get_path(struct dt_node *node)
+{
+	unsigned int len = 0;
+	struct dt_node *n;
+	char *path, *p;
+
+	/* Dealing with NULL is for test/debug purposes */
+	if (!node)
+		return "<NULL>";
+
+	for (n = node; n; n = n->parent)
+		len += strlen(n->name) + 1;
+	len--;  /* First entry has no '/' */
+	path = zalloc(len + 1);
+	assert(path);
+	p = path + len;
+	for (n = node; n; n = n->parent) {
+		len = strlen(n->name);
+		p -= len;
+		memcpy(p, n->name, len);
+		if (n->parent || n == node)
+			*(--p) = '/';
+	}
+	assert(p == path);
+
+	return p;
+}
+
+static const char *__dt_path_split(const char *p,
+				   const char **namep, unsigned int *namel,
+				   const char **addrp, unsigned int *addrl)
+{
+	const char *at, *sl;
+
+	*namel = *addrl = 0;
+
+	/* Skip initial '/' */
+	while (*p == '/')
+		p++;
+
+	/* Check empty path */
+	if (*p == 0)
+		return p;
+
+	at = strchr(p, '@');
+	sl = strchr(p, '/');
+	if (sl == NULL)
+		sl = p + strlen(p);
+	if (sl < at)
+		at = NULL;
+	if (at) {
+		*addrp = at + 1;
+		*addrl = sl - at - 1;
+	}
+	*namep = p;
+	*namel = at ? (at - p) : (sl - p);
+
+	return sl;
+}
+
+struct dt_node *dt_find_by_path(struct dt_node *root, const char *path)
+{
+	struct dt_node *n;
+	const char *pn, *pa, *p = path, *nn, *na;
+	unsigned int pnl, pal, nnl, nal;
+	bool match;
+
+	/* Walk path components */
+	while (*p) {
+		/* Extract next path component */
+		p = __dt_path_split(p, &pn, &pnl, &pa, &pal);
+		if (pnl == 0 && pal == 0)
+			break;
+
+		/* Compare with each child node */
+		match = false;
+		list_for_each(&root->children, n, list) {
+			match = true;
+			__dt_path_split(n->name, &nn, &nnl, &na, &nal);
+			if (pnl && (pnl != nnl || strncmp(pn, nn, pnl)))
+				match = false;
+			if (pal && (pal != nal || strncmp(pa, na, pal)))
+				match = false;
+			if (match) {
+				root = n;
+				break;
+			}
+		}
+
+		/* No child match */
+		if (!match)
+			return NULL;
+	}
+	return root;
+}
+
+struct dt_node *dt_find_by_phandle(struct dt_node *root, u32 phandle)
+{
+	struct dt_node *node;
+
+	dt_for_each_node(root, node)
+		if (node->phandle == phandle)
+			return node;
+	return NULL;
+}
+
 static struct dt_property *new_property(struct dt_node *node,
 					const char *name, size_t size)
 {
 	struct dt_property *p = malloc(sizeof(*p) + size);
 	if (!p) {
 		prerror("Failed to allocate property %s for %s of %lu bytes\n",
-			name, node->name, size);
+			name, dt_get_path(node), size);
 		abort();
 	}
-	assert(!dt_find_property(node, name));
-	assert(strcmp(name, "linux,phandle") != 0);
-	assert(strcmp(name, "phandle") != 0);
+	if (dt_find_property(node, name)) {
+		prerror("Duplicate property %s in node %s\n",
+			name, dt_get_path(node));
+		abort();
+
+	}
+
 	p->name = take_name(name);
 	p->priv = NULL;
 	p->len = size;
@@ -122,7 +232,17 @@ struct dt_property *dt_add_property(struct dt_node *node,
 				    const void *val, size_t size)
 {
 	struct dt_property *p = new_property(node, name, size);
-	memcpy(p->prop, val, size);
+
+	if (strcmp(name, "linux,phandle") == 0 ||
+	    strcmp(name, "phandle") == 0) {
+		assert(size == 4);
+		node->phandle = *(u32 *)val;
+		if (node->phandle >= next_phandle)
+			next_phandle = node->phandle + 1;
+	}
+
+	if (size)
+		memcpy(p->prop, val, size);
 	return p;
 }
 
@@ -131,6 +251,20 @@ struct dt_property *dt_add_property_string(struct dt_node *node,
 					   const char *value)
 {
 	return dt_add_property(node, name, value, strlen(value)+1);
+}
+
+struct dt_property *dt_add_property_nstr(struct dt_node *node,
+					 const char *name,
+					 const char *value, unsigned int vlen)
+{
+	struct dt_property *p;
+	char *tmp = zalloc(vlen + 1);
+
+	strncpy(tmp, value, vlen);
+	p = dt_add_property(node, name, tmp, strlen(tmp)+1);
+	free(tmp);
+
+	return p;
 }
 
 struct dt_property *__dt_add_property_cells(struct dt_node *node,
@@ -256,12 +390,14 @@ bool dt_node_is_compatible(const struct dt_node *node, const char *compat)
 	return false;
 }
 
-struct dt_node *dt_find_compatible_node(const struct dt_node *root,
+struct dt_node *dt_find_compatible_node(struct dt_node *root,
+					struct dt_node *prev,
 					const char *compat)
 {
 	struct dt_node *node;
 
-	dt_for_each_node(root, node)
+	node = prev ? dt_next(root, prev) : root;
+	for (; node; node = dt_next(root, node))
 		if (dt_node_is_compatible(node, compat))
 			return node;
 	return NULL;
@@ -311,6 +447,23 @@ u32 dt_prop_get_u32_def(const struct dt_node *node, const char *prop, u32 def)
 	assert(p->len == sizeof(u32));
 
 	return dt_property_get_cell(p, 0);
+}
+
+const void *dt_prop_get(const struct dt_node *node, const char *prop)
+{
+	const struct dt_property *p = dt_find_property(node, prop);
+
+	assert(p);
+
+	return p->prop;
+}
+
+const void *dt_prop_get_def(const struct dt_node *node, const char *prop,
+			    void *def)
+{
+	const struct dt_property *p = dt_find_property(node, prop);
+
+	return p ? p->prop : def;
 }
 
 void dt_free(struct dt_node *node)

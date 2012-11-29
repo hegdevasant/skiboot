@@ -52,6 +52,10 @@ struct dt_property *dt_add_property(struct dt_node *node,
 struct dt_property *dt_add_property_string(struct dt_node *node,
 					   const char *name,
 					   const char *value);
+struct dt_property *dt_add_property_nstr(struct dt_node *node,
+					 const char *name,
+					 const char *value, unsigned int vlen);
+
 /* Given out enough GCC extensions, we will achieve enlightenment! */
 #define dt_add_property_strings(node, name, ...)			\
 	__dt_add_property_strings((node), ((name)),			\
@@ -99,8 +103,24 @@ struct dt_node *dt_next(const struct dt_node *root, const struct dt_node *prev);
 bool dt_node_is_compatible(const struct dt_node *node, const char *compat);
 
 /* Find a node based on compatible property */
-struct dt_node *dt_find_compatible_node(const struct dt_node *root,
+struct dt_node *dt_find_compatible_node(struct dt_node *root,
+					struct dt_node *prev,
 					const char *compat);
+
+#define dt_for_each_compatible(root, node, compat)	\
+	for (node = NULL; 			        \
+	     (node = dt_find_compatible_node(root, node, compat)) != NULL;)
+
+/* Build the full path for a node. Return a new block of memory, caller
+ * shall free() it
+ */
+char *dt_get_path(struct dt_node *node);
+
+/* Find a node by path */
+struct dt_node *dt_find_by_path(struct dt_node *root, const char *path);
+
+/* Find a node by phandle */
+struct dt_node *dt_find_by_phandle(struct dt_node *root, u32 phandle);
 
 /* Find a property by name. */
 const struct dt_property *dt_find_property(const struct dt_node *node,\
@@ -124,6 +144,9 @@ u64 dt_prop_get_u64(const struct dt_node *node, const char *prop);
 u64 dt_prop_get_u64_def(const struct dt_node *node, const char *prop, u64 def);
 u32 dt_prop_get_u32(const struct dt_node *node, const char *prop);
 u32 dt_prop_get_u32_def(const struct dt_node *node, const char *prop, u32 def);
+const void *dt_prop_get(const struct dt_node *node, const char *prop);
+const void *dt_prop_get_def(const struct dt_node *node, const char *prop,
+			    void *def);
 
 /* Parsing helpers */
 u32 dt_n_address_cells(const struct dt_node *node);
