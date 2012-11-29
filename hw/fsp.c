@@ -10,6 +10,7 @@
 #include <interrupts.h>
 #include <opal.h>
 #include <gx.h>
+#include <device.h>
 
 //#define DBG(fmt...)	printf(fmt)
 #define DBG(fmt...)	do { } while(0)
@@ -17,12 +18,18 @@
 
 #define FSP_MAX_IOPATH	4
 
+enum fsp_path_state {
+	fsp_path_bad,
+	fsp_path_backup,
+	fsp_path_active,
+};
+
 struct fsp_iopath {
-	unsigned short	link_status;	/* straight from SPSS */
-	unsigned int	chip_id;
-	unsigned int	interrupt;
-	void		*gxhb_regs;
-	void		*fsp_regs;
+	enum fsp_path_state	state;
+	unsigned int		chip_id;
+	unsigned int		interrupt;
+	void			*gxhb_regs;
+	void			*fsp_regs;
 };
 
 enum fsp_mbx_state {
@@ -169,7 +176,7 @@ static void fsp_wreg(struct fsp *fsp, u32 reg, u32 val)
 	if (fsp->active_iopath < 0)
 		return;
 	iop = &fsp->iopath[fsp->active_iopath];
-	if (iop->link_status == SPSS_IO_PATH_PSI_LINK_BAD_FRU)
+	if (iop->state == fsp_path_bad)
 		return;
 	out_be32(iop->fsp_regs + reg, val);
 }
@@ -181,7 +188,7 @@ static u32 fsp_rreg(struct fsp *fsp, u32 reg)
 	if (fsp->active_iopath < 0)
 		return 0xffffffff;
 	iop = &fsp->iopath[fsp->active_iopath];
-	if (iop->link_status == SPSS_IO_PATH_PSI_LINK_BAD_FRU)
+	if (iop->state == fsp_path_bad)
 		return 0xffffffff;
 	return in_be32(iop->fsp_regs + reg);
 }
@@ -831,30 +838,6 @@ int fsp_sync_msg(struct fsp_msg *msg, bool autofree)
 	return rc;
 }
 
-static bool fsp_check_impl(const void *spss, int i)
-{
-	const struct spss_sp_impl *sp_impl;
-	unsigned int mask;
-
-	/* Find an check the SP Implementation structure */
-	sp_impl = HDIF_get_idata(spss, SPSS_IDATA_SP_IMPL, NULL);
-	if (!CHECK_SPPTR(sp_impl)) {
-		prerror("FSP #%d: SPSS/SP_Implementation not found !\n", i);
-		return false;
-	}
-
-	printf("FSP #%d: FSP HW version %d, SW version %d, chip DD%d.%d\n",
-	       i, sp_impl->hw_version, sp_impl->sw_version,
-	       sp_impl->chip_version >> 4, sp_impl->chip_version & 0xf);
-	mask = SPSS_SP_IMPL_FLAGS_FUNCTIONAL | SPSS_SP_IMPL_FLAGS_FUNCTIONAL;
-	if ((sp_impl->func_flags & mask) != mask) {
-		prerror("FSP #%d: FSP not installed or not functional\n", i);
-		return false;
-	}
-
-	return true;
-}
-
 void fsp_register_client(struct fsp_client *client, u8 msgclass)
 {
 	struct fsp_cmdclass *cmdclass = __fsp_get_cmdclass(msgclass);
@@ -901,7 +884,7 @@ static void fsp_psi_enable_interrupt(struct fsp *fsp)
 	struct fsp_iopath *iop;
 
 	iop = &fsp->iopath[fsp->active_iopath];
-	if (iop->link_status == SPSS_IO_PATH_PSI_LINK_BAD_FRU)
+	if (iop->state == fsp_path_bad)
 		return;
 
 	/* Enable FSP interrupts in the GXHB */
@@ -1007,7 +990,7 @@ static int64_t fsp_psi_set_xive(void *data, uint32_t isn __unused,
 	struct fsp_iopath *iop = data;
 	uint64_t xivr;
 
-	if (iop->link_status == SPSS_IO_PATH_PSI_LINK_BAD_FRU)
+	if (iop->state == fsp_path_bad)
 		return OPAL_HARDWARE;
 
 	/* Populate the XIVR */
@@ -1026,7 +1009,7 @@ static int64_t fsp_psi_get_xive(void *data, uint32_t isn __unused,
 	struct fsp_iopath *iop = data;
 	uint64_t xivr;
 
-	if (iop->link_status == SPSS_IO_PATH_PSI_LINK_BAD_FRU)
+	if (iop->state == fsp_path_bad)
 		return OPAL_HARDWARE;
 
 	/* Read & decode the XIVR */
@@ -1161,10 +1144,20 @@ static int fsp_psi_init_phb(struct fsp_iopath *fiop, bool active)
 }
 
 
-static void fsp_create_fsp(const void *spss, int index)
+static void fsp_create_fsp(struct dt_node *fsp_node)
 {
+	const struct dt_property *linksprop;
 	struct fsp *fsp;
-	int count, i;
+	int count, i, index;
+
+	index = dt_prop_get_u32(fsp_node, "reg");
+	prerror("FSP #%d: Found in device-tree, setting up...\n", index);
+
+	linksprop = dt_find_property(fsp_node, "links");
+	if (!linksprop || linksprop->len < 4) {	
+		prerror("FSP #%d: No links !\n", index);
+		return;
+	}
 
 	fsp = zalloc(sizeof(struct fsp));
 	if (!fsp) {
@@ -1175,12 +1168,7 @@ static void fsp_create_fsp(const void *spss, int index)
 	fsp->index = index;
 	fsp->active_iopath = -1;
 
-	count = HDIF_get_iarray_size(spss, SPSS_IDATA_SP_IOPATH);
-	if (count < 0) {
-		prerror("FSP #%d: Can't find IO PATH array size !\n", index);
-		free(fsp);
-		return;
-	}
+	count = linksprop->len / 4;
 	printf("FSP #%d: Found %d IO PATH\n", index, count);
 	if (count > FSP_MAX_IOPATH) {
 		prerror("FSP #%d: WARNING, limited to %d IO PATH\n",
@@ -1192,46 +1180,41 @@ static void fsp_create_fsp(const void *spss, int index)
 
 	/* Iterate all links */
 	for (i = 0; i < count; i++) {
-		const struct spss_iopath *iopath;
+		struct dt_node *link;
 		struct fsp_iopath *fiop;
-		unsigned int iopath_sz;
-		const char *ststr;
-		bool active;
+		bool active, working;
+		u32 lph;
 
-		iopath = HDIF_get_iarray_item(spss, SPSS_IDATA_SP_IOPATH,
-					      i, &iopath_sz);
-		if (!CHECK_SPPTR(iopath)) {
-			prerror("FSP #%d: Can't find IO PATH %d\n", index, i);
+		lph = ((const u32 *)linksprop->prop)[i];
+		link = dt_find_by_phandle(dt_root, lph);
+		if (!link) {
+			prerror("FSP #%d: Can't find link 0x%x\n", index, lph);
 			fsp->iopath_count = i;
 			break;
 		}
-		if (iopath->iopath_type != SPSS_IOPATH_TYPE_PSI) {
-			prerror("FSP #%d: Unsupported IO PATH %d type 0x%04x\n",
-				index, i, iopath->iopath_type);
+
+		if (!dt_node_is_compatible(link, "ibm,psi")) {
+			prerror("FSP #%d: Unsupported link type at %s\n",
+				index, link->name);
 			continue;
 		}
+
+		working = !strcmp(dt_prop_get(link, "status"), "ok");
+		active = working &&
+			dt_find_property(link, "current-link") != NULL;
+
 		fiop = &fsp->iopath[i];
-		fiop->link_status = iopath->psi.link_status;
-		fiop->gxhb_regs = (void *)iopath->psi.gxhb_base;
-		fiop->chip_id = iopath->psi.proc_chip_id;
-		fiop->interrupt = get_psi_interrupt(fiop->chip_id);
-		active = false;
-		switch(fiop->link_status) {
-		case SPSS_IO_PATH_PSI_LINK_BAD_FRU:
-			ststr = "Broken";
-			break;
-		case SPSS_IO_PATH_PSI_LINK_CURRENT:
-			ststr = "Active";
-			active = true;
-			break;
-		case SPSS_IO_PATH_PSI_LINK_BACKUP:
-			ststr = "Backup";
-			break;
-		default:
-			ststr = "Unknown";
-		}
-		printf("FSP #%d: IO PATH %d is %s PSI Link, GXHB at %llx\n",
-		       index, i, ststr, iopath->psi.gxhb_base);
+		if (!working)
+			fiop->state = fsp_path_bad;
+		else if (active)
+			fiop->state = fsp_path_active;
+		else
+			fiop->state = fsp_path_backup;
+
+		fiop->gxhb_regs = (void *)dt_translate_address(link, 0, NULL);
+		fiop->chip_id = dt_prop_get_u32(link, "ibm,chip-id");
+		fiop->interrupt = dt_prop_get_u32(link, "interrupts");
+
 		if (active)
 			fsp->active_iopath = i;
 
@@ -1249,48 +1232,36 @@ static void fsp_create_fsp(const void *spss, int index)
 
 void fsp_init(void)
 {
-	void *base_spss, *spss;
-	int i;
+	struct dt_node *fsp_node;
+	bool inited = false;
+
+	dt_for_each_compatible(dt_root, fsp_node, "ibm,fsp1") {
+		if (!inited) {
+			int i;
 	
-	/* Initialize the per-class msg queues */
-	for (i = 0; i <= (FSP_MCLASS_LAST - FSP_MCLASS_FIRST); i++) {
-		list_head_init(&fsp_cmdclass[i].msgq);
-		list_head_init(&fsp_cmdclass[i].clientq);
-	}
+			/* Initialize the per-class msg queues */
+			for (i = 0;
+			     i <= (FSP_MCLASS_LAST - FSP_MCLASS_FIRST); i++) {
+				list_head_init(&fsp_cmdclass[i].msgq);
+				list_head_init(&fsp_cmdclass[i].clientq);
+			}
 
-	/* Initialize a TCE table */
-	fsp_init_tce_table();
+			/* Initialize a TCE table */
+			fsp_init_tce_table();
 
-	/* Find SPSS in SPIRA */
-	base_spss = spira.ntuples.sp_subsys.addr;
-	if (!base_spss) {
-		prerror("FSP: Cannot locate SPSS !\n");
-		return;
-	}
-
-	/* For each SPSS */
-	for (i = 0; i < spira.ntuples.sp_subsys.act_cnt; i++) {
-		spss = base_spss + i * spira.ntuples.sp_subsys.alloc_len;
-
-
-		if (!HDIF_check(spss, "SPINFO")) {
-			prerror("FSP #%d: SPSS signature mismatch !\n", i);
-			continue;
+			inited = true;
 		}
 
-		/* Check SP Implementation */
-		if (!fsp_check_impl(spss, i))
-			continue;
-
 		/* Create the FSP data structure */
-		fsp_create_fsp(spss, i);
+		fsp_create_fsp(fsp_node);
 	}
-	if (!active_fsp)
-		prerror("FSP: No active FSP !\n");
 }
 
 void fsp_opl(void)
 {
+	if (!first_fsp)
+		return;
+
 	/* Send OPL */
 	ipl_state |= ipl_opl_sent;
 	fsp_sync_msg(fsp_mkmsg(FSP_CMD_OPL, 0), true);

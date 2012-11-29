@@ -112,9 +112,9 @@ struct spira_fru_op_status {
  *
  * This structure contains several internal data blocks
  * describing the service processor(s) in the system
- *
- * Key: "SPINFO"
  */
+
+#define SPSS_HDIF_SIG	"SPINFO"
 
 /* Idata index 0 : FRU ID Data */
 #define SPSS_IDATA_FRU_ID	0

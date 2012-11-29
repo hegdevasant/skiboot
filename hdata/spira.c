@@ -6,6 +6,8 @@
 #include <ccan/str/str.h>
 #include <device_tree.h>
 
+#include "hdata.h"
+
 /* Processor Initialization structure, contains
  * the initial NIA and MSR values for the entry
  * point
@@ -327,6 +329,9 @@ void parse_hdat(void)
 
 	/* Add XSCOM node */
 	add_xscom();
+
+	/* Add FSP */
+	fsp_parse();
 
 #if 0 /* Tests */
 	{
