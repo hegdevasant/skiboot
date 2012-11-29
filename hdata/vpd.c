@@ -119,6 +119,8 @@ static const void *vpd_lid_load(const uint8_t *lx, uint8_t lxrn, size_t *size)
 	char record[4] = "LXR0";
 	const void *valid_lx;
 	uint8_t lx_size;
+	struct dt_node *iplp;
+	const char *side = NULL;
 	int rc;
 
 	if (!data) {
@@ -127,7 +129,10 @@ static const void *vpd_lid_load(const uint8_t *lx, uint8_t lxrn, size_t *size)
 	}
 
 	/* Adjust LID number for flash side */
-	if (dt_find_property(dt_root, DT_PRIVATE "cec_ipl_temp_side"))
+	iplp = dt_find_by_path(dt_root, "ipl-params/ipl-params");
+	if (iplp)
+		side = dt_prop_get_def(iplp, "cec-ipl-side", NULL);
+	if (!side || !strcmp(side, "temp"))
 		lid_no |= 0x8000;
 
 	/* Load it from the FSP */

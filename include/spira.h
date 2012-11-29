@@ -178,7 +178,7 @@ struct spss_iopath {
  */
 
 /* Idata index 0: System Parameters */
-#define IPLPARAMS_SYS_PARAMS	0
+#define IPLPARAMS_SYSPARAMS	0
 
 struct iplparams_sysparams {
 	char		sys_model[4];

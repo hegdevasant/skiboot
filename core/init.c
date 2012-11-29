@@ -35,13 +35,19 @@ static bool load_kernel(void)
 {
 	struct elf64_hdr *kh = (void *)KERNEL_LOAD_BASE;
 	struct elf64_phdr *ph;
+	struct dt_node *iplp;
 	unsigned int i;
 	uint32_t lid;
 	size_t ksize;
+	const char *side = NULL;
 
 	ksize = KERNEL_LOAD_SIZE;
 	lid = KERNEL_LID;
-	if (dt_find_property(dt_root, DT_PRIVATE "cec_ipl_temp_side"))
+
+	iplp = dt_find_by_path(dt_root, "ipl-params/ipl-params");
+	if (iplp)
+		side = dt_prop_get_def(iplp, "cec-ipl-side", NULL);
+	if (!side || !strcmp(side, "temp"))
 		lid |= 0x8000;
 	fsp_fetch_data(0, FSP_DATASET_NONSP_LID, lid, 0,
 		       (void *)KERNEL_LOAD_BASE, &ksize);

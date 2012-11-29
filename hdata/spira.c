@@ -67,32 +67,6 @@ bool spira_check_ptr(const void *ptr, const char *file, unsigned int line)
 	return false;
 }
 
-/* Adds private cec_ipl_temp_side property if we're booting from temp side. */
-static void fetch_global_params(void)
-{
-	/* Get CEC IPL side from IPLPARAMS */
-	const void *iplp = spira.ntuples.ipl_parms.addr;
-
-	if (iplp && HDIF_check(iplp, "IPLPMS")) {
-		const struct iplparams_iplparams *p;
-
-		p = HDIF_get_idata(iplp, IPLPARAMS_IPLPARAMS, NULL);
-		if (CHECK_SPPTR(p)) {
-			if (p->ipl_side & IPLPARAMS_CEC_FW_IPL_SIDE_TEMP) {
-				dt_add_property(dt_root,
-						DT_PRIVATE "cec_ipl_temp_side",
-						NULL, 0);
-				printf("FSP: CEC IPLed from Temp side\n");
-			} else {
-				printf("FSP: CEC IPLed from Perm side\n");
-			}
-		} else
-			prerror("FSP: Invalid IPL params, assuming P side\n");
-	} else
-		prerror("FSP: Can't find IPL params, assuming P side\n");
-
-}
-
 static void add_ics_reg_property(struct dt_node *ics,
 				 u64 ibase,
 				 unsigned int num_threads)
@@ -216,21 +190,142 @@ static void add_xscom(void)
 			      hi32(xscom_size), lo32(xscom_size));
 }
 
+static void add_iplparams_sys_params(const void *iplp, struct dt_node *node)
+{
+	const struct iplparams_sysparams *p;
+
+	p = HDIF_get_idata(iplp, IPLPARAMS_SYSPARAMS, NULL);
+	if (!CHECK_SPPTR(p)) {
+		prerror("IPLPARAMS: No SYS Parameters\n");
+		return;
+	}
+
+	node = dt_new(node, "sys-params");
+	assert(node);
+	dt_add_property_cells(node, "#address-cells", 0);
+	dt_add_property_cells(node, "#size-cells", 0);
+
+	dt_add_property_nstr(node, "ibm,sys-model", p->sys_model, 4);
+
+	/* XXX Add many more */
+}
+
+static void add_iplparams_ipl_params(const void *iplp, struct dt_node *node)
+{
+	const struct iplparams_iplparams *p;
+
+	p = HDIF_get_idata(iplp, IPLPARAMS_IPLPARAMS, NULL);
+	if (!CHECK_SPPTR(p)) {
+		prerror("IPLPARAMS: No IPL Parameters\n");
+		return;
+	}
+
+	node = dt_new(node, "ipl-params");
+	assert(node);
+	dt_add_property_cells(node, "#address-cells", 0);
+	dt_add_property_cells(node, "#size-cells", 0);
+
+	dt_add_property_strings(node, "cec-ipl-side",
+				(p->ipl_side & IPLPARAMS_CEC_FW_IPL_SIDE_TEMP) ?
+				"temp" : "perm");
+	dt_add_property_strings(node, "fsp-ipl-side",
+				(p->ipl_side & IPLPARAMS_FSP_FW_IPL_SIDE_TEMP) ?
+				"temp" : "perm");
+
+	/* XXX Add many more */
+}
+
+static void add_iplparams_serials(const void *iplp, struct dt_node *node)
+{
+	const struct iplparms_serial *ipser;
+	struct dt_node *ser_node;
+	int count, i;
+	
+	count = HDIF_get_iarray_size(iplp, IPLPARMS_IDATA_SERIAL);
+	if (!count) {
+		prerror("IPLPARAMS: No serial ports\n");
+		return;
+	}
+	prerror("IPLPARAMS: %d serial ports in array\n", count);
+
+	node = dt_new(node, "fsp-serial");
+	assert(node);
+	dt_add_property_cells(node, "#address-cells", 1);
+	dt_add_property_cells(node, "#size-cells", 0);
+
+	for (i = 0; i < count; i++) {
+		ipser = HDIF_get_iarray_item(iplp, IPLPARMS_IDATA_SERIAL,
+					     i, NULL);
+		if (!CHECK_SPPTR(ipser))
+			continue;
+		printf("IPLPARAMS: Serial %d rsrc: %04x loc: %s\n",
+		       i, ipser->rsrc_id, ipser->loc_code);
+		ser_node = dt_new_addr(node, "serial", ipser->rsrc_id);
+		dt_add_property_cells(ser_node, "reg", ipser->rsrc_id);
+		dt_add_property_nstr(ser_node, "ibm,loc-code",
+				     ipser->loc_code, 80);
+		dt_add_property_string(ser_node, "compatible",
+				       "ibm,fsp-serial");
+		/* XXX handle CALLHOME flag ? */
+	}
+}
+
+static void add_iplparams(void)
+{
+	struct dt_node *iplp_node;
+	const void *ipl_parms;
+
+	ipl_parms = spira.ntuples.ipl_parms.addr;
+	if (!CHECK_SPPTR(ipl_parms)) {
+		prerror("IPLPARAMS: Cannot find IPL Parms in SPIRA\n");
+		return;
+	}
+	if (!HDIF_check(ipl_parms, "IPLPMS")) {
+		prerror("IPLPARAMS: IPL Parms has wrong header type\n");
+		return;
+	}
+
+	iplp_node = dt_new(dt_root, "ipl-params");
+	assert(iplp_node);
+	dt_add_property_cells(iplp_node, "#address-cells", 0);
+	dt_add_property_cells(iplp_node, "#size-cells", 0);
+
+	add_iplparams_sys_params(ipl_parms, iplp_node);
+	add_iplparams_ipl_params(ipl_parms, iplp_node);
+	add_iplparams_serials(ipl_parms, iplp_node);
+}
+
 void parse_hdat(void)
 {
 	dt_root = dt_new_root("");
 
-	/* We need to know if we're booting from temp size before vpd access */
-	fetch_global_params();
-
-	add_dtb_model();
+	/*
+	 * Basic DT root stuff
+	 */
 	dt_add_property_string(dt_root, "compatible", "ibm,powernv");
 	dt_add_property_cells(dt_root, "#address-cells", 2);
 	dt_add_property_cells(dt_root, "#size-cells", 2);
 
+	/*
+	 * IPL params go first, they contain stuff that may be
+	 * needed at any point later on such as the IPL side to
+	 * fetch VPD LIDs etc...
+	 */
+	add_iplparams();
+
+	/* Get model property based on System VPD */
+	add_dtb_model();
+
+	/* Parse SPPACAs (TODO: Add SPICA) */
 	cpu_parse();
+
+	/* Parse MS VPD */
 	memory_parse();
+
+	/* Add XICS nodes */
 	add_interrupt_controllers();
+
+	/* Add XSCOM node */
 	add_xscom();
 
 #if 0 /* Tests */
