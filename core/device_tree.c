@@ -9,7 +9,6 @@
 #include <interrupts.h>
 #include <fsp.h>
 #include <cec.h>
-#include <spira.h>
 #include <vpd.h>
 #include <ccan/str/str.h>
 

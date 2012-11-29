@@ -1,6 +1,5 @@
 #include <xscom.h>
 #include <io.h>
-#include <spira.h>
 #include <processor.h>
 #include <device.h>
 

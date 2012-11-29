@@ -3,7 +3,6 @@
  * from assembly such as machine checks etc...
  */
 #include <skiboot.h>
-#include <spira.h>
 #include <cpu.h>
 #include <fsp.h>
 #include <device.h>

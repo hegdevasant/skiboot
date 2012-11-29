@@ -3,7 +3,6 @@
  */
 #include <stdarg.h>
 #include <processor.h>
-#include <spira.h>
 #include <io.h>
 #include <fsp.h>
 #include <lock.h>
