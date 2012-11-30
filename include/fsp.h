@@ -482,6 +482,9 @@ extern void fsp_init(void);
 /* Perform the OPL sequence */
 extern void fsp_opl(void);
 
+/* Check if system has an FSP */
+extern bool fsp_present(void);
+
 /* Allocate and populate an fsp_msg structure
  *
  * WARNING: Do _NOT_ use free() on an fsp_msg, use fsp_freemsg()

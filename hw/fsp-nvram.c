@@ -53,6 +53,7 @@ enum nvram_state {
 	NVRAM_STATE_OPENING,
 	NVRAM_STATE_BROKEN,
 	NVRAM_STATE_OPEN,
+	NVRAM_STATE_ABSENT,
 };
 
 static void *nvram_image = (void *)NVRAM_BASE;
@@ -254,6 +255,8 @@ static int64_t opal_nvram_check_state(void)
 		nvram_send_open();
 	case NVRAM_STATE_OPENING:
 		return OPAL_BUSY;
+	case NVRAM_STATE_ABSENT:
+		return OPAL_UNSUPPORTED;
 	default:
 		break;
 	}
@@ -319,6 +322,11 @@ static bool nvram_get_size(void)
 
 void fsp_nvram_init(void)
 {
+	if (!fsp_present()) {
+		nvram_state = NVRAM_STATE_ABSENT;
+		return;
+	}
+
 	/* Mark nvram as not dirty */
 	nvram_dirty_start = nvram_size;
 	nvram_dirty_end = 0;
@@ -346,6 +354,9 @@ void fsp_nvram_init(void)
  */
 void fsp_nvram_wait_open(void)
 {
+	if (!fsp_present())
+		return;
+
 	while(nvram_state == NVRAM_STATE_OPENING)
 		fsp_poll();
 }
@@ -353,6 +364,9 @@ void fsp_nvram_wait_open(void)
 void add_opal_nvram_node(struct dt_node *opal)
 {
 	struct dt_node *nvram;
+
+	if (!fsp_present())
+		return;
 
 	nvram = dt_new(opal, "nvram");
 	dt_add_property_cells(nvram, "#bytes", nvram_size);

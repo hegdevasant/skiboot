@@ -127,11 +127,13 @@ opal_call(OPAL_TEST, opal_test_func);
 
 static int64_t opal_poll_events(uint64_t *outstanding_event_mask)
 {
-	/* Poll the FSP */
-	fsp_poll();
+	if (fsp_present()) {
+		/* Poll the FSP */
+		fsp_poll();
 
-	/* Poll the console buffers */
-	fsp_console_poll();
+		/* Poll the FSP console buffers */
+		fsp_console_poll();
+	}
 
 	if (outstanding_event_mask)
 		*outstanding_event_mask = opal_pending_events;
@@ -152,6 +154,9 @@ static int64_t opal_cec_power_down(uint64_t request)
 	if (request !=0 && request != 1)
 		return OPAL_PARAMETER;
 
+	if (!fsp_present())
+		return OPAL_UNSUPPORTED;
+
 	if (fsp_queue_msg(fsp_mkmsg(FSP_CMD_POWERDOWN_NORM, 1, request),
 			  fsp_freemsg))
 		return OPAL_INTERNAL_ERROR;
@@ -164,6 +169,9 @@ static int64_t opal_cec_reboot(void)
 {
 	/* Try a fast reset first */
 	fast_reset();
+
+	if (!fsp_present())
+		return OPAL_UNSUPPORTED;
 
 	/* If that failed, talk to the FSP */
 	if (fsp_queue_msg(fsp_mkmsg(FSP_CMD_REBOOT, 0), fsp_freemsg))

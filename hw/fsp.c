@@ -1234,6 +1234,8 @@ void fsp_init(void)
 	struct dt_node *fsp_node;
 	bool inited = false;
 
+	printf("FSP: Looking for FSP...\n");
+
 	dt_for_each_compatible(dt_root, fsp_node, "ibm,fsp1") {
 		if (!inited) {
 			int i;
@@ -1254,11 +1256,19 @@ void fsp_init(void)
 		/* Create the FSP data structure */
 		fsp_create_fsp(fsp_node);
 	}
+
+	if (!inited)
+		printf("FSP: No FSP on this machine\n");
+}
+
+bool fsp_present(void)
+{
+	return first_fsp != NULL;
 }
 
 void fsp_opl(void)
 {
-	if (!first_fsp)
+	if (!fsp_present())
 		return;
 
 	/* Send OPL */
@@ -1301,6 +1311,9 @@ int fsp_fetch_data(uint8_t flags, uint16_t id, uint32_t sub_id,
 	struct fsp_msg *msg;
 
 	*length = total = 0;
+
+	if (!fsp_present())
+		return -ENODEV;
 
 	printf("FSP: Fetch data id: %02x sid: %08x to %p (0x%x bytes)\n",
 	       id, sub_id, buffer, remaining);

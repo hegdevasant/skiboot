@@ -317,6 +317,9 @@ void fsp_console_preinit(void)
 	int i;
 	void *base;
 
+	if (!fsp_present())
+		return;
+
 	/* Initialize out data structure pointers & TCE maps */
 	base = (void *)SER0_BUFFER_BASE;
 	for (i = 0; i < MAX_SERIAL; i++) {
@@ -369,6 +372,9 @@ void fsp_console_init(void)
 	const struct iplparms_serial *ipser;
 	const void *ipl_parms;
 	int count, i;
+
+	if (!fsp_present())
+		return;
 
 	/* Wait until we got the intf query before moving on */
 	while (!got_intf_query)
