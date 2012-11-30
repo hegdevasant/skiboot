@@ -184,8 +184,8 @@ static bool __cpu_parse(void)
 	struct dt_node *cpus;
 
 	cpus = dt_new(dt_root, "cpus");
-	dt_add_property_cells(cpus, "#address-cells", 2);
-	dt_add_property_cells(cpus, "#size-cells", 1);
+	dt_add_property_cells(cpus, "#address-cells", 1);
+	dt_add_property_cells(cpus, "#size-cells", 0);
 
 	paca = spira.ntuples.paca.addr;
 	if (!HDIF_check(paca, "SPPACA")) {
