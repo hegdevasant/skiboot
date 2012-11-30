@@ -272,6 +272,9 @@ struct p7ioc {
 	uint32_t			buid_base;
 	uint32_t			rgc_buid;
 
+	/* XIVT cache for RGC interrupts */
+	uint64_t			xive_cache[16];
+
 	/* PHB array */
 	struct p7ioc_phb		phbs[P7IOC_NUM_PHBS];
 	   

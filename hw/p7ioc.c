@@ -4,6 +4,7 @@
 #include <spira.h>
 #include <cec.h>
 #include <opal.h>
+#include <io.h>
 #include <interrupts.h>
 #include <device_tree.h>
 #include <ccan/str/str.h>
@@ -53,26 +54,63 @@ static const struct io_hub_ops p7ioc_hub_ops = {
 	.reset		= p7ioc_reset,
 };
 
-static int64_t p7ioc_rgc_get_xive(void *data __unused,
-				  uint32_t isn __unused,
-				  uint16_t *server __unused,
-				  uint8_t *prio __unused)
+static int64_t p7ioc_rgc_get_xive(void *data, uint32_t isn,
+				  uint16_t *server, uint8_t *prio)
 {
-	/* XXX TODO */
-	return OPAL_UNSUPPORTED;
+	struct p7ioc *ioc = data;
+	uint32_t irq = (isn & 0xf);
+	uint32_t fbuid = IRQ_FBUID(isn);
+	uint64_t xive;
+
+	if (fbuid != ioc->rgc_buid)
+		return OPAL_PARAMETER;
+
+	xive = ioc->xive_cache[irq];
+	*server = GETFIELD(IODA_XIVT_SERVER, xive);
+	*prio = GETFIELD(IODA_XIVT_PRIORITY, xive);
+
+	return OPAL_SUCCESS;
+ }
+
+static int64_t p7ioc_rgc_set_xive(void *data, uint32_t isn,
+				  uint16_t server, uint8_t prio)
+{
+	struct p7ioc *ioc = data;
+	uint32_t irq = (isn & 0xf);
+	uint32_t fbuid = IRQ_FBUID(isn);
+	uint64_t xive;
+	uint64_t m_server, m_prio;
+
+	if (fbuid != ioc->rgc_buid)
+		return OPAL_PARAMETER;
+
+	xive = SETFIELD(IODA_XIVT_SERVER, 0ull, server);
+	xive = SETFIELD(IODA_XIVT_PRIORITY, xive, prio);
+	ioc->xive_cache[irq] = xive;
+
+	/* Now we mangle the server and priority */
+	if (prio == 0xff) {
+		m_server = 0;
+		m_prio = 0xff;
+	} else {
+		m_server = server >> 3;
+		m_prio = (prio >> 3) | ((server & 7) << 5);
+	}
+
+	/* Update the XIVE. Don't care HRT entry on P7IOC */
+	out_be64(ioc->regs + 0x3e1820, (0x0002000000000000 | irq));
+	xive = in_be64(ioc->regs + 0x3e1830);
+	xive = SETFIELD(IODA_XIVT_SERVER, xive, m_server);
+	xive = SETFIELD(IODA_XIVT_PRIORITY, xive, m_prio);
+	out_be64(ioc->regs + 0x3e1830, xive);
+
+	return OPAL_SUCCESS;
 }
 
-static int64_t p7ioc_rgc_set_xive(void *data __unused,
-				  uint32_t isn __unused,
-				  uint16_t server __unused,
-				  uint8_t prio __unused)
+static void p7ioc_rgc_interrupt(void *data __unused, uint32_t isn)
 {
-	/* XXX TODO */
-	return OPAL_UNSUPPORTED;
-}
+	printf("IOC: Got RGC interrupt 0x%04x\n", isn);
 
-static void p7ioc_rgc_interrupt(void *data __unused, uint32_t isn __unused)
-{
 	/* XXX TODO */
 }
 
@@ -121,12 +159,17 @@ struct io_hub *p7ioc_create_hub(const struct cechub_io_hub *hub, uint32_t id)
 	ioc->buid_base = hub->buid_ext << 9;
 	ioc->rgc_buid = ioc->buid_base + RGC_BUID_OFFSET;
 
+	/* Clear the RGC XIVE cache */
+	for (i = 0; i < 16; i++)
+		ioc->xive_cache[i] = SETFIELD(IODA_XIVT_PRIORITY, 0ull, 0xff);
+
 	/*
 	 * Register RGC interrupts
 	 *
-	 * For now I assume all 16 are used, TBD
+	 * For now I assume only 0 is... to verify with Greg or HW guys,
+	 * we support all 16
 	 */
-	register_irq_source(&p7ioc_rgc_irq_ops, ioc, ioc->rgc_buid << 4, 16);
+	register_irq_source(&p7ioc_rgc_irq_ops, ioc, ioc->rgc_buid << 4, 1);
 
 	/* Setup PHB structures (no HW access yet).
 	 *
