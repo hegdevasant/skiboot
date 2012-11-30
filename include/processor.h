@@ -22,17 +22,11 @@
 #define MSR_RI		PPC_BIT(62)	/* Recoverable Interrupt */
 #define MSR_LE		PPC_BIT(63)	/* Little Endian */
 
-/* PIR
- *
- * XXX Turn this into runtime
- */
-#ifdef P8_BUILD
-#define SPR_PIR_THREAD_MASK	0x0007	/* Mask of thread bits */
-#define SPR_PIR_MASK		0x1fff	/* Mask of implemented bits */
-#else
-#define SPR_PIR_THREAD_MASK	0x0003	/* Mask of thread bits */
-#define SPR_PIR_MASK		0x03ff	/* Mask of implemented bits */
-#endif
+/* PIR */
+#define SPR_PIR_P8_THREAD_MASK	0x0007	/* Mask of thread bits */
+#define SPR_PIR_P8_MASK		0x1fff	/* Mask of implemented bits */
+#define SPR_PIR_P7_THREAD_MASK	0x0003	/* Mask of thread bits */
+#define SPR_PIR_P7_MASK		0x03ff	/* Mask of implemented bits */
 
 /* SPR register definitions */
 #define SPR_SDR1	0x019

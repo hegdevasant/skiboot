@@ -4,6 +4,7 @@
 
 #include <skiboot.h>
 #include <processor.h>
+#include <cpu.h>
 
 static uint64_t brk = HEAP_BASE;
 
@@ -20,20 +21,21 @@ void *sbrk(int incr)
 	return prev;
 }
 
-/* Initial stack */
-char boot_stack[STACK_SIZE] __attribute__ ((aligned(16)));
-void *boot_stack_top = &boot_stack[STACK_SIZE - 256];
-
 void backtrace(void)
 {
+	unsigned int pir = mfspr(SPR_PIR);
 	unsigned long *sp;
+	unsigned long *bottom, *top;
 
 	/* Check if there's a __builtin_something instead */
 	asm("mr %0,1" : "=r" (sp));
 
+	bottom = cpu_stack_bottom(pir);
+	top = cpu_stack_top(pir);
+
 	/* XXX Handle SMP */
-	fprintf(stderr, "CPU %08lx Backtrace:\n", mfspr(SPR_PIR));
-	while((void *)sp > (void *)boot_stack && (void *)sp < boot_stack_top) {
+	fprintf(stderr, "CPU %08x Backtrace:\n", pir);
+	while(sp > bottom && sp < top) {
 		fprintf(stderr, " S: %016lx R: %016lx\n",
 			(unsigned long)sp, sp[2]);
 		sp = (unsigned long *)sp[0];

@@ -5,6 +5,7 @@
 #include <processor.h>
 #include <ccan/list/list.h>
 #include <lock.h>
+#include <device.h>
 
 /*
  * cpu_thread is our internal structure representing each
@@ -25,8 +26,12 @@ struct cpu_job;
 
 struct cpu_thread {
 	uint32_t		pir;
+	uint32_t		server_no;
+	uint32_t		chip_id;
+	bool			is_secondary;
+	struct cpu_thread	*primary;
 	enum cpu_thread_state	state;
-	void			*stack;
+	struct dt_node		*node;
 
 	struct lock		job_lock;
 	struct list_head	job_queue;
@@ -41,11 +46,9 @@ extern unsigned long cpu_secondary_start;
 /* Boot CPU. */
 extern struct cpu_thread *boot_cpu;
 
-/* Initialize cpu_threads[pir] */
-struct cpu_thread *init_cpu_thread(u32 pir, enum cpu_thread_state state);
-
-/* This sets up the cpu_thread structures for everyone else. */
-extern void cpu_parse(void);
+/* Initialize CPUs */
+void init_boot_cpu(void);
+void init_all_cpus(void);
 
 /* This brings up our secondaries */
 extern void cpu_bringup(void);
@@ -56,9 +59,12 @@ extern void cpu_callin(struct cpu_thread *cpu);
 /* For cpus which fail to call in. */
 extern void cpu_remove_node(const struct cpu_thread *t);
 
-extern struct dt_node *find_cpu_node_by_chip_id(u32 id);
-struct cpu_thread *find_cpu_by_node(struct dt_node *cpu);
+/* Find CPUs using different methods */
+extern struct cpu_thread *find_cpu_by_chip_id(u32 chip_id);
+extern struct cpu_thread *find_cpu_by_node(struct dt_node *cpu);
+extern struct cpu_thread *find_cpu_by_server(u32 server_no);
 extern struct cpu_thread *find_cpu_by_pir(u32 pir);
+
 extern struct dt_node *get_cpu_node(u32 pir);
 
 /* Iterator */
@@ -134,9 +140,9 @@ static inline void cpu_give_self_os(void)
 	__this_cpu->state = cpu_state_os;
 }
 
-extern bool add_cpu_nodes(void);
+extern void *cpu_stack_bottom(unsigned int pir);
+extern void *cpu_stack_top(unsigned int pir);
 
 extern unsigned int cpu_max_pir;
-extern struct cpu_thread cpu_threads[SPR_PIR_MASK + 1];
-extern void *cpu_stacks[SPR_PIR_MASK + 1];
+
 #endif /* __CPU_H */

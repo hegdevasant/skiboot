@@ -455,6 +455,8 @@ extern uint64_t opal_pending_events;
 
 extern void opal_table_init(void);
 extern void opal_update_pending_evt(uint64_t evt_mask, uint64_t evt_values);
+extern uint64_t opal_get_base(void);
+extern uint64_t opal_get_size(void);
 extern void add_opal_nodes(void);
 
 #endif /* __ASSEMBLY__ */

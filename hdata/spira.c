@@ -299,6 +299,12 @@ static void add_iplparams(void)
 
 void parse_hdat(void)
 {
+	printf("\n");
+	printf("-----------------------------------------------\n");
+	printf("-------------- Parsing HDAT ... ---------------\n");
+	printf("-----------------------------------------------\n");
+	printf("\n");
+
 	dt_root = dt_new_root("");
 
 	/*
@@ -355,4 +361,7 @@ void parse_hdat(void)
 		       n, dt_get_path(n));
 	}
 #endif
+	printf("\n");
+	printf("-----------------------------------------------\n");
+	printf("\n");
 }

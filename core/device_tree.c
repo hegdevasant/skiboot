@@ -70,7 +70,7 @@ void dt_end_node(void)
 
 static void dump_fdt(void)
 {
-#if 0
+#if 1
 	int i, off, depth, err;
 
 	printf("Device tree %u@%p\n", fdt_totalsize(fdt), fdt);
@@ -140,6 +140,13 @@ static void from_dt_node(const struct dt_node *root)
 void *create_dtb(const struct dt_node *root)
 {
 	size_t len = DEVICE_TREE_MAX_SIZE;
+	uint64_t sbase, total_size;
+
+	/* Calculate our total size, which is SKIBOOT_SIZE
+	 * plus all the CPU stacks
+	 */
+	sbase = opal_get_base();
+	total_size = opal_get_size();
 
 	do {
 		if (fdt)
@@ -153,8 +160,7 @@ void *create_dtb(const struct dt_node *root)
 		}
 
 		fdt_create(fdt, len);
-		save_err(fdt_add_reservemap_entry(fdt, SKIBOOT_BASE,
-						  SKIBOOT_SIZE));
+		save_err(fdt_add_reservemap_entry(fdt, sbase, total_size));
 		save_err(fdt_finish_reservemap(fdt));
 
 		dt_begin_node("");

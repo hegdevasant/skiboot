@@ -345,7 +345,6 @@ static void chiptod_print_tb(void *data __unused)
 void chiptod_init(void)
 {
 	struct cpu_thread *cpu0, *cpu;
-	struct dt_node *cpu0_node;
 	bool sres;
 
 	op_display(OP_LOG, OP_MOD_CHIPTOD, 0);
@@ -360,14 +359,7 @@ void chiptod_init(void)
 	op_display(OP_LOG, OP_MOD_CHIPTOD, 1);
 
 	/* Pick somebody on the primary */
-	cpu0_node = find_cpu_node_by_chip_id(id_primary->chip_id);
-	if (!cpu0_node) {
-		prerror("CHIPTOD: Failed to find a CPU on chip %d !\n",
-			id_primary->chip_id);
-		op_display(OP_FATAL, OP_MOD_CHIPTOD, 1);
-		abort();
-	}
-	cpu0 = find_cpu_by_node(cpu0_node);
+	cpu0 = find_cpu_by_chip_id(id_primary->chip_id);
 
 	/* Schedule master sync */
 	sres = false;
@@ -383,7 +375,7 @@ void chiptod_init(void)
 	/* Schedule slave sync */
 	for_each_available_cpu(cpu) {
 		/* Only get primaries, not threads */
-		if (cpu->pir & SPR_PIR_THREAD_MASK)
+		if (cpu->is_secondary)
 			continue;
 
 		/* Skip master */
@@ -408,7 +400,7 @@ void chiptod_init(void)
 	/* Display TBs */
 	for_each_available_cpu(cpu) {
 		/* Only do primaries, not threads */
-		if (cpu->pir & SPR_PIR_THREAD_MASK)
+		if (cpu->is_secondary)
 			continue;
 		cpu_wait_job(cpu_queue_job(cpu, chiptod_print_tb, NULL), true);
 	}

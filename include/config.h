@@ -19,8 +19,9 @@
 //#define OPAL_DEBUG_CONSOLE_IO	1
 //#define OPAL_DEBUG_CONSOLE_POLL	1
 
-/* Boot stack size set to 64K as well */
-#define STACK_SIZE		0x10000
+/* Stack size set to 16K  */
+#define STACK_SHIFT		14
+#define STACK_SIZE		(1 << STACK_SHIFT)
 
 /* Enable this for mambo console */
 //#define MAMBO_CONSOLE		1
@@ -30,13 +31,6 @@
 
 /* Enable this to hookup SkiBoot log to the DVS console */
 #define DVS_CONSOLE		1
-
-/* Enable this if building for P8 rather than P7
- *
- * XXX: This probably wants to change to runtime detection but
- * for now it's used during early boot for the PIR format
- */
-//#define P8_BUILD		1
 
 /* Enable this to disable setting of the output pending event when
  * sending things on the console. The FSP is very slow to consume
@@ -51,6 +45,14 @@
  * that location
  */
 #define SKIBOOT_BASE		0x30000000
+
+/* We keep a gap of 4M for skiboot text & bss for now, then
+ * we have our heap which goes up to base + 16M (so 12M for
+ * now, though we can certainly reduce that a lot)
+ */
+#define HEAP_BASE		(SKIBOOT_BASE + 0x00400000)
+#define HEAP_SIZE		0x00c00000
+
 
 /* This is the location of our console buffer at base + 16M */
 #define INMEM_CON_START		(SKIBOOT_BASE + 0x01000000)
@@ -75,16 +77,27 @@
 #define SPIRA_HEAP_BASE		(SKIBOOT_BASE + 0x01400000)
 #define SPIRA_HEAP_SIZE		0x00400000
 
-/* This is our heap at base + 24M, the max size is set to be 16M */
-#define HEAP_BASE		(SKIBOOT_BASE + 0x01800000)
-#define HEAP_SIZE		0x01000000
-
-/* This is our NVRAM image at base + 40M, it is set to be 1M in size */
-#define NVRAM_BASE		(SKIBOOT_BASE + 0x02800000)
+/* This is our NVRAM image at base + 24M, it is set to be 1M in size */
+#define NVRAM_BASE		(SKIBOOT_BASE + 0x01800000)
 #define NVRAM_SIZE		0x00100000
 
-/* This is our total size, currenly 41M XXX we can reduce that a lot ! */
-#define SKIBOOT_SIZE		0x02900000
+/* Total size of the above area */
+#define SKIBOOT_SIZE		0x01900000
+
+/* We start laying out the CPU stacks from here, indexed by PIR
+ * each stack is STACK_SIZE in size (naturally aligned power of
+ * two) and the bottom of the stack contains the cpu thread
+ * structure for the processor, so it can be obtained by a simple
+ * bit mask from the stack pointer.
+ *
+ * The size of this array is dynamically determined at boot time
+ */
+#define CPU_STACKS_BASE		(SKIBOOT_BASE + SKIBOOT_SIZE)
+
+/* This value is the above plus the offset to the top of stack
+ * to be used on entry
+ */
+#define CPU_STACKS_OFFSET	(CPU_STACKS_BASE + STACK_SIZE - 0x100)
 
 /* Address at which we load the kernel LID. Currently +1M */
 #define KERNEL_LOAD_BASE	0x00100000

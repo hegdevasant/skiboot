@@ -146,10 +146,8 @@ void main_cpu_entry(const void *fdt)
 {
 	printf("SkiBoot %s starting...\n", gitid);
 
-	/* Initialize boot cpu's cpu_thread struct. */
-	__this_cpu = boot_cpu = init_cpu_thread(mfspr(SPR_PIR),
-						cpu_state_active);
-	cpu_stacks[boot_cpu->pir] = boot_cpu->stack = boot_stack_top;
+	/* Initialize boot cpu's cpu_thread struct */
+	init_boot_cpu();
 
 	/* Now locks can be used */
 	init_locks();
@@ -163,6 +161,9 @@ void main_cpu_entry(const void *fdt)
 		dt_expand(fdt);
 	else
 		parse_hdat();
+
+	/* Initialize the rest of the cpu thread structs */
+	init_all_cpus();
 
 	/* Initialize XSCOM */
 	xscom_init();
@@ -211,7 +212,12 @@ void main_cpu_entry(const void *fdt)
 	/* Create the OPAL call table */
 	opal_table_init();
 
-	/* Add OPAL-specific node to dt_root. */
+	/* Add OPAL-specific node to dt_root before booting the kernel
+	 *
+	 * Note: This must be done fairly late as it has to account for
+	 * various memory reservations done in previous stages of the
+	 * boot process.
+	 */
 	add_opal_nodes();
 
 	load_and_boot_kernel(false);

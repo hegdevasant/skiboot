@@ -20,26 +20,6 @@ static unsigned int paca_index(const struct HDIF_common_hdr *paca)
 		/ spira.ntuples.paca.alloc_len;
 }
 
-static void cpu_find_max_pir(void)
-{
-	const struct HDIF_common_hdr *paca;
-
-	/* Iterate all PACAs to locate the highest PIR value */
-	for_each_paca(paca) {
-		const struct sppaca_cpu_id *id;
-		unsigned int size;
-
-		id = HDIF_get_idata(paca, SPPACA_IDATA_CPU_ID, &size);
-		if (!CHECK_SPPTR(id) || size < SPIRA_CPU_ID_MIN_SIZE)
-			continue;
-		if (id->pir > SPR_PIR_MASK)
-			continue;
-		if (id->pir > cpu_max_pir)
-			cpu_max_pir = id->pir;
-	}
-	printf("CPU: Max PIR set to 0x%04x\n", cpu_max_pir);
-}
-
 static const char *cpu_state(u32 flags)
 {
 	switch ((flags & CPU_ID_VERIFY_MASK) >> CPU_ID_VERIFY_SHIFT) {
@@ -57,7 +37,8 @@ static const char *cpu_state(u32 flags)
 
 static struct dt_node *add_cpu_node(struct dt_node *cpus,
 				 const struct HDIF_common_hdr *paca,
-				 const struct sppaca_cpu_id *id)
+				    const struct sppaca_cpu_id *id,
+				    bool okay)
 {
 	static const uint32_t p7_sps[] = {
 		0x0c, 0x000, 1, 0x0c, 0x0000,
@@ -128,7 +109,7 @@ static struct dt_node *add_cpu_node(struct dt_node *cpus,
 
 	cpu = dt_new_addr(cpus, name, no);
 	dt_add_property_string(cpu, "device_type", "cpu");
-	dt_add_property_string(cpu, "status", "okay");
+	dt_add_property_string(cpu, "status", okay ? "okay" : "bad");
 	dt_add_property_cells(cpu, "reg", no);
 	dt_add_property(cpu, "ibm,segment-page-sizes", p7_sps, sizeof(p7_sps));
 	dt_add_property(cpu, "ibm,processor-segment-sizes",
@@ -158,23 +139,9 @@ static struct dt_node *add_cpu_node(struct dt_node *cpus,
 	dt_add_property_cells(cpu, DT_PRIVATE "hw_proc_id",
 			     id->hardware_proc_id);
 	dt_add_property_u64(cpu, DT_PRIVATE "ibase", cleanup_addr(id->ibase));
-	dt_add_property_cells(cpu, DT_PRIVATE "pir", id->pir);
-	dt_add_property_cells(cpu, DT_PRIVATE "processor_chip_id",
-			     id->processor_chip_id);
+	dt_add_property_cells(cpu, "ibm,pir", id->pir);
+	dt_add_property_cells(cpu, "ibm,chip_id", id->processor_chip_id);
 	return cpu;
-}
-
-static struct dt_node *find_cpus(void)
-{
-	struct dt_node *cpus;
-
-	/* Find our cpus node */
-	dt_for_each_node(dt_root, cpus) {
-		if (streq(cpus->name, "cpus"))
-			break;
-	}
-	assert(cpus);
-	return cpus;
 }
 
 static struct dt_node *find_cpu_by_hardware_proc_id(struct dt_node *root,
@@ -215,7 +182,6 @@ static bool __cpu_parse(void)
 {
 	const struct HDIF_common_hdr *paca;
 	struct dt_node *cpus;
-	uint32_t boot_pir = mfspr(SPR_PIR);
 
 	cpus = dt_new(dt_root, "cpus");
 	dt_add_property_cells(cpus, "#address-cells", 2);
@@ -234,11 +200,10 @@ static bool __cpu_parse(void)
 		return false;
 	}
 
-	cpu_find_max_pir();
-
 	for_each_paca(paca) {
 		const struct sppaca_cpu_id *id;
-		u32 size, state;
+		u32 size;
+		bool okay;
 
 		id = HDIF_get_idata(paca, SPPACA_IDATA_CPU_ID, &size);
 
@@ -251,39 +216,25 @@ static bool __cpu_parse(void)
 				paca_index(paca), size, id);
 			return false;
 		}
-		if (id->pir > cpu_max_pir) {
-			prerror("CPU[%i]: PIR 0x%04x out of range\n",
-				paca_index(paca), id->pir);
-			return false;
-		}
-
 		switch ((id->verify_exists_flags & CPU_ID_VERIFY_MASK) >>
 			CPU_ID_VERIFY_SHIFT) {
 		case CPU_ID_VERIFY_USABLE_NO_FAILURES:
 		case CPU_ID_VERIFY_USABLE_FAILURES:
-			state = cpu_state_present;
+			okay = true;
 			break;
 		default:
-			state = cpu_state_unavailable;
+			okay = false;
 		}
 
 		printf("CPU[%i]: PIR=%i RES=%i %s\n",
 		       paca_index(paca), id->pir, id->process_interrupt_line,
-		       state == cpu_state_present ? "OK" : "UNAVAILABLE");
-
-		/* Don't re-init boot thread; that's done by core. */
-		if (id->pir != boot_pir)
-			init_cpu_thread(id->pir, state);
-
-		/* Only cpus we have/will bring up get a node. */
-		if (state != cpu_state_present)
-			continue;
+		       okay ? "OK" : "UNAVAILABLE");
 
 		/* Secondary threads don't get their own node. */
 		if (id->verify_exists_flags & CPU_ID_SECONDARY_THREAD)
 			continue;
 
-		if (!add_cpu_node(cpus, paca, id))
+		if (!add_cpu_node(cpus, paca, id, okay))
 			return false;
 	}
 
@@ -343,26 +294,4 @@ void cpu_parse(void)
 		prerror("CPU: Initial CPU parsing failed\n");
 		abort();
 	}
-}
-
-bool add_cpu_nodes(void)
-{
-	struct dt_node *cpus, *i;
-	struct dt_property *p;
-
-	cpus = find_cpus();
-
-	dt_begin_node(cpus->name);
-	list_for_each(&cpus->properties, p, list)
-		dt_property(p->name, p->prop, p->len);
-
-	/* This only works because the tree under cpus is flat. */
-	for (i = dt_first(cpus); i; i = dt_next(cpus, i)) {
-		dt_begin_node(i->name);
-		list_for_each(&i->properties, p, list)
-			dt_property(p->name, p->prop, p->len);
-		dt_end_node();
-	}
-	dt_end_node();
-	return true;
 }

@@ -10,6 +10,15 @@
 	.= nr;		\
 	b .;
 
+
+#define GET_STACK(stack_reg,pir_reg)				\
+	sldi	stack_reg,pir_reg,STACK_SHIFT;			\
+	addis	stack_reg,stack_reg,CPU_STACKS_OFFSET@ha;	\
+	addi	stack_reg,stack_reg,CPU_STACKS_OFFSET@l;
+
+#define GET_CPU()						\
+	clrrdi	%r13,%r1,STACK_SHIFT
+
 	.section ".head","ax"
 	/* Keep that gap empty */
 	. = 0
@@ -25,13 +34,13 @@ __head:
 	 */
 	. = 0xf0
 boot_sem:
-	.llong	0
+	.long	0
 
 	/* And this is a boot flag used to kick secondaries into the
 	 * main code.
 	 */
 boot_flag:
-	.llong	0
+	.long	0
 
 	/* Exception stubs */
 	EXCEPTION(0x100)
@@ -97,11 +106,32 @@ opal_branch_table:
  *
  * All CPUs come here
  *
+ * Boot code NV register usage:
+ *
+ *   r31 :  PIR
+ *   r30 :  Current running offset
+ *   r29 :  Target
+ *   r28 :  PVR
+ *   r27 :  DTB pointer (or NULL)
+ *   r26 :  PIR thread mask
  */
 .global boot_entry
 boot_entry:
+	/* Check PVR and set some CR bits */
+	mfspr	%r28,SPR_PVR
+	li	%r26,3	/* Default to SMT4 */
+	srdi	%r3,%r28,16
+	cmpwi	cr0,%r3,PVR_TYPE_P7
+	beq	1f
+	cmpwi	cr0,%r3,PVR_TYPE_P7P
+	beq	1f
+	cmpwi	cr0,%r3,PVR_TYPE_P8
+	bne	.	/* Unsupported CPU type... what do we do ? */
+	crset	8	/* Set CR2.0 */
+	li	%r26,7	/* SMT 8 */
+
 	/* Get our reloc offset into r30 */
-	bcl	20,31,$+4
+1:	bcl	20,31,$+4
 1:	mflr	%r30
 	subi	%r30,%r30,(1b - __head)
 
@@ -116,8 +146,11 @@ boot_entry:
 
 	/* Check our PIR, avoid threads */
 	mfspr	%r31,SPR_PIR
-	andi.	%r0,%r31,SPR_PIR_THREAD_MASK
+	and.	%r0,%r31,%r26
 	bne	secondary_wait
+
+	/* Initialize per-core SPRs */
+	bl init_shared_sprs
 
 	/* Pick a boot CPU, cpu index in r31 */
 	LOAD_IMM32(%r3, boot_sem - __head)
@@ -133,8 +166,7 @@ boot_entry:
 	/* Make sure we are in SMT medium */
 	smt_medium
 
-	/* Initialize various SPRs */
-	bl init_shared_sprs
+	/* Initialize thread SPRs */
 	bl init_replicated_sprs
 
 	/* Check if we need to copy ourselves up and update %r30 to
@@ -146,7 +178,7 @@ boot_entry:
 	srdi	%r3,%r3,3
 	mtctr	%r3
 	mr	%r4,%r30
-	mr	%r28,%r30
+	mr	%r15,%r30
 	mr	%r30,%r29
 1:	ld	%r0,0(%r4)
 	std	%r0,0(%r29)
@@ -163,10 +195,7 @@ boot_entry:
 	bctr
 
 	/* Get ready for C code: get a stack */
-2:	LOAD_IMM32(%r1,boot_stack - __head)
-	LOAD_IMM32(%r3,STACK_SIZE - 256)
-	add	%r1,%r1,%r30
-	add	%r1,%r1,%r3
+2:	GET_STACK(%r1,%r31)
 
 	/* Clear up initial frame */
 	li	%r3,0
@@ -179,14 +208,11 @@ boot_entry:
 
 	/* Tell secondaries to move to second stage (relocated) spin loop */
 	LOAD_IMM32(%r3, boot_flag - __head)
-	add	%r3,%r3,%r28
+	add	%r3,%r3,%r15
 	li	%r0,1
-	std	%r0,0(%r3)
+	stw	%r0,0(%r3)
 
-	/* Clear our r13, we don't have a cpu thread struct yet */
-	li	%r13,0
-
-	/* Clear BSS before we try to use that stack */
+	/* Clear BSS */
 	li	%r0,0
 	LOAD_ADDR_FROM_TOC(%r3, _sbss)
 	LOAD_ADDR_FROM_TOC(%r4, _ebss)
@@ -198,6 +224,7 @@ boot_entry:
 	bdnz	1b
 
 	/* Jump to C */
+	GET_CPU()
 	mr	%r3,%r27
 	bl	main_cpu_entry
 	b	.
@@ -210,7 +237,7 @@ secondary_wait:
 	LOAD_IMM32(%r3, boot_flag - __head)
 	add	%r3,%r3,%r30
 1:	smt_very_low
-	ld	%r0,0(%r3)
+	lwz	%r0,0(%r3)
 	cmpdi	%r0,0
 	beq	1b
 
@@ -232,23 +259,20 @@ secondary_wait:
 	cmpdi	%r0,0
 	beq	1b
 
-	/* Lookup our PIR in the cpu_threads array, and setup
-	 * our per-cpu pointer in r13
-	 */
 	smt_medium
-	LOAD_ADDR_FROM_TOC(%r3, cpu_threads)
-	LOAD_ADDR_FROM_TOC(%r5, cpu_max_pir)
-	mulli	%r4,%r31,CPUTHREAD_SIZE
-	lwz	%r5,0(%r5)
-	cmpw	%r31,%r5
-	bgt	secondary_not_found
-	add	%r13,%r3,%r4
 
-	/* Get our stack and jump to C */
-	ld	%r1,CPUTHREAD_STACK(%r13)
+	/* Check our PIR is in bound */
+	LOAD_ADDR_FROM_TOC(%r5, cpu_max_pir)
+	cmpw	%r31,%r5
+	bgt-	secondary_not_found
+
+	/* Get our stack, cpu thread, and jump to C */
+	GET_STACK(%r1,%r31)
 	li	%r0,0
 	std	%r0,0(%r1)
 	std	%r0,16(%r1)
+	GET_CPU()
+
 	bl	secondary_cpu_entry
 	b	.
 
@@ -302,22 +326,13 @@ fast_reset_entry:
 	/* Get PIR */
 	mfspr	%r31,SPR_PIR
 
-	/* Get a stack */
-	sldi	%r3,%r31,3
-	add	%r3,%r3,%r30
-	ld	%r1,(cpu_stacks - __head)(%r3)
-
-	/* Clean up initial frame */
+	/* Get a stack and restore r13 */
+	GET_STACK(%r1,%r31)
 	li	%r3,0
 	std	%r3,0(%r1)
 	std	%r3,8(%r1)
 	std	%r3,16(%r1)
-
-	/* Get the CPU thread struct */
-	mulli	%r3,%r31,CPUTHREAD_SIZE
-	add	%r3,%r3,%r30
-	addis	%r3,%r3,(cpu_threads - __head)@ha
-	addi	%r13,%r3,(cpu_threads - __head)@l
+	GET_CPU()
 
 	/* Get our TOC */
 	addis	%r2,%r30,(__toc_start - __head)@ha
@@ -412,16 +427,6 @@ hv_lid_load_table:
 	.long	0
 	.long	0
 
-	/* This is an array of stack pointer for each CPU indexed by
-	 * PIR so they can be quickly retrieved at a small offset
-	 * from __head
-	 */
-.global cpu_stacks
-cpu_stacks:
-	.space	8 * (SPR_PIR_MASK + 1)
-
-
-
 /*
  *
  * OPAL entry point from operating system
@@ -438,12 +443,9 @@ cpu_stacks:
 	.balign	0x10
 .global opal_entry
 opal_entry:
-	/* Get our per CPU stack, save PIR into CTR */
+	/* Get our per CPU stack */
 	mfspr	%r12,SPR_PIR
-	mtctr	%r12
-	sldi	%r12,%r12,3
-	add	%r12,%r12,%r2
-	ld	%r12,(cpu_stacks - __head)(%r12)
+	GET_STACK(%r12,%r12)
 	stdu	%r12,-STACK_FRAMESIZE(%r12)
 
 	/* Save caller r1, establish new r1 */
@@ -468,12 +470,8 @@ opal_entry:
 	std	%r13,STACK_GPR13(%r1)
 	std	%r12,STACK_LR(%r1)
 
-	/* Restore PIR, get the CPU thread */
-	mfctr	%r13
-	mulli	%r13,%r13,CPUTHREAD_SIZE
-	add	%r13,%r13,%r2
-	addis	%r13,%r13,(cpu_threads - __head)@ha
-	addi	%r13,%r13,(cpu_threads - __head)@l
+	/* Get the CPU thread */
+	GET_CPU()
 
 	/* Mark the stack frame */
 	li	%r12,STACK_ENTRY_OPAL_API	

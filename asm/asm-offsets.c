@@ -16,9 +16,7 @@ int main(void)
 {
 	OFFSET(SPIRA_ACTUAL_SIZE, spira, reserved);
 
-	DEFINE(CPUTHREAD_SIZE, sizeof(struct cpu_thread));
 	OFFSET(CPUTHREAD_PIR, cpu_thread, pir);
-	OFFSET(CPUTHREAD_STACK, cpu_thread, stack);
 
 	OFFSET(STACK_TYPE,	stack_frame, type);
 	OFFSET(STACK_GPR0,	stack_frame, gpr[0]);
