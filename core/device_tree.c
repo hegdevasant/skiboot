@@ -14,35 +14,49 @@
 
 static int fdt_error;
 static void *fdt;
-static u32 lphandle;
-static char indent[30];
 
-static void save_err(int err)
+#undef DEBUG_FDT
+
+static void __save_err(int err, const char *str)
 {
-	if (err && !fdt_error)
+#ifdef DEBUG_FDT
+	printf("FDT: rc: %d from \"%s\"\n", err, str);
+#endif
+	if (err && !fdt_error) {
+		prerror("FDT: Error %d from \"%s\"\n", err, str);
 		fdt_error = err;
+	}
+}
+
+#define save_err(...) __save_err(__VA_ARGS__, #__VA_ARGS__)
+
+void __dt_begin_node(const char *name, uint32_t phandle)
+{
+	save_err(fdt_begin_node(fdt, name));
+
+	/*
+	 * We add both the new style "phandle" and the legacy
+	 * "linux,phandle" properties
+	 */
+	dt_property_cell("linux,phandle", phandle);
+	dt_property_cell("phandle", phandle);
 }
 
 uint32_t dt_begin_node(const char *name)
 {
-	save_err(fdt_begin_node(fdt, name));
+	uint32_t phandle = ++last_phandle;
 
-	printf("%s%s:\n", indent, name);
-	strcat(indent, " ");
-	dt_property_cell("linux,phandle", ++lphandle);
-
-	return lphandle;
+	__dt_begin_node(name, phandle);
+	return phandle;
 }
 
 void dt_property_string(const char *name, const char *value)
 {
-	printf("%s%s=%s\n", indent, name, value);
 	save_err(fdt_property_string(fdt, name, value));
 }
 
 void dt_property_cell(const char *name, u32 cell)
 {
-	printf("%s%s=%u\n", indent, name, cell);
 	save_err(fdt_property_cell(fdt, name, cell));
 }
 
@@ -50,7 +64,6 @@ void dt_property_cells(const char *name, int count, ...)
 {
 	va_list args;
 
-	printf("%s%s=%u...\n", indent, name, count);
 	va_start(args, count);
 	save_err(fdt_property_cells_v(fdt, name, count, args));
 	va_end(args);
@@ -58,19 +71,17 @@ void dt_property_cells(const char *name, int count, ...)
 
 void dt_property(const char *name, const void *val, size_t size)
 {
-	printf("%s%s=[%lu]\n", indent, name, size);
 	save_err(fdt_property(fdt, name, val, size));
 }
 
 void dt_end_node(void)
 {
-	indent[strlen(indent)-1] = '\0';
 	save_err(fdt_end_node(fdt));
 }
 
 static void dump_fdt(void)
 {
-#if 1
+#ifdef DEBUG_FDT
 	int i, off, depth, err;
 
 	printf("Device tree %u@%p\n", fdt_totalsize(fdt), fdt);
@@ -117,22 +128,27 @@ static void add_chosen_node(void)
 	dt_end_node();
 }
 
-static void from_dt_node(const struct dt_node *root)
+static void flatten_dt_node(const struct dt_node *root)
 {
 	const struct dt_node *i;
 	const struct dt_property *p;
 
+#ifdef DEBUG_FDT
+	printf("FDT: node: %s\n", root->name);
+#endif
+
 	list_for_each(&root->properties, p, list) {
 		if (strstarts(p->name, DT_PRIVATE))
 			continue;
+#ifdef DEBUG_FDT
+		printf("FDT:   prop: %s size: %ld\n", p->name, p->len);
+#endif
 		dt_property(p->name, p->prop, p->len);
 	}
 
 	list_for_each(&root->children, i, list) {
-		dt_begin_node(i->name);
-		dt_property_cell("phandle", i->phandle);
-
-		from_dt_node(i);
+		__dt_begin_node(i->name, i->phandle);
+		flatten_dt_node(i);
 		dt_end_node();
 	}
 }
@@ -141,6 +157,7 @@ void *create_dtb(const struct dt_node *root)
 {
 	size_t len = DEVICE_TREE_MAX_SIZE;
 	uint64_t sbase, total_size;
+	uint32_t old_last_phandle = last_phandle;
 
 	/* Calculate our total size, which is SKIBOOT_SIZE
 	 * plus all the CPU stacks
@@ -151,7 +168,7 @@ void *create_dtb(const struct dt_node *root)
 	do {
 		if (fdt)
 			free(fdt);
-		lphandle = 0;
+		last_phandle = old_last_phandle;
 		fdt_error = 0;
 		fdt = malloc(len);
 		if (!fdt) {
@@ -163,12 +180,17 @@ void *create_dtb(const struct dt_node *root)
 		save_err(fdt_add_reservemap_entry(fdt, sbase, total_size));
 		save_err(fdt_finish_reservemap(fdt));
 
-		dt_begin_node("");
-		/* Interrupt, CPU and memory nodes are in dt root. */
-		from_dt_node(root);
+		/* Open root node */
+		__dt_begin_node(root->name, root->phandle);
 
+		/* Unflatten our live tree */
+		flatten_dt_node(root);
+
+		/* Add the remaining bits that haven't been converted yet */
 		add_cec_nodes();
 		add_chosen_node();
+
+		/* Close root node */
 		dt_end_node();
 
 		save_err(fdt_finish(fdt));

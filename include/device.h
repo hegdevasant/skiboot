@@ -34,6 +34,11 @@ struct dt_node {
 	void *priv;
 };
 
+/* This is shared with device_tree.c .. make it static when
+ * the latter is gone (hopefully soon)
+ */
+extern u32 last_phandle;
+
 /* Create a root node: ie. a parentless one. */
 struct dt_node *dt_new_root(const char *name);
 
@@ -132,9 +137,6 @@ bool dt_has_node_property(const struct dt_node *node,
 
 /* Free a node (and any children). */
 void dt_free(struct dt_node *node);
-
-/* Return an fdt. */
-void *dt_flatten(const struct dt_node *root);
 
 /* Parse an initial fdt */
 void dt_expand(const void *fdt);

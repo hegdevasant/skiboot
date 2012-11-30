@@ -104,7 +104,7 @@
 #define KERNEL_LOAD_SIZE	0x20000000
 
 /* Size allocated to build the device-tree */
-#define	DEVICE_TREE_MAX_SIZE	0x40000
+#define	DEVICE_TREE_MAX_SIZE	0x80000
 
 #endif /* __CONFIG_H */
 

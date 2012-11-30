@@ -6,7 +6,7 @@
 #include <ccan/str/str.h>
 
 /* Used to give unique handles. */
-static u32 next_phandle = 1;
+u32 last_phandle = 0;
 
 static bool is_rodata(const void *p)
 {
@@ -41,7 +41,7 @@ static struct dt_node *new_node(const char *name)
 	list_head_init(&node->properties);
 	list_head_init(&node->children);
 	/* FIXME: locking? */
-	node->phandle = ++next_phandle;
+	node->phandle = ++last_phandle;
 	node->priv = NULL;
 	return node;
 }
@@ -231,16 +231,22 @@ struct dt_property *dt_add_property(struct dt_node *node,
 				    const char *name,
 				    const void *val, size_t size)
 {
-	struct dt_property *p = new_property(node, name, size);
+	struct dt_property *p;
 
+	/*
+	 * Filter out phandle properties, we re-generate them
+	 * when flattening
+	 */
 	if (strcmp(name, "linux,phandle") == 0 ||
 	    strcmp(name, "phandle") == 0) {
 		assert(size == 4);
 		node->phandle = *(u32 *)val;
-		if (node->phandle >= next_phandle)
-			next_phandle = node->phandle + 1;
+		if (node->phandle >= last_phandle)
+			last_phandle = node->phandle;
+		return NULL;
 	}
 
+	p = new_property(node, name, size);
 	if (size)
 		memcpy(p->prop, val, size);
 	return p;
@@ -483,71 +489,6 @@ void dt_free(struct dt_node *node)
 		list_del_from(&node->parent->children, &node->list);
 	free_name(node->name);
 	free(node);
-}
-
-static int node_to_fdt(void *fdt, const struct dt_node *node)
-{
-	int err;
-	const struct dt_property *p;
-	const struct dt_node *child;
-
-	if (strstarts(node->name, DT_PRIVATE))
-		return 0;
-
-	err = fdt_begin_node(fdt, node->name);
-	if (err)
-		return err;
-
-	err = fdt_property_cell(fdt, "phandle", node->phandle);
-	if (err)
-		return err;
-
-	list_for_each(&node->properties, p, list) {
-		if (strstarts(p->name, DT_PRIVATE))
-			continue;
-			
-		err = fdt_property(fdt, p->name, p->prop, p->len);
-		if (err)
-			return err;
-	}
-
-	list_for_each(&node->children, child, list) {
-		err = node_to_fdt(fdt, child);
-		if (err)
-			return err;
-	}
-	return fdt_end_node(fdt);
-}
-
-void *dt_flatten(const struct dt_node *root)
-{
-	size_t len = DEVICE_TREE_MAX_SIZE;
-	int err;
-	void *fdt;
-
-	do {
-		fdt = malloc(len);
-		if (!fdt) {
-			prerror("dtb: could not malloc %lu\n", (long)len);
-			return NULL;
-		}
-
-		fdt_create(fdt, len);
-		err = fdt_add_reservemap_entry(fdt, SKIBOOT_BASE,
-					       SKIBOOT_SIZE);
-		if (!err)
-			err = fdt_finish_reservemap(fdt);
-		if (!err)
-			err = node_to_fdt(fdt, root);
-		if (!err)
-			return fdt;
-
-		free(fdt);
-		len *= 2;
-	} while (err == -FDT_ERR_NOSPACE);
-
-	prerror("dtb: error %s\n", fdt_strerror(err));
-	return NULL;
 }
 
 static int dt_expand_node(struct dt_node *node, const void *fdt, int fdt_node)
