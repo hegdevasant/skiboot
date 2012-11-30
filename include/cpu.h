@@ -43,6 +43,12 @@ struct cpu_thread {
  */
 extern unsigned long cpu_secondary_start;
 
+/* Max PIR in the system */
+extern unsigned int cpu_max_pir;
+
+/* Max # of core per thread */
+extern unsigned int cpu_thread_count;
+
 /* Boot CPU. */
 extern struct cpu_thread *boot_cpu;
 
@@ -96,21 +102,18 @@ static inline struct cpu_thread *this_cpu(void)
 /* Get the thread # of a cpu within the core */
 static inline uint32_t cpu_get_thread_index(struct cpu_thread *cpu)
 {
-	/* XXX Handle P8 */
-	return cpu->pir & 0x3;
+	return cpu->pir - cpu->primary->pir;
 }
 
 /* Get the PIR of thread 0 of the same core */
 static inline uint32_t cpu_get_thread0(struct cpu_thread *cpu)
 {
-	/* XXX Handle P8 */
-	return cpu->pir & ~3;
+	return cpu->primary->pir;
 }
 
 static inline bool cpu_is_thread0(struct cpu_thread *cpu)
 {
-	/* XXX Handle P8 */
-	return (cpu->pir & 3) == 0;
+	return cpu->primary == cpu;
 }
 
 /* Called when some error condition requires disabling a core */
@@ -142,7 +145,5 @@ static inline void cpu_give_self_os(void)
 
 extern void *cpu_stack_bottom(unsigned int pir);
 extern void *cpu_stack_top(unsigned int pir);
-
-extern unsigned int cpu_max_pir;
 
 #endif /* __CPU_H */
