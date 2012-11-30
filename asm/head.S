@@ -127,7 +127,6 @@ boot_entry:
 	beq	1f
 	cmpwi	cr0,%r3,PVR_TYPE_P8
 	bne	.	/* Unsupported CPU type... what do we do ? */
-	crset	8	/* Set CR2.0 */
 	li	%r26,7	/* SMT 8 */
 
 	/* Get our reloc offset into r30 */
@@ -263,6 +262,7 @@ secondary_wait:
 
 	/* Check our PIR is in bound */
 	LOAD_ADDR_FROM_TOC(%r5, cpu_max_pir)
+	lwz	%r5,0(%r5)
 	cmpw	%r31,%r5
 	bgt-	secondary_not_found
 
