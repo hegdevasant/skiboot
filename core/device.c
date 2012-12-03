@@ -98,6 +98,19 @@ struct dt_node *dt_new_addr(struct dt_node *parent, const char *name,
 	return new;
 }
 
+struct dt_node *dt_new_2addr(struct dt_node *parent, const char *name,
+			     uint64_t addr0, uint64_t addr1)
+{
+	char lname[strlen(name) + 2*STR_MAX_CHARS(addr0) + 3];
+	struct dt_node *new;
+	assert(parent);
+
+	snprintf(lname, sizeof(lname), "%s@%llx,%llx", name, addr0, addr1);
+	new = new_node(lname);
+	dt_attach_root(parent, new);
+	return new;
+}
+
 char *dt_get_path(struct dt_node *node)
 {
 	unsigned int len = 0;

@@ -49,6 +49,8 @@ bool dt_attach_root(struct dt_node *parent, struct dt_node *root);
 struct dt_node *dt_new(struct dt_node *parent, const char *name);
 struct dt_node *dt_new_addr(struct dt_node *parent, const char *name,
 			    uint64_t unit_addr);
+struct dt_node *dt_new_2addr(struct dt_node *parent, const char *name,
+			     uint64_t unit_addr0, uint64_t unit_addr1);
 
 /* Add a property node, various forms. */
 struct dt_property *dt_add_property(struct dt_node *node,
