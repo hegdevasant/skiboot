@@ -3,7 +3,6 @@
  */
 #include <skiboot.h>
 #include <processor.h>
-#include <spira.h>
 #include <io.h>
 #include <fsp.h>
 #include <console.h>
@@ -369,9 +368,8 @@ static void fsp_serial_add(int index, u16 rsrc_id, const char *loc_code,
 
 void fsp_console_init(void)
 {
-	const struct iplparms_serial *ipser;
-	const void *ipl_parms;
-	int count, i;
+	struct dt_node *serials, *ser;
+	int i;
 
 	if (!fsp_present())
 		return;
@@ -391,38 +389,20 @@ void fsp_console_init(void)
 	op_display(OP_LOG, OP_MOD_FSPCON, 0x0002);
 
 	/* Parse serial port data */
-	ipl_parms = spira.ntuples.ipl_parms.addr;
-	if (!CHECK_SPPTR(ipl_parms)) {
-		prerror("FSPCON: Cannot find IPL Parms in SPIRA\n");
-		return;
-	}
-	if (!HDIF_check(ipl_parms, "IPLPMS")) {
-		prerror("FSPCON: IPL Parms has wrong header type\n");
+	serials = dt_find_by_path(dt_root, "ipl-params/fsp-serial");
+	if (!serials) {
+		prerror("FSPCON: No FSP serial ports in device-tree\n");
 		return;
 	}
 
-	op_display(OP_LOG, OP_MOD_FSPCON, 0x0003);
+	i = 1;
+	dt_for_each_child(serials, ser) {
+		u32 rsrc_id = dt_prop_get_u32(ser, "reg");
+		const void *lc = dt_prop_get(ser, "ibm,loc-code");
 
-	count = HDIF_get_iarray_size(ipl_parms, IPLPARMS_IDATA_SERIAL);
-	if (!count) {
-		prerror("FSPCON: No serial port in the IPL Parms\n");
-		return;
-	}
-	if (count > 2) {
-		prerror("FSPCON: %d serial ports, truncating to 2\n", count);
-		count = 2;
-	}
-
-	op_display(OP_LOG, OP_MOD_FSPCON, 0x0004);
-
-	for (i = 0; i < count; i++) {
-		ipser = HDIF_get_iarray_item(ipl_parms, IPLPARMS_IDATA_SERIAL,
-					     i, NULL);
-		if (!CHECK_SPPTR(ipser))
-			continue;
 		printf("FSPCON: Serial %d rsrc: %04x loc: %s\n",
-		       i, ipser->rsrc_id, ipser->loc_code);
-		fsp_serial_add(i + 1, ipser->rsrc_id, ipser->loc_code, false);
+		       i, rsrc_id, (char *)lc);
+		fsp_serial_add(i++, rsrc_id, lc, false);
 		op_display(OP_LOG, OP_MOD_FSPCON, 0x0010 + i);
 	}
 
