@@ -16,6 +16,10 @@
  *       and always going to 0x180
  */
 
+static struct dt_node *xscom_node;
+static int cpu_type;
+
+
 static struct proc_init_data proc_init_data = {
 	.hdr = HDIF_SIMPLE_HDR("PROCIN", 1, struct proc_init_data),
 	.regs_ptr = {
@@ -168,6 +172,8 @@ static void add_xscom(void)
 
 	xn = dt_new_addr(dt_root, "xscom", xscom_base);
 	assert(xn);
+	dt_add_property_cells(xn, "#address-cells", 2);
+	dt_add_property_cells(xn, "#size-cells", 1);
 
 	/* We hard wire the XSCOM size for now, it seems to be the same
 	 * everywhere so far
@@ -175,7 +181,7 @@ static void add_xscom(void)
 	xscom_size = 0x400000000000;
 
 	/* XXX Use boot CPU PVR to decide on XSCOM type... */
-	switch(PVR_TYPE(mfspr(SPR_PVR))) {
+	switch(cpu_type) {
 	case PVR_TYPE_P7:
 	case PVR_TYPE_P7P:
 		dt_add_property_strings(xn, "compatible",
@@ -190,6 +196,76 @@ static void add_xscom(void)
 	}
 	dt_add_property_cells(xn, "reg", hi32(xscom_base), lo32(xscom_base),
 			      hi32(xscom_size), lo32(xscom_size));
+
+	xscom_node = xn;
+}
+
+static void add_chiptod(void)
+{
+	unsigned int i, xscom_addr, xscom_len;
+	const char *compat_str;
+	const void *p;
+
+	if (!xscom_node)
+		return;
+
+	switch(cpu_type) {
+	case PVR_TYPE_P7:
+	case PVR_TYPE_P7P:
+		compat_str = "ibm,power7-chiptod";
+		xscom_addr = 0x00040000;
+		xscom_len = 0x34;
+		break;
+	case PVR_TYPE_P8:
+		compat_str = "ibm,power8-chiptod";
+		xscom_addr = 0x00040000;
+		xscom_len = 0x34;
+		break;
+	default:
+		return;
+	}
+
+	/*
+	 * Locate chiptod ID structures in SPIRA
+	 */
+	p = spira.ntuples.chip_tod.addr;
+	if (!CHECK_SPPTR(p)) {
+		prerror("CHIPTOD: Cannot locate SPIRA TOD info\n");
+		return;
+	}
+
+	for (i = 0; i < spira.ntuples.chip_tod.act_cnt; i++) {
+		const struct chiptod_chipid *id;
+		struct dt_node *node;
+
+		id = HDIF_get_idata(p, CHIPTOD_IDATA_CHIPID, NULL);
+		if (!CHECK_SPPTR(id)) {
+			prerror("CHIPTOD: Bad ChipID data %d\n", i);
+			continue;
+		}
+
+		if ((id->flags & CHIPTOD_ID_FLAGS_STATUS_MASK) !=
+		    CHIPTOD_ID_FLAGS_STATUS_OK)
+			continue;
+
+
+		node = dt_new_2addr(xscom_node, "chiptod",
+				    id->chip_id, xscom_addr);
+		dt_add_property_cells(node, "reg", id->chip_id,
+				     xscom_addr, xscom_len);
+		dt_add_property_strings(node, "compatible", "ibm,power-chiptod",
+				       compat_str);
+
+		if (id->flags & CHIPTOD_ID_FLAGS_PRIMARY)
+			dt_add_property(node, "primary", NULL, 0);
+		if (id->flags & CHIPTOD_ID_FLAGS_SECONDARY)
+			dt_add_property(node, "secondary", NULL, 0);
+
+		/* This is somewhat redundant but consistent with other nodes */
+		dt_add_property_cells(node, "ibm,chip-id", id->chip_id);
+
+		p += spira.ntuples.chip_tod.alloc_len;
+	}
 }
 
 static void add_iplparams_sys_params(const void *iplp, struct dt_node *node)
@@ -299,6 +375,8 @@ static void add_iplparams(void)
 
 void parse_hdat(void)
 {
+	cpu_type = PVR_TYPE(mfspr(SPR_PVR));
+
 	printf("\n");
 	printf("-----------------------------------------------\n");
 	printf("-------------- Parsing HDAT ... ---------------\n");
@@ -338,6 +416,9 @@ void parse_hdat(void)
 
 	/* Add FSP */
 	fsp_parse();
+
+	/* Add ChipTOD's */
+	add_chiptod();
 
 #if 0 /* Tests */
 	{

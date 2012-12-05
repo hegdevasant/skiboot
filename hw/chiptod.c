@@ -31,61 +31,43 @@
 /* Number of iterations for the various timeouts */
 #define TIMEOUT_LOOPS		10000000
 
-const struct chiptod_chipid *id_primary = NULL;
-const struct chiptod_chipid *id_secondary = NULL;
+static enum chiptod_type {
+	chiptod_unknown,
+	chiptod_p7,
+	chiptod_p8
+} chiptod_type;
+
+static int32_t chiptod_primary = -1;
+static int32_t chiptod_secondary = -1;
 
 static bool __chiptod_init(void)
 {
-	const void *p;
-	unsigned int i;
+	struct dt_node *np;
 
-	/*
-	 * Locate chiptod ID structures in SPIRA
-	 */
-	p = spira.ntuples.chip_tod.addr;
-	if (!CHECK_SPPTR(p)) {
-		prerror("CHIPTOD: Cannot locate SPIRA TOD info\n");
-		return false;
-	}
+	dt_for_each_compatible(dt_root, np, "ibm,power-chiptod") {
+		uint32_t chip = dt_prop_get_u32(np, "ibm,chip-id");
 
-	for (i = 0; i < spira.ntuples.chip_tod.act_cnt; i++) {
-		const struct chiptod_chipid *id;
-
-		id = HDIF_get_idata(p, CHIPTOD_IDATA_CHIPID, NULL);
-		if (!CHECK_SPPTR(id)) {
-			prerror("CHIPTOD: Bad ChipID data %d\n", i);
-			continue;
+		if (dt_has_node_property(np, "primary", NULL)) {
+		    chiptod_primary = chip;
+		    if (dt_node_is_compatible(np,"ibm,power7-chiptod"))
+			    chiptod_type = chiptod_p7;
+		    if (dt_node_is_compatible(np,"ibm,power8-chiptod"))
+			    chiptod_type = chiptod_p8;
 		}
 
-		if ((id->flags & CHIPTOD_ID_FLAGS_STATUS_MASK) !=
-		    CHIPTOD_ID_FLAGS_STATUS_OK)
-			continue;
-		if (id->flags & CHIPTOD_ID_FLAGS_PRIMARY)
-			id_primary = id;
-		if (id->flags & CHIPTOD_ID_FLAGS_SECONDARY)
-			id_secondary = id;
+		if (dt_has_node_property(np, "secondary", NULL))
+		    chiptod_secondary = chip;
 
-		p += spira.ntuples.chip_tod.alloc_len;
 	}
 
-	if (id_secondary && !id_primary) {
-		prerror("CHIPTOD: Got secondary TOD (ID 0x%x) but no primary\n",
-			id_secondary->chip_id);
-		id_primary = id_secondary;
-		id_secondary = NULL;
-	}
-
-	if (!id_primary) {
+	if (chiptod_primary < 0) {
 		prerror("CHIPTOD: Cannot find a primary TOD\n");
 		return false;
 	}
-
-	printf("CHIPTOD: Primay chip ID 0x%x\n", id_primary->chip_id);
-	if (id_secondary) {
-		printf("CHIPTOD: Secondary chip ID 0x%x\n",
-		       id_secondary->chip_id);
+	if (chiptod_type == chiptod_unknown) {
+		prerror("CHIPTOD: Unknown TOD type !\n");
+		return false;
 	}
-
 
 	return true;
 }
@@ -354,12 +336,15 @@ void chiptod_init(void)
 		op_display(OP_FATAL, OP_MOD_CHIPTOD, 0);
 		abort();
 	}
-	assert(id_primary);
+
+	/* XXX We don't handle P8 yet ! */
+	if (chiptod_type == chiptod_p8)
+		return;
 
 	op_display(OP_LOG, OP_MOD_CHIPTOD, 1);
 
 	/* Pick somebody on the primary */
-	cpu0 = find_cpu_by_chip_id(id_primary->chip_id);
+	cpu0 = find_cpu_by_chip_id(chiptod_primary);
 
 	/* Schedule master sync */
 	sres = false;
