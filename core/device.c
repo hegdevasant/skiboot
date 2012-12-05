@@ -388,6 +388,8 @@ bool dt_has_node_property(const struct dt_node *node,
 
 	if (!p)
 		return false;
+	if (!val)
+		return true;
 
 	return p->len == strlen(val) + 1 && memcmp(p->prop, val, p->len) == 0;
 }
