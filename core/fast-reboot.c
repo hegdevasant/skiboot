@@ -1,5 +1,4 @@
 #include <skiboot.h>
-#include <spira.h>
 #include <cpu.h>
 #include <fsp.h>
 #include <device_tree.h>

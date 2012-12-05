@@ -1,5 +1,4 @@
 #include <skiboot.h>
-#include <spira.h>
 #include <fsp.h>
 #include <memory.h>
 #include <chiptod.h>
