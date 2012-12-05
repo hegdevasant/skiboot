@@ -373,7 +373,7 @@ static void add_iplparams(void)
 	add_iplparams_serials(ipl_parms, iplp_node);
 }
 
-void parse_hdat(void)
+void parse_hdat(bool is_opal)
 {
 	cpu_type = PVR_TYPE(mfspr(SPR_PVR));
 
@@ -391,6 +391,7 @@ void parse_hdat(void)
 	dt_add_property_string(dt_root, "compatible", "ibm,powernv");
 	dt_add_property_cells(dt_root, "#address-cells", 2);
 	dt_add_property_cells(dt_root, "#size-cells", 2);
+	dt_add_property_string(dt_root, "lid-type", is_opal ? "opal" : "phyp");
 
 	/*
 	 * IPL params go first, they contain stuff that may be

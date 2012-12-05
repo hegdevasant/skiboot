@@ -71,7 +71,7 @@ extern void start_kernel(uint64_t entry, void* fdt,
 extern void start_kernel_secondary(uint64_t entry) __noreturn;
 
 /* Get description of machine from HDAT and create device-tree */
-extern void parse_hdat(void);
+extern void parse_hdat(bool is_opal);
 
 /* Root of device tree. */
 extern struct dt_node *dt_root;

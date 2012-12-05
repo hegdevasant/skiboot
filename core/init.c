@@ -29,7 +29,8 @@ struct dt_node *dt_root;
 /* LID numbers. For now we hijack some of pHyp's own until i figure
  * out the whole business with the MasterLID
  */
-#define KERNEL_LID	0x80a00701
+#define KERNEL_LID_PHYP	0x80a00701
+#define KERNEL_LID_OPAL	0x80a00701 /* XXX FIXME */
 
 static bool load_kernel(void)
 {
@@ -42,7 +43,11 @@ static bool load_kernel(void)
 	const char *side = NULL;
 
 	ksize = KERNEL_LOAD_SIZE;
-	lid = KERNEL_LID;
+
+	if (!strcmp(dt_prop_get(dt_root, "lid-type"), "opal"))
+		lid = KERNEL_LID_OPAL;
+	else
+		lid = KERNEL_LID_PHYP;
 
 	iplp = dt_find_by_path(dt_root, "ipl-params/ipl-params");
 	if (iplp)
@@ -155,12 +160,16 @@ void main_cpu_entry(const void *fdt)
 	/*
 	 * If we are coming in with a flat device-tree, we expand it
 	 * now. Else look for HDAT and create a device-tree from them
+	 *
+	 * Hack alert: When entering via the OPAL entry point, fdt
+	 * is set to -1, we record that and pass it to parse_hdat
 	 */
-
-	if (fdt)
-		dt_expand(fdt);
+	if (fdt == (void *)-1ul)
+		parse_hdat(true);
+	else if (fdt == NULL)
+		parse_hdat(false);
 	else
-		parse_hdat();
+		dt_expand(fdt);
 
 	/* Initialize the rest of the cpu thread structs */
 	init_all_cpus();

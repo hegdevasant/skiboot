@@ -20,11 +20,21 @@
 	clrrdi	%r13,%r1,STACK_SHIFT
 
 	.section ".head","ax"
-	/* Keep that gap empty */
+
 	. = 0
 .global __head
 __head:
-	/* This entry point is used when booting with a flat device-tree */
+	/* When booted as an OPAL LID, this is a pointer to the OPAL
+	 * variant of the NACA
+	 */
+	.llong	opal_naca
+
+	/* This entry point is used when booting with a flat device-tree
+	 * pointer in r3
+	 */
+	. = 0x10
+.global fdt_entry
+fdt_entry:
 	mr	%r27,%r3
 	b	boot_entry
 
@@ -426,6 +436,34 @@ hv_lid_load_table:
 	.long	0x10
 	.long	0
 	.long	0
+
+/*
+ *
+ * OPAL variant of NACA
+ *
+ */
+.global opal_naca
+opal_naca:
+	.llong	opal_boot_trampoline	/* Primary entry (used ?) */
+	.llong	opal_boot_trampoline	/* Secondary entry (used ?) */
+	.llong	spira			/* Spira pointer */
+	.llong	0			/* Load address */
+	.llong	opal_boot_trampoline	/* 0x180 trampoline */
+	.llong	0			/* More stuff as seen in objdump ...*/
+	.llong	0
+	.llong	0
+	.llong	0
+
+	/* The FSP seems to ignore our primary/secondary entry
+	 * points and instead copy that bit down to 0x180 and
+	 * patch the first instruction to get our expected
+	 * boot CPU number. We ignore that patching for now and
+	 * got to the same entry we use for pHyp and FDT HB.
+	 */
+opal_boot_trampoline:
+	li	%r3,0
+	li	%r27,-1
+	ba	boot_entry - __head
 
 /*
  *
