@@ -29,7 +29,7 @@ struct dt_node *dt_root;
  * out the whole business with the MasterLID
  */
 #define KERNEL_LID_PHYP	0x80a00701
-#define KERNEL_LID_OPAL	0x80a00701 /* XXX FIXME */
+#define KERNEL_LID_OPAL	0x80f00101
 
 static bool load_kernel(void)
 {
@@ -146,7 +146,7 @@ void load_and_boot_kernel(bool is_reboot)
 	start_kernel(kernel_entry, fdt, mem_top);
 }
 
-void main_cpu_entry(const void *fdt)
+void main_cpu_entry(const void *fdt, u32 master_cpu)
 {
 	printf("SkiBoot %s starting...\n", gitid);
 
@@ -203,7 +203,7 @@ void main_cpu_entry(const void *fdt)
 	op_display(OP_LOG, OP_MOD_INIT, 0x0002);
 
 	/* Enable timebase synchronization */
-	chiptod_init();
+	chiptod_init(master_cpu);
 
 	op_display(OP_LOG, OP_MOD_INIT, 0x0003);
 

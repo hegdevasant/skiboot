@@ -568,7 +568,7 @@ struct sppaca_cpu_id {
 	u32 drawer_book_octant_blade_id;
 	u32 memory_interleaving_scope;
 	u32 lco_target;
-};
+} __packed;
 
 /* Idata index 3 : Timebase data */
 #define SPPACA_IDATA_TIMEBASE	3
@@ -578,7 +578,7 @@ struct sppaca_cpu_timebase {
 	u32 time_base;
 	u32 actual_clock_speed;
 	u32 memory_bus_frequency;
-};
+} __packed;
 
 /* Idata index 4 : Cache size structure */
 #define SPPACA_IDATA_CACHE_SIZE	4
@@ -605,5 +605,95 @@ struct sppaca_cpu_cache {
 	u32 l35_dcache_size_kb;
 	u32 l35_cache_line_size;
 };
+
+
+/*
+ * SPPCIA structure. The SPIRA contain an array of these, one
+ * per processor core
+ */
+#define PCIA_HDIF_SIG	"SPPCIA"
+
+/* Idata index 0 : Core unique data */
+#define SPPCIA_IDATA_CORE_UNIQUE	0
+
+struct sppcia_core_unique {
+	u32 reserved;
+	u32 proc_fru_id;
+	u32 hw_proc_id;
+	u32 verif_exist_flags;	/* Same as PACA */
+	u32 chip_ec_level;
+	u32 proc_chip_id;
+	u32 reserved2;
+	u32 reserved3;
+	u32 reserved4;
+	u32 hw_module_id;
+	u64 reserved5;
+	u32 reserved6;
+	u32 reserved7;
+	u32 reserved8;
+	u32 ccm_node_id;
+	u32 hw_card_id;
+	u32 fabric_id;
+	u32 drawer_id;
+	u32 mem_interleave_scope;
+	u32 lco_target;
+	u32 reserved9;
+} __packed;
+
+/* Idata index 1 : CPU Time base structure */
+#define SPPCIA_IDATA_TIMEBASE		1
+
+struct sppcia_cpu_timebase {
+	u32 cycle_time;
+	u32 time_base;
+	u32 actual_clock_speed;
+	u32 memory_bus_frequency;
+} __packed;
+
+/* Idata index 2 : CPU Cache Size Structure */
+#define SPPCIA_IDATA_CPU_CACHE		2
+
+struct sppcia_cpu_cache {
+	u32 icache_size_kb;
+	u32 icache_line_size;
+	u32 l1_dcache_size_kb;
+	u32 l1_dcache_line_size;
+	u32 l2_dcache_size_kb;
+	u32 l2_line_size;
+	u32 l3_dcache_size_kb;
+	u32 l3_line_size;
+	u32 dcache_block_size;
+	u32 icache_block_size;
+	u32 dcache_assoc_sets;
+	u32 icache_assoc_sets;
+	u32 dtlb_entries;
+	u32 dtlb_assoc_sets;
+	u32 itlb_entries;
+	u32 itlb_assoc_sets;
+	u32 reservation_size;
+	u32 l2_cache_assoc_sets;
+	u32 l35_dcache_size_kb;
+	u32 l35_cache_line_size;
+} __packed;
+
+/* Idata index 3 : Thread Array Data
+ *
+ * HDIF array of
+ */
+#define SPPCIA_IDATA_THREAD_ARRAY	3
+
+struct sppcia_cpu_thread {
+	u32 proc_int_line;
+	u32 phys_thread_id;
+	u64 ibase;
+	u32 pir;
+} __packed;
+
+/* Idata index 4 : CPU Attributes */
+#define SPPCIA_IDATA_CPU_ATTR		4
+
+struct sppcia_cpu_attr {
+	u32 attr;
+} __packed;
 
 #endif /* __SPIRA_H */

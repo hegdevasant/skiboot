@@ -7,6 +7,8 @@
 #include <ccan/str/str.h>
 #include <device.h>
 
+#define PACA_MAX_THREADS 4
+
 #define for_each_paca(p)						\
 	for (p = spira.ntuples.paca.addr;				\
 	     (void *)p < spira.ntuples.paca.addr			\
@@ -36,10 +38,11 @@ static const char *cpu_state(u32 flags)
 }
 
 static struct dt_node *add_cpu_node(struct dt_node *cpus,
-				 const struct HDIF_common_hdr *paca,
+				    const struct HDIF_common_hdr *paca,
 				    const struct sppaca_cpu_id *id,
 				    bool okay)
 {
+	/* Page size encodings appear to be the same for P7 and P8 */
 	static const uint32_t p7_sps[] = {
 		0x0c, 0x000, 1, 0x0c, 0x0000,
 		0x18, 0x100, 1,	0x18, 0x0000,
@@ -102,6 +105,7 @@ static struct dt_node *add_cpu_node(struct dt_node *cpus,
 		break;
 	case PVR_TYPE_P8:
 		name = "PowerPC,POWER8";
+		/* XXX Not really supported with PACA, use PCIA */
 		break;
 	default:
 		name = "PowerPC,Unknown";
@@ -178,18 +182,59 @@ static void add_u32_sorted(u32 arr[], u32 new, unsigned num)
 	arr[i] = new;
 }
 
-static bool __cpu_parse(void)
+static void add_icps(void)
+{
+	struct dt_node *cpu;
+	unsigned int i;
+	u64 reg[PACA_MAX_THREADS * 2];
+	struct dt_node *icp;
+
+	dt_for_each_node(dt_root, cpu) {
+		u32 irange[2];
+		const struct dt_property *intsrv;
+		u64 ibase;
+		unsigned int num_threads;
+
+		if (!dt_has_node_property(cpu, "device_type", "cpu"))
+			continue;
+
+		intsrv = dt_find_property(cpu, "ibm,ppc-interrupt-server#s");
+		ibase = dt_prop_get_u64(cpu, DT_PRIVATE "ibase");
+
+		num_threads = intsrv->len / sizeof(u32);
+		assert(num_threads <= PACA_MAX_THREADS);
+
+		icp = dt_new_addr(dt_root, "interrupt-controller", ibase);
+		dt_add_property_strings(icp, "compatible",
+					"IBM,ppc-xicp",
+					"IBM,power7-xicp");
+
+		irange[0] = dt_property_get_cell(intsrv, 0); /* Index */
+		irange[1] = num_threads;		     /* num servers */
+		dt_add_property(icp, "ibm,interrupt-server-ranges",
+				irange, sizeof(irange));
+		dt_add_property(icp, "interrupt-controller", NULL, 0);
+		dt_add_property_cells(icp, "#address-cells", 0);
+		dt_add_property_cells(icp, "#interrupt-cells", 1);
+		dt_add_property_string(icp, "device_type",
+				   "PowerPC-External-Interrupt-Presentation");
+		for (i = 0; i < num_threads*2; i += 2) {
+			reg[i] = ibase;
+			/* One page is enough for a handful of regs. */
+			reg[i+1] = 4096;
+			ibase += reg[i+1];
+		}
+		dt_add_property(icp, "reg", reg, sizeof(reg));	
+	}
+}
+
+static bool __paca_parse(void)
 {
 	const struct HDIF_common_hdr *paca;
 	struct dt_node *cpus;
 
-	cpus = dt_new(dt_root, "cpus");
-	dt_add_property_cells(cpus, "#address-cells", 1);
-	dt_add_property_cells(cpus, "#size-cells", 0);
-
 	paca = spira.ntuples.paca.addr;
 	if (!HDIF_check(paca, "SPPACA")) {
-		/* FIXME: PACA is deprecated in favor of PCIA */
 		prerror("Invalid PACA (PCIA = %p)\n", spira.ntuples.pcia.addr);
 		return false;
 	}
@@ -199,6 +244,10 @@ static bool __cpu_parse(void)
 			spira.ntuples.paca.act_len);
 		return false;
 	}
+
+	cpus = dt_new(dt_root, "cpus");
+	dt_add_property_cells(cpus, "#address-cells", 1);
+	dt_add_property_cells(cpus, "#size-cells", 0);
 
 	for_each_paca(paca) {
 		const struct sppaca_cpu_id *id;
@@ -285,12 +334,15 @@ static bool __cpu_parse(void)
 				new_prop, (num + 1) * sizeof(u32));
 		free(new_prop);
 	}
+
+	add_icps();
+
 	return true;
 }	
 
-void cpu_parse(void)
+void paca_parse(void)
 {
-	if (!__cpu_parse()) {
+	if (!__paca_parse()) {
 		prerror("CPU: Initial CPU parsing failed\n");
 		abort();
 	}

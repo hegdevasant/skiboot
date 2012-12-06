@@ -5,6 +5,6 @@
  * time base accross the fabric.
  */
 
-extern void chiptod_init(void);
+extern void chiptod_init(u32 master_cpu);
 
 #endif /* __CHIPTOD_H */

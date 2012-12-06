@@ -73,65 +73,16 @@ bool spira_check_ptr(const void *ptr, const char *file, unsigned int line)
 	return false;
 }
 
-static void add_ics_reg_property(struct dt_node *ics,
-				 u64 ibase,
-				 unsigned int num_threads)
+static void add_interrupt_controller(void)
 {
-	unsigned int i;
-	u64 reg[num_threads * 2];
-
-	for (i = 0; i < num_threads*2; i += 2) {
-		reg[i] = ibase;
-		/* One page is enough for a handful of regs. */
-		reg[i+1] = 4096;
-		ibase += reg[i+1];
-	}
-	dt_add_property(ics, "reg", reg, sizeof(reg));
-}
-
-static void add_interrupt_controllers(void)
-{
-	struct dt_node *cpu, *ics;
-
-	ics = dt_new_addr(dt_root, "interrupt-controller", 0);
+	struct dt_node *ics = dt_new_addr(dt_root, "interrupt-controller", 0);
 	dt_add_property_cells(ics, "reg", 0, 0, 0, 0);
-	dt_add_property_string(ics, "compatible", "IBM,ppc-xics");
+	dt_add_property_strings(ics, "compatible", "IBM,ppc-xics", "IBM,opal-xics");
 	dt_add_property_cells(ics, "#address-cells", 0);
 	dt_add_property_cells(ics, "#interrupt-cells", 1);
 	dt_add_property_string(ics, "device_type",
 			       "PowerPC-Interrupt-Source-Controller");
 	dt_add_property(ics, "interrupt-controller", NULL, 0);
-
-	dt_for_each_node(dt_root, cpu) {
-		u32 irange[2];
-		const struct dt_property *intsrv;
-		u64 ibase;
-		unsigned int num_threads;
-
-		if (!dt_has_node_property(cpu, "device_type", "cpu"))
-			continue;
-
-		intsrv = dt_find_property(cpu, "ibm,ppc-interrupt-server#s");
-		ibase = dt_prop_get_u64(cpu, DT_PRIVATE "ibase");
-
-		num_threads = intsrv->len / sizeof(u32);
-
-		ics = dt_new_addr(dt_root, "interrupt-controller", ibase);
-		dt_add_property_strings(ics, "compatible",
-					"IBM,ppc-xicp",
-					"IBM,power7-xicp");
-
-		irange[0] = dt_property_get_cell(intsrv, 0); /* Index */
-		irange[1] = num_threads;		     /* num servers */
-		dt_add_property(ics, "ibm,interrupt-server-ranges",
-				irange, sizeof(irange));
-		dt_add_property(ics, "interrupt-controller", NULL, 0);
-		add_ics_reg_property(ics, ibase, num_threads);
-		dt_add_property_cells(ics, "#address-cells", 0);
-		dt_add_property_cells(ics, "#interrupt-cells", 1);
-		dt_add_property_string(ics, "device_type",
-				   "PowerPC-External-Interrupt-Presentation");
-	}
 }
 
 static void add_xscom(void)
@@ -403,14 +354,15 @@ void parse_hdat(bool is_opal)
 	/* Get model property based on System VPD */
 	add_dtb_model();
 
-	/* Parse SPPACAs (TODO: Add SPICA) */
-	cpu_parse();
+	/* Parse SPPACA and/or PCIA */
+	if (!pcia_parse())
+		paca_parse();
 
 	/* Parse MS VPD */
 	memory_parse();
 
 	/* Add XICS nodes */
-	add_interrupt_controllers();
+	add_interrupt_controller();
 
 	/* Add XSCOM node */
 	add_xscom();

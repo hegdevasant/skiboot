@@ -36,6 +36,7 @@ __head:
 .global fdt_entry
 fdt_entry:
 	mr	%r27,%r3
+	li	%r25,0
 	b	boot_entry
 
 	/* This is our boot semaphore used for CPUs to sync, it has to be
@@ -58,6 +59,7 @@ boot_flag:
 	/* Entry point set by the FSP */
 	.= 0x180
 	li	%r27,0
+	li	%r25,0
 	b	boot_entry
 
 	/* More exception stubs */
@@ -118,12 +120,13 @@ opal_branch_table:
  *
  * Boot code NV register usage:
  *
- *   r31 :  PIR
+ *   r31 :  Boot PIR
  *   r30 :  Current running offset
- *   r29 :  Target
+ *   r29 :  Target address
  *   r28 :  PVR
  *   r27 :  DTB pointer (or NULL)
  *   r26 :  PIR thread mask
+ *   r25 :  Selected master CPU (OPAL boot)
  */
 .global boot_entry
 boot_entry:
@@ -235,6 +238,7 @@ boot_entry:
 	/* Jump to C */
 	GET_CPU()
 	mr	%r3,%r27
+	mr	%r4,%r25
 	bl	main_cpu_entry
 	b	.
 
@@ -461,7 +465,7 @@ opal_naca:
 	 * got to the same entry we use for pHyp and FDT HB.
 	 */
 opal_boot_trampoline:
-	li	%r3,0
+	li	%r25,0
 	li	%r27,-1
 	ba	boot_entry - __head
 
