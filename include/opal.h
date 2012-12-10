@@ -29,6 +29,7 @@
 #define OPAL_INTERNAL_ERROR	-11
 #define OPAL_BUSY_EVENT		-12
 #define OPAL_HARDWARE_FROZEN	-13
+#define OPAL_WRONG_STATE	-14
 
 /* API Tokens (in r0) */
 #define OPAL_TEST				0

@@ -194,7 +194,7 @@ struct cpu_thread *find_cpu_by_server(u32 server_no)
 {
 	struct cpu_thread *t;
 
-	for_each_available_cpu(t) {
+	for_each_cpu(t) {
 		if (t->server_no == server_no)
 			return t;
 	}
@@ -449,7 +449,7 @@ int64_t opal_start_cpu_thread(uint64_t server_no, uint64_t start_address)
 
 	if (cpu->state != cpu_state_active) {
 		prerror("OPAL: CPU not active in OPAL !\n");
-		return OPAL_PARAMETER;
+		return OPAL_WRONG_STATE;
 	}
 	job = __cpu_queue_job(cpu, opal_start_thread_job, (void *)start_address,
 			      true);
