@@ -70,7 +70,7 @@ static void add_icp(const void *pcia, u32 tcount, const char *compat)
 		assert(t);
 		if (i == 0)
 			irange[0] = t->proc_int_line;
-		reg[i * 2] = t->ibase;
+		reg[i * 2] = cleanup_addr(t->ibase);
 		reg[i * 2 + 1] = 0x1000;
 	}
 	irange[1] = tcount;
@@ -202,6 +202,9 @@ static struct dt_node *add_core_node(struct dt_node *cpus,
 	 * between P7 and P8)
 	 */
 	dt_add_property_cells(cpu, "ibm,chip_id", id->proc_chip_id);
+
+	/* Add private "ibase" property used by other bits of skiboot */
+	dt_add_property_u64(cpu, DT_PRIVATE "ibase", cleanup_addr(t->ibase));
 
 	/* Build ibm,ppc-interrupt-server#s with all threads */
 	for (i = 0; i < threads; i++) {
