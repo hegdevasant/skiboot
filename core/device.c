@@ -111,19 +111,21 @@ struct dt_node *dt_new_2addr(struct dt_node *parent, const char *name,
 	return new;
 }
 
-char *dt_get_path(struct dt_node *node)
+char *dt_get_path(const struct dt_node *node)
 {
 	unsigned int len = 0;
-	struct dt_node *n;
+	const struct dt_node *n;
 	char *path, *p;
 
 	/* Dealing with NULL is for test/debug purposes */
 	if (!node)
 		return "<NULL>";
 
-	for (n = node; n; n = n->parent)
-		len += strlen(n->name) + 1;
-	len--;  /* First entry has no '/' */
+	for (n = node; n; n = n->parent) {
+		len += strlen(n->name);
+		if (n->parent || n == node)
+			len++;
+	}
 	path = zalloc(len + 1);
 	assert(path);
 	p = path + len;
@@ -381,6 +383,31 @@ const struct dt_property *dt_find_property(const struct dt_node *node,
 	return NULL;
 }
 
+const struct dt_property *dt_require_property(const struct dt_node *node,
+					      const char *name, int wanted_len)
+{
+	const struct dt_property *p = dt_find_property(node, name);
+
+	if (!p) {
+		const char *path = dt_get_path(node);
+
+		prerror("DT: Missing required property %s/%s\n",
+			path, name);
+		assert(false);
+	}
+	if (wanted_len >= 0 && p->len != wanted_len) {
+		char *path = dt_get_path(node);
+
+		prerror("DT: Unexpected property length %s/%s\n",
+			path, name);
+		prerror("DT: Expected len: %d got len: %ld\n",
+			wanted_len, p->len);
+		assert(false);
+	}
+
+	return p;
+}
+
 bool dt_has_node_property(const struct dt_node *node,
 			  const char *name, const char *val)
 {
@@ -426,10 +453,7 @@ struct dt_node *dt_find_compatible_node(struct dt_node *root,
 
 u64 dt_prop_get_u64(const struct dt_node *node, const char *prop)
 {
-	const struct dt_property *p = dt_find_property(node, prop);
-
-	assert(p);
-	assert(p->len == sizeof(u64));
+	const struct dt_property *p = dt_require_property(node, prop, 8);
 
 	return ((u64)dt_property_get_cell(p, 0) << 32)
 		| dt_property_get_cell(p, 1);
@@ -442,18 +466,13 @@ u64 dt_prop_get_u64_def(const struct dt_node *node, const char *prop, u64 def)
 	if (!p)
 		return def;
 
-	assert(p->len == sizeof(u64));
-
 	return ((u64)dt_property_get_cell(p, 0) << 32)
 		| dt_property_get_cell(p, 1);
 }
 
 u32 dt_prop_get_u32(const struct dt_node *node, const char *prop)
 {
-	const struct dt_property *p = dt_find_property(node, prop);
-
-	assert(p);
-	assert(p->len == sizeof(u32));
+	const struct dt_property *p = dt_require_property(node, prop, 4);
 
 	return dt_property_get_cell(p, 0);
 }
@@ -465,16 +484,12 @@ u32 dt_prop_get_u32_def(const struct dt_node *node, const char *prop, u32 def)
 	if (!p)
 		return def;
 
-	assert(p->len == sizeof(u32));
-
 	return dt_property_get_cell(p, 0);
 }
 
 const void *dt_prop_get(const struct dt_node *node, const char *prop)
 {
-	const struct dt_property *p = dt_find_property(node, prop);
-
-	assert(p);
+	const struct dt_property *p = dt_require_property(node, prop, -1);
 
 	return p->prop;
 }
@@ -594,8 +609,7 @@ u64 dt_get_address(const struct dt_node *node, unsigned int index,
 	u32 ns = dt_n_size_cells(node);
 	u32 pos, n;
 
-	p = dt_find_property(node, "reg");
-	assert(p);
+	p = dt_require_property(node, "reg", -1);
 	n = (na + ns) * sizeof(u32);
 	pos = n * index;
 	assert((pos + n) <= p->len);
@@ -611,8 +625,7 @@ unsigned int dt_count_addresses(const struct dt_node *node)
 	u32 ns = dt_n_size_cells(node);
 	u32 n;
 
-	p = dt_find_property(node, "reg");
-	assert(p);
+	p = dt_require_property(node, "reg", -1);
 	n = (na + ns) * sizeof(u32);
 	return p->len / n;
 }

@@ -121,7 +121,7 @@ struct dt_node *dt_find_compatible_node(struct dt_node *root,
 /* Build the full path for a node. Return a new block of memory, caller
  * shall free() it
  */
-char *dt_get_path(struct dt_node *node);
+char *dt_get_path(const struct dt_node *node);
 
 /* Find a node by path */
 struct dt_node *dt_find_by_path(struct dt_node *root, const char *path);
@@ -132,6 +132,8 @@ struct dt_node *dt_find_by_phandle(struct dt_node *root, u32 phandle);
 /* Find a property by name. */
 const struct dt_property *dt_find_property(const struct dt_node *node,\
 					   const char *name);
+const struct dt_property *dt_require_property(const struct dt_node *node,
+					      const char *name, int wanted_len);
 
 /* Find a property by name, check if it's the same as val. */
 bool dt_has_node_property(const struct dt_node *node,
