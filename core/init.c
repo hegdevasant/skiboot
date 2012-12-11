@@ -156,6 +156,11 @@ void main_cpu_entry(const void *fdt, u32 master_cpu)
 	/* Now locks can be used */
 	init_locks();
 
+	/* Create the OPAL call table early on, entries can be overriden
+	 * later on (FSP console code for example)
+	 */
+	opal_table_init();
+
 	/*
 	 * If we are coming in with a flat device-tree, we expand it
 	 * now. Else look for HDAT and create a device-tree from them
@@ -216,9 +221,6 @@ void main_cpu_entry(const void *fdt, u32 master_cpu)
 	cec_init();
 
 	op_display(OP_LOG, OP_MOD_INIT, 0x0005);
-
-	/* Create the OPAL call table */
-	opal_table_init();
 
 	/* Add OPAL-specific node to dt_root before booting the kernel
 	 *

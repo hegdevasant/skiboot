@@ -12,11 +12,12 @@
 /* Pending events to signal via opal_poll_events */
 uint64_t opal_pending_events;
 
+/* OPAL dispatch table defined in head.S */
+extern uint64_t opal_branch_table[];
 void opal_table_init(void)
 {
 	struct opal_table_entry *s = &__opal_table_start;
 	struct opal_table_entry *e = &__opal_table_end;
-	extern uint64_t opal_branch_table[];
 
 	printf("OPAL table: %p .. %p, branch table: %p\n",
 	       s, e, opal_branch_table);
@@ -53,6 +54,15 @@ void opal_trace_entry(struct stack_frame *eframe)
 	printf("OPAL: r11=%016llx\n", eframe->gpr[11]);
 	printf("OPAL: caller LR: %016llx SP: %016llx\n",
 	       eframe->lr, eframe->gpr[1]);
+}
+
+void opal_register(uint64_t token, void *func)
+{
+	uint64_t *opd = func;
+
+	assert(token <= OPAL_LAST);
+
+	opal_branch_table[token] = *opd;
 }
 
 static void add_opal_firmware_node(struct dt_node *opal)
