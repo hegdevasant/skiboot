@@ -8,12 +8,14 @@
 #include <interrupts.h>
 #include <op-panel.h>
 #include <device.h>
+#include <console.h>
 
 /* Pending events to signal via opal_poll_events */
 uint64_t opal_pending_events;
 
 /* OPAL dispatch table defined in head.S */
 extern uint64_t opal_branch_table[];
+
 void opal_table_init(void)
 {
 	struct opal_table_entry *s = &__opal_table_start;
@@ -91,6 +93,14 @@ void add_opal_nodes(void)
 	extern uint32_t opal_entry;
 	struct dt_node *opal;
 
+	/* XXX TODO: Reorg this. We should create the base OPAL
+	 * node early on, and have the various sub modules populate
+	 * their own entries (console etc...)
+	 *
+	 * The logic of which console backend to use should be
+	 * extracted
+	 */
+
 	base = opal_get_base();
 	size = opal_get_size();
 	entry = (uint64_t)&opal_entry;
@@ -103,10 +113,15 @@ void add_opal_nodes(void)
 	dt_add_property_u64(opal, "opal-entry-address", entry);
 	dt_add_property_u64(opal, "opal-runtime-size", size);
 	add_opal_interrupts(opal);
-	add_opal_console_nodes(opal);
 	add_opal_nvram_node(opal);
 	add_opal_oppanel_node(opal);
 	add_opal_firmware_node(opal);
+
+	if (fsp_present())
+		add_fsp_console_nodes(opal);
+	else
+		add_dummy_console_nodes(opal);
+
 	//add_opal_errlog_node();
 }
 

@@ -14,4 +14,6 @@ extern bool flush_console(void);
 extern bool __flush_console(void);
 extern void set_console(struct con_ops *driver);
 
+extern void add_dummy_console_nodes(struct dt_node *opal);
+
 #endif /* __CONSOLE_H */

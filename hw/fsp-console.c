@@ -366,52 +366,8 @@ static void fsp_serial_add(int index, u16 rsrc_id, const char *loc_code,
 	}
 }
 
-void fsp_console_init(void)
-{
-	struct dt_node *serials, *ser;
-	int i;
-
-	if (!fsp_present())
-		return;
-
-	/* Wait until we got the intf query before moving on */
-	while (!got_intf_query)
-		fsp_poll();
-
-	op_display(OP_LOG, OP_MOD_FSPCON, 0x0000);
-
-	/* Add DVS ports. We currently have session 0 and 3, 0 is for
-	 * OS use. 3 is our debug port
-	 */
-	fsp_serial_add(0, 0xffff, "DVS_OS", false);
-	op_display(OP_LOG, OP_MOD_FSPCON, 0x0001);
-	fsp_serial_add(3, 0xffff, "DVS_FW", true);
-	op_display(OP_LOG, OP_MOD_FSPCON, 0x0002);
-
-	/* Parse serial port data */
-	serials = dt_find_by_path(dt_root, "ipl-params/fsp-serial");
-	if (!serials) {
-		prerror("FSPCON: No FSP serial ports in device-tree\n");
-		return;
-	}
-
-	i = 1;
-	dt_for_each_child(serials, ser) {
-		u32 rsrc_id = dt_prop_get_u32(ser, "reg");
-		const void *lc = dt_prop_get(ser, "ibm,loc-code");
-
-		printf("FSPCON: Serial %d rsrc: %04x loc: %s\n",
-		       i, rsrc_id, (char *)lc);
-		fsp_serial_add(i++, rsrc_id, lc, false);
-		op_display(OP_LOG, OP_MOD_FSPCON, 0x0010 + i);
-	}
-
-	op_display(OP_LOG, OP_MOD_FSPCON, 0x0005);
-}
-
-
-static int64_t opal_console_write(int64_t term_number, int64_t *length,
-				  const uint8_t *buffer)
+static int64_t fsp_console_write(int64_t term_number, int64_t *length,
+				 const uint8_t *buffer)
 {
 	struct fsp_serial *fs;
 	size_t written, requested;
@@ -447,10 +403,9 @@ static int64_t opal_console_write(int64_t term_number, int64_t *length,
 
 	return written ? OPAL_SUCCESS : OPAL_BUSY_EVENT;
 }
-opal_call(OPAL_CONSOLE_WRITE, opal_console_write);
 
-static int64_t opal_console_write_buffer_space(int64_t term_number,
-					       int64_t *length)
+static int64_t fsp_console_write_buffer_space(int64_t term_number,
+					      int64_t *length)
 {
 	struct fsp_serial *fs;
 	struct fsp_serbuf_hdr *sb;
@@ -472,11 +427,9 @@ static int64_t opal_console_write_buffer_space(int64_t term_number,
 
 	return OPAL_SUCCESS;
 }
-opal_call(OPAL_CONSOLE_WRITE_BUFFER_SPACE, opal_console_write_buffer_space);
 
-
-static int64_t opal_console_read(int64_t term_number, int64_t *length,
-				 uint8_t *buffer __unused)
+static int64_t fsp_console_read(int64_t term_number, int64_t *length,
+				uint8_t *buffer __unused)
 {
 	struct fsp_serial *fs;
 	struct fsp_serbuf_hdr *sb;
@@ -537,7 +490,6 @@ static int64_t opal_console_read(int64_t term_number, int64_t *length,
 
 	return OPAL_SUCCESS;
 }
-opal_call(OPAL_CONSOLE_READ, opal_console_read);
 
 void fsp_console_poll(void)
 {
@@ -588,6 +540,54 @@ void fsp_console_poll(void)
 		}
 		unlock(&con_lock);
 	}
+}
+
+void fsp_console_init(void)
+{
+	struct dt_node *serials, *ser;
+	int i;
+
+	if (!fsp_present())
+		return;
+
+	opal_register(OPAL_CONSOLE_READ, fsp_console_read);
+	opal_register(OPAL_CONSOLE_WRITE_BUFFER_SPACE,
+		      fsp_console_write_buffer_space);
+	opal_register(OPAL_CONSOLE_WRITE, fsp_console_write);
+
+	/* Wait until we got the intf query before moving on */
+	while (!got_intf_query)
+		fsp_poll();
+
+	op_display(OP_LOG, OP_MOD_FSPCON, 0x0000);
+
+	/* Add DVS ports. We currently have session 0 and 3, 0 is for
+	 * OS use. 3 is our debug port
+	 */
+	fsp_serial_add(0, 0xffff, "DVS_OS", false);
+	op_display(OP_LOG, OP_MOD_FSPCON, 0x0001);
+	fsp_serial_add(3, 0xffff, "DVS_FW", true);
+	op_display(OP_LOG, OP_MOD_FSPCON, 0x0002);
+
+	/* Parse serial port data */
+	serials = dt_find_by_path(dt_root, "ipl-params/fsp-serial");
+	if (!serials) {
+		prerror("FSPCON: No FSP serial ports in device-tree\n");
+		return;
+	}
+
+	i = 1;
+	dt_for_each_child(serials, ser) {
+		u32 rsrc_id = dt_prop_get_u32(ser, "reg");
+		const void *lc = dt_prop_get(ser, "ibm,loc-code");
+
+		printf("FSPCON: Serial %d rsrc: %04x loc: %s\n",
+		       i, rsrc_id, (char *)lc);
+		fsp_serial_add(i++, rsrc_id, lc, false);
+		op_display(OP_LOG, OP_MOD_FSPCON, 0x0010 + i);
+	}
+
+	op_display(OP_LOG, OP_MOD_FSPCON, 0x0005);
 }
 
 static void flush_all_input(void)
@@ -689,9 +689,10 @@ void fsp_console_reset(void)
 	flush_all_input();
 
 	reopen_all_hvsi();
+
 }
 
-void add_opal_console_nodes(struct dt_node *opal)
+void add_fsp_console_nodes(struct dt_node *opal)
 {
 	unsigned int i;
 	struct dt_node *consoles;

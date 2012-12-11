@@ -6,6 +6,8 @@
 #include <skiboot.h>
 #include <unistd.h>
 #include <console.h>
+#include <opal.h>
+#include <device.h>
 
 static char *con_buf = (char *)INMEM_CON_START;
 static size_t con_in;
@@ -131,4 +133,55 @@ void set_console(struct con_ops *driver)
 	con_driver = driver;
 	if (driver)
 		flush_console();
+}
+
+/*
+ * Default OPAL console provided if nothing else overrides it
+ */
+static int64_t dummy_console_write(int64_t term_number, int64_t *length,
+				   const uint8_t *buffer)
+{
+	if (term_number != 0)
+		return OPAL_PARAMETER;
+	write(0, buffer, *length);
+}
+opal_call(OPAL_CONSOLE_WRITE, dummy_console_write);
+
+static int64_t dummy_console_write_buffer_space(int64_t term_number,
+						int64_t *length)
+{
+	if (term_number != 0)
+		return OPAL_PARAMETER;
+	if (length)
+		*length = INMEM_CON_LEN;
+	return OPAL_SUCCESS;
+}
+opal_call(OPAL_CONSOLE_WRITE_BUFFER_SPACE, dummy_console_write_buffer_space);
+
+static int64_t dummy_console_read(int64_t term_number, int64_t *length,
+				  uint8_t *buffer __unused)
+{
+	if (term_number != 0)
+		return OPAL_PARAMETER;
+	*length = 0;
+
+	return OPAL_SUCCESS;
+}
+opal_call(OPAL_CONSOLE_READ, dummy_console_read);
+
+void add_dummy_console_nodes(struct dt_node *opal)
+{
+	struct dt_node *con, *consoles;
+
+	consoles = dt_new(opal, "consoles");
+	assert(consoles);
+	dt_add_property_cells(consoles, "#address-cells", 1);
+	dt_add_property_cells(consoles, "#size-cells", 0);
+
+	con = dt_new_addr(consoles, "serial", 0);
+	assert(con);
+	dt_add_property_string(con, "compatible", "ibm,opal-console-raw");
+	dt_add_property_cells(con, "#write-buffer-size", INMEM_CON_LEN);
+	dt_add_property_cells(con, "reg", 0);
+	dt_add_property_string(con, "device_type", "serial");
 }
