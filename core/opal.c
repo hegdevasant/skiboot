@@ -167,8 +167,10 @@ opal_call(OPAL_CEC_POWER_DOWN, opal_cec_power_down);
 
 static int64_t opal_cec_reboot(void)
 {
+#ifdef ENABLE_FAST_RESET
 	/* Try a fast reset first */
 	fast_reset();
+#endif
 
 	if (!fsp_present())
 		return OPAL_UNSUPPORTED;

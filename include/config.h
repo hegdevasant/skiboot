@@ -32,6 +32,9 @@
 /* Enable this to hookup SkiBoot log to the DVS console */
 #define DVS_CONSOLE		1
 
+/* Enable this to do fast resets. Currently unreliable... */
+//#define ENABLE_FAST_RESET	1
+
 /* Enable this to disable setting of the output pending event when
  * sending things on the console. The FSP is very slow to consume
  * and older kernels wait after each character during early boot so
