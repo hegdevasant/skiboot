@@ -106,6 +106,10 @@
 #define KERNEL_LOAD_BASE	0x00100000
 #define KERNEL_LOAD_SIZE	0x20000000
 
+/* Hard wired addresses for Stradale kernel */
+#define KERNEL_STRADALE_BASE	0x20000000
+#define KERNEL_STRADALE_SIZE	0x01000000
+
 /* Size allocated to build the device-tree */
 #define	DEVICE_TREE_MAX_SIZE	0x80000
 

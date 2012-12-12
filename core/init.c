@@ -33,32 +33,46 @@ struct dt_node *dt_root;
 
 static bool load_kernel(void)
 {
-	struct elf64_hdr *kh = (void *)KERNEL_LOAD_BASE;
+	uint64_t load_base;
+	struct elf64_hdr *kh;
 	struct elf64_phdr *ph;
 	struct dt_node *iplp;
 	unsigned int i;
 	uint32_t lid;
 	size_t ksize;
-	const char *side = NULL;
+	const char *ltype, *side = NULL;
 
-	ksize = KERNEL_LOAD_SIZE;
+	ltype = dt_prop_get_def(dt_root, "lid-type", NULL);
 
-	if (!strcmp(dt_prop_get(dt_root, "lid-type"), "opal"))
-		lid = KERNEL_LID_OPAL;
-	else
-		lid = KERNEL_LID_PHYP;
+	/* No lid-type, assume stradale, currently pre-loaded at fixed
+	 * address
+	 */
+	if (!ltype) {
+		load_base = KERNEL_STRADALE_BASE;
+		ksize = KERNEL_STRADALE_SIZE;
+		printf("No lid-type property, assuming FSP-less setup\n");
+	} else {
+		load_base = KERNEL_LOAD_BASE;
+		ksize = KERNEL_LOAD_SIZE;
 
-	iplp = dt_find_by_path(dt_root, "ipl-params/ipl-params");
-	if (iplp)
-		side = dt_prop_get_def(iplp, "cec-ipl-side", NULL);
-	if (!side || !strcmp(side, "temp"))
-		lid |= 0x8000;
-	fsp_fetch_data(0, FSP_DATASET_NONSP_LID, lid, 0,
-		       (void *)KERNEL_LOAD_BASE, &ksize);
+		if (!strcmp(ltype, "opal"))
+			lid = KERNEL_LID_OPAL;
+		else
+			lid = KERNEL_LID_PHYP;
+
+		iplp = dt_find_by_path(dt_root, "ipl-params/ipl-params");
+		if (iplp)
+			side = dt_prop_get_def(iplp, "cec-ipl-side", NULL);
+		if (!side || !strcmp(side, "temp"))
+			lid |= 0x8000;
+		fsp_fetch_data(0, FSP_DATASET_NONSP_LID, lid, 0,
+			       (void *)load_base, &ksize);
+	}
 
 	printf("INIT: Kernel loaded, size: %ld bytes\n", ksize);
 
 	/* Check it's a ppc64 ELF */
+	kh = (struct elf64_hdr *)load_base;
 	if (kh->ei_ident != ELF_IDENT		||
 	    kh->ei_class != ELF_CLASS_64	||
 	    kh->ei_data != ELF_DATA_MSB		||
@@ -74,7 +88,7 @@ static bool load_kernel(void)
 	 * to work for the Linux Kernel because it's a fairly dumb ELF
 	 * but it will not work for any ELF binary.
 	 */
-	ph = (struct elf64_phdr *)(KERNEL_LOAD_BASE + kh->e_phoff);
+	ph = (struct elf64_phdr *)(load_base + kh->e_phoff);
 	for (i = 0; i < kh->e_phnum; i++, ph++) {
 		if (ph->p_type != ELF_PTYPE_LOAD)
 			continue;
@@ -91,8 +105,8 @@ static bool load_kernel(void)
 		prerror("INIT: Failed to find kernel entry !\n");
 		return false;
 	}
-	kernel_entry += KERNEL_LOAD_BASE;
-	kernel_top = KERNEL_LOAD_BASE + ksize;
+	kernel_entry += load_base;
+	kernel_top = load_base + ksize;
 
 	printf("INIT: Kernel entry at 0x%llx\n", kernel_entry);
 
