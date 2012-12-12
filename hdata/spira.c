@@ -151,11 +151,11 @@ static void add_xscom(void)
 	xscom_node = xn;
 }
 
-static void add_chiptod(void)
+static void add_chiptod_old(void)
 {
 	unsigned int i, xscom_addr, xscom_len;
 	const char *compat_str;
-	const void *p;
+	const void *p, *oldp;
 
 	if (!xscom_node)
 		return;
@@ -181,7 +181,7 @@ static void add_chiptod(void)
 	 */
 	p = spira.ntuples.chip_tod.addr;
 	if (!CHECK_SPPTR(p)) {
-		prerror("CHIPTOD: Cannot locate SPIRA TOD info\n");
+		prerror("CHIPTOD: Cannot locate old style SPIRA TOD info\n");
 		return;
 	}
 
@@ -189,7 +189,10 @@ static void add_chiptod(void)
 		const struct chiptod_chipid *id;
 		struct dt_node *node;
 
-		id = HDIF_get_idata(p, CHIPTOD_IDATA_CHIPID, NULL);
+		oldp = p;
+		p += spira.ntuples.chip_tod.alloc_len;
+
+		id = HDIF_get_idata(oldp, CHIPTOD_IDATA_CHIPID, NULL);
 		if (!CHECK_SPPTR(id)) {
 			prerror("CHIPTOD: Bad ChipID data %d\n", i);
 			continue;
@@ -214,8 +217,89 @@ static void add_chiptod(void)
 
 		/* This is somewhat redundant but consistent with other nodes */
 		dt_add_property_cells(node, "ibm,chip-id", id->chip_id);
+	}
+}
 
+static void add_chiptod_new(void)
+{
+	unsigned int i, xscom_addr, xscom_len;
+	const char *compat_str;
+	const void *p, *oldp;
+
+	if (!xscom_node)
+		return;
+
+	switch(cpu_type) {
+	case PVR_TYPE_P7:
+	case PVR_TYPE_P7P:
+		compat_str = "ibm,power7-chiptod";
+		xscom_addr = 0x00040000;
+		xscom_len = 0x34;
+		break;
+	case PVR_TYPE_P8:
+		compat_str = "ibm,power8-chiptod";
+		xscom_addr = 0x00040000;
+		xscom_len = 0x34;
+		break;
+	default:
+		return;
+	}
+
+	/*
+	 * Locate Proc Chip ID structures in SPIRA
+	 */
+	p = spira.ntuples.proc_chip.addr;
+	if (!CHECK_SPPTR(p)) {
+		prerror("CHIPTOD: Cannot locate new style SPIRA TOD info\n");
+		return;
+	}
+
+	for (i = 0; i < spira.ntuples.proc_chip.act_cnt; i++) {
+		const struct sppcrd_chip_info *cinfo;
+		const struct sppcrd_chip_tod *tinfo;
+		struct dt_node *node;
+		u32 ve, chip_id;
+
+		oldp = p;
 		p += spira.ntuples.chip_tod.alloc_len;
+
+		cinfo = HDIF_get_idata(oldp, SPPCRD_IDATA_CHIP_INFO, NULL);
+		if (!CHECK_SPPTR(cinfo)) {
+			prerror("CHIPTOD: Bad ChipID data %d\n", i);
+			continue;
+		}
+
+		ve = cinfo->verif_exist_flags & CHIP_VERIFY_MASK;
+		ve >>= CHIP_VERIFY_SHIFT;
+		if (ve == CHIP_VERIFY_NOT_INSTALLED ||
+		    ve == CHIP_VERIFY_UNUSABLE)
+			continue;
+
+		tinfo = HDIF_get_idata(oldp, SPPCRD_IDATA_CHIP_TOD, NULL);
+		if (!CHECK_SPPTR(tinfo)) {
+			prerror("CHIPTOD: Bad TOD data %d\n", i);
+			continue;
+		}
+
+		if ((tinfo->flags & CHIPTOD_ID_FLAGS_STATUS_MASK) !=
+		    CHIPTOD_ID_FLAGS_STATUS_OK)
+			continue;
+
+		chip_id = cinfo->xscom_id;
+
+		node = dt_new_2addr(xscom_node, "chiptod", chip_id, xscom_addr);
+		dt_add_property_cells(node, "reg", chip_id,
+				      xscom_addr, xscom_len);
+		dt_add_property_strings(node, "compatible", "ibm,power-chiptod",
+				       compat_str);
+
+		if (tinfo->flags & CHIPTOD_ID_FLAGS_PRIMARY)
+			dt_add_property(node, "primary", NULL, 0);
+		if (tinfo->flags & CHIPTOD_ID_FLAGS_SECONDARY)
+			dt_add_property(node, "secondary", NULL, 0);
+
+		/* This is somewhat redundant but consistent with other nodes */
+		dt_add_property_cells(node, "ibm,chip-id", chip_id);
 	}
 }
 
@@ -371,7 +455,8 @@ void parse_hdat(bool is_opal)
 	fsp_parse();
 
 	/* Add ChipTOD's */
-	add_chiptod();
+	add_chiptod_old();
+	add_chiptod_new();
 
 #if 0 /* Tests */
 	{

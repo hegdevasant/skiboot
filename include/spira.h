@@ -611,7 +611,7 @@ struct sppaca_cpu_cache {
  * SPPCIA structure. The SPIRA contain an array of these, one
  * per processor core
  */
-#define PCIA_HDIF_SIG	"SPPCIA"
+#define SPPCIA_HDIF_SIG	"SPPCIA"
 
 /* Idata index 0 : Core unique data */
 #define SPPCIA_IDATA_CORE_UNIQUE	0
@@ -694,6 +694,39 @@ struct sppcia_cpu_thread {
 
 struct sppcia_cpu_attr {
 	u32 attr;
+} __packed;
+
+/*
+ * Processor Chip Related Data. The SPIRA contain an array of these, one
+ * per chip
+ */
+#define SPPCRD_HDIF_SIG	"SPPCRD"
+
+/* Idata index 0 : Chip info */
+#define SPPCRD_IDATA_CHIP_INFO	0
+
+struct sppcrd_chip_info {
+	u32 proc_chip_id;
+	u32 verif_exist_flags;
+#define CHIP_VERIFY_MASK			0xC0000000
+#define CHIP_VERIFY_SHIFT			30
+#define CHIP_VERIFY_USABLE_NO_FAILURES		0
+#define CHIP_VERIFY_USABLE_FAILURES		1
+#define CHIP_VERIFY_NOT_INSTALLED		2
+#define CHIP_VERIFY_UNUSABLE			3
+	u32 nx_state;
+	u32 pore_state;
+	u32 xscom_id;
+} __packed;
+
+/* Idata index 1 : Chip TOD */
+#define SPPCRD_IDATA_CHIP_TOD	1
+
+struct sppcrd_chip_tod {
+	u32 flags;
+	/* CHIPTOD_ID_... values */
+	u32 ctrl_reg_internal;
+	u32 tod_ctrl_reg;
 } __packed;
 
 #endif /* __SPIRA_H */
