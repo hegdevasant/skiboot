@@ -144,6 +144,8 @@ static int64_t dummy_console_write(int64_t term_number, int64_t *length,
 	if (term_number != 0)
 		return OPAL_PARAMETER;
 	write(0, buffer, *length);
+
+	return OPAL_SUCCESS;
 }
 opal_call(OPAL_CONSOLE_WRITE, dummy_console_write);
 
@@ -154,6 +156,7 @@ static int64_t dummy_console_write_buffer_space(int64_t term_number,
 		return OPAL_PARAMETER;
 	if (length)
 		*length = INMEM_CON_LEN;
+
 	return OPAL_SUCCESS;
 }
 opal_call(OPAL_CONSOLE_WRITE_BUFFER_SPACE, dummy_console_write_buffer_space);
