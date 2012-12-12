@@ -316,6 +316,7 @@ void init_boot_cpu(void)
 	/* Setup boot CPU state */
 	boot_cpu = &cpu_stacks[pir].cpu;
 	init_cpu_thread(boot_cpu, cpu_state_active, pir);
+	assert(this_cpu() == boot_cpu);
 }
 
 void init_all_cpus(void)
@@ -415,6 +416,8 @@ void cpu_bringup(void)
 		}
 		smt_medium();
 	}
+
+	printf("CPU: All processors called in...\n");
 
 	op_display(OP_LOG, OP_MOD_CPU, 0x0003);
 }
