@@ -377,7 +377,7 @@ void init_all_cpus(void)
 		for (thread = 1; thread < (p->len / 4); thread++) {
 			printf("CPU:   secondart thread %d found\n", thread);
 			t = &cpu_stacks[pir + thread].cpu;
-			init_cpu_thread(t, cpu_state_present, pir + thread);
+			init_cpu_thread(t, state, pir + thread);
 			t->server_no = ((u32 *)p->prop)[thread];
 			t->is_secondary = true;
 			t->primary = pt;
