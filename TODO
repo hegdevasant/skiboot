@@ -1,22 +1,23 @@
 TODO List
 =========
 
-This list is for all iterms for a P7/P7+ target with P7IOC.
-
 * FSP & PSI link work
-   - Monitor PSI link state
-     -> Handle link errors, etc...
-     -> Handle fallback to backup link, retraining, ...
-     -> Handle reset/reload
-   - Handle mbox errors better
+  - Split code into a PSI transport layer and the FSP mbox layer
+  - PSI :
+     - Monitor PSI link state
+     - Handle link errors, etc...
+     - Handle fallback to backup link, retraining, ...
+  - Mbox/FSP:
+     - Handle reset/reload
+    - Handle mbox errors better
      -> Properly keep messages queued up until comm resumes
      -> Abort/escalate for upper level restart some message
         types such as FSP data fetch
-   - Add timeouts
-   - Handle redundant FSPs
-   - Do we need to use the "Disable Mbox" command to disable
-     messages we don't support ?
-   - Handle handoff to a runtime FW
+    - Add timeouts
+    - Handle redundant FSPs (not needed in GA1)
+    - We need to use the "Disable Mbox" command to disable
+      messages we don't support
+    - Handle handoff to a runtime FW (not needed in GA1)
      -> Mailbox suspend/resume as described by D. Larson
      -> Transfer of buffers & TCEs
 
@@ -30,18 +31,11 @@ This list is for all iterms for a P7/P7+ target with P7IOC.
   - Examine the setting of the low TB bits speed in TFMR
      -> How does it correlates to CPU frequency ?
 
-* IO Chip
-  - Configure GX for P7IOC
-  - Configure P7IOC all the way to PHB
-  - Configure PHB
+* P7IOC IO Chip (almost complete)
   - Implement PCI-E reset/link training
-  - Populate device-tree
-  - Implement basic OPAL PCIe functions
-      -> Config space
-      -> XIVE (interrupts)
-      -> MSIs
-      -> TCEs
-      -> M32/M64 windows
+      -> Improve it, support fallback to Gen1
+      -> Improve OPAL APIs for reset  
+      -> Add missing APIs (M64)
   - Implement EEH support
       -> Basic state analysis
       -> PE freeze handling & reporting & recovering
@@ -55,14 +49,15 @@ This list is for all iterms for a P7/P7+ target with P7IOC.
      -> More ?
      -> Problems with KVM ... guest can have offset TB, need
         to add API between OPAL and KVM when HMI recovery happens
-	so that KVM can re-adjust the guest TB (MC-like)
+	so that KVM can re-adjust the guest TB (MC-like) ? Or just
+	pass-on the HMI to the host so KVM does an exit & re-enters
 
 * Machine Checks
   - Implement a handler
   - Figure out what to do
      -> See existing OPAL data structures
 
-* Debug/trace infrastructure
+* Debug/trace infrastructure (WIP by Rusty)
   - More dynamic configuration
      -> Instead of ifdefs ... per-module knobs ?
      -> Use self-patching for perfs ?
@@ -77,13 +72,31 @@ This list is for all iterms for a P7/P7+ target with P7IOC.
      -> State of Linux driver
      -> Needs OPAL interfaces ?
      -> Interrupts
+ ** NEED HARDWARE **
+
+* P8 support
+  - XSCOM addressing differences (scom ID macros...)
+  - Sort out BUID assignment
+  - Different NX setup from P7+ ?
+  - PHB3
+     -> Base inits
+     -> New OPAL interfaces
+     -> EEH
 
 * FSP integration
   - Format of MasterLID
   - How do we integrate with FSP Team ?
      -> Replace OPAL ? Different LID format, need docs ...
 
-* Live transfer to runtime
+* Host Boot / Services integration
+  - Stradale boot via device-tree (mostly done)
+  - Define host service interface
+  - Implement basic interaction with HS synchronously
+  - Add stack switching & asynchronous API
+     -> Including new Linux interfaces to ask for subsequent
+        timed calls after interrupt
+
+* Live transfer to runtime (not GA1 ?)
   - Save / Restore state
      -> Using device-tree ? Or reconstruct from SPIRA ?
   - Mailbox / TCE transfer (see FSP above)
@@ -100,15 +113,25 @@ This list is for all iterms for a P7/P7+ target with P7IOC.
   - OPAL defined interfaces
   - Need matching kernel code etc...
 
-* NVRAM
+* NVRAM (almost done for P7)
+  - Investigate P8 Tuletta
+  - Investigate P8 Stradale
 
 * VPDs
-  - Figure out what's available in SPIRA
+  - Figure out what's available in HDAT
     -> Expose in device-tree
   - Figure out where to get the rest
     -> LIDs ?
     -> Expose in device-tree
 
+* Notifier for event such as pre-kernel boot
+    -> Use that to set stdout path
+    -> Use that for nvram wait
+
+* Remove direct FSP references, use hooks or notifiers for
+  some FSP actions, or dynamic registration of OPAL calls
+  for things like nvram etc...
+   
 * Other
   - Dynamic reconfiguration ?
   - More P7 chip level RAS ?
@@ -120,5 +143,3 @@ This list is for all iterms for a P7/P7+ target with P7IOC.
     -> Storage attachment ?
     -> etc...
 
-
-    
