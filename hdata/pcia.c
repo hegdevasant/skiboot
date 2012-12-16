@@ -76,7 +76,10 @@ static void add_icp(const void *pcia, u32 tcount, const char *compat)
 	irange[1] = tcount;
 
 	icp = dt_new_addr(dt_root, "interrupt-controller", reg[0]);
-	dt_add_property_strings(icp, "compatible", "IBM,ppc-xicp", compat);
+	if (compat)
+		dt_add_property_strings(icp, "compatible", "IBM,ppc-xicp", compat);
+	else
+		dt_add_property_strings(icp, "compatible", "IBM,ppc-xicp");
 	dt_add_property(icp, "ibm,interrupt-server-ranges", irange, sizeof(irange));
 	dt_add_property(icp, "interrupt-controller", NULL, 0);
 	dt_add_property(icp, "reg", reg, sizeof(reg));
@@ -166,6 +169,7 @@ static struct dt_node *add_core_node(struct dt_node *cpus,
 		break;
 	default:
 		name = "PowerPC,Unknown";
+		icp_compat = NULL;
 	}
 
 	cpu = dt_new_addr(cpus, name, t->proc_int_line);
