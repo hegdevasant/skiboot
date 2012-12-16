@@ -8,6 +8,9 @@
 /* Used to give unique handles. */
 u32 last_phandle = 0;
 
+struct dt_node *dt_root;
+struct dt_node *dt_chosen;
+
 static bool is_rodata(const void *p)
 {
 	return ((char *)p >= __rodata_start && (char *)p < __rodata_end);
@@ -572,7 +575,7 @@ void dt_expand(const void *fdt)
 {
 	printf("FDT: Parsing fdt @%p\n", fdt);
 
-	dt_root = dt_new_root("/");
+	dt_root = dt_new_root("");
 
 	dt_expand_node(dt_root, fdt, 0);
 }
@@ -636,3 +639,13 @@ u64 dt_translate_address(const struct dt_node *node, unsigned int index,
 	/* XXX TODO */
 	return dt_get_address(node, index, out_size);
 }
+
+void dt_init_misc(void)
+{
+	/* Check if there's a /chosen node, if not, add one */
+	dt_chosen = dt_find_by_path(dt_root, "/chosen");
+	if (!dt_chosen)
+		dt_chosen = dt_new(dt_root, "chosen");
+	assert(dt_chosen);
+}
+

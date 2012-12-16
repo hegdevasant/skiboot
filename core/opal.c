@@ -118,9 +118,9 @@ void add_opal_nodes(void)
 	add_opal_firmware_node(opal);
 
 	if (fsp_present())
-		add_fsp_console_nodes(opal);
+		fsp_console_add_nodes(opal);
 	else
-		add_dummy_console_nodes(opal);
+		dummy_console_add_nodes(opal);
 
 	//add_opal_errlog_node();
 }

@@ -692,7 +692,7 @@ void fsp_console_reset(void)
 
 }
 
-void add_fsp_console_nodes(struct dt_node *opal)
+void fsp_console_add_nodes(struct dt_node *opal)
 {
 	unsigned int i;
 	struct dt_node *consoles;
@@ -723,21 +723,24 @@ void add_fsp_console_nodes(struct dt_node *opal)
 	}
 }
 
-void add_stdout_path(void)
+void fsp_console_select_stdout(void)
 {
+	if (!fsp_present())
+		return;
+
 	/* If DVS is connected, use that as a console. Else, check for
 	 * available serial ports, and finally if nothing's connected,
 	 * leave the command line alone and let the kernel pick whatever
 	 * it wants
 	 */
 	if (fsp_serials[0].open)
-		dt_property_string("linux,stdout-path",
-				   "/ibm,opal/consoles/serial@0");
+		dt_add_property_string(dt_chosen, "linux,stdout-path",
+				       "/ibm,opal/consoles/serial@0");
 	else if (fsp_serials[1].open)
-		dt_property_string("linux,stdout-path",
-				   "/ibm,opal/consoles/serial@1");
+		dt_add_property_string(dt_chosen, "linux,stdout-path",
+				       "/ibm,opal/consoles/serial@1");
 	else if (fsp_serials[2].open)
-		dt_property_string("linux,stdout-path",
-				   "/ibm,opal/consoles/serial@2");
+		dt_add_property_string(dt_chosen, "linux,stdout-path",
+				       "/ibm,opal/consoles/serial@2");
 }
 

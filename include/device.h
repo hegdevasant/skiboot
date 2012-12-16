@@ -39,6 +39,9 @@ struct dt_node {
  */
 extern u32 last_phandle;
 
+extern struct dt_node *dt_root;
+extern struct dt_node *dt_chosen;
+
 /* Create a root node: ie. a parentless one. */
 struct dt_node *dt_new_root(const char *name);
 
@@ -178,5 +181,6 @@ unsigned int dt_count_addresses(const struct dt_node *node);
 u64 dt_translate_address(const struct dt_node *node, unsigned int index,
 			 u64 *out_size);
 
+void dt_init_misc(void);
 
 #endif /* __DEVICE_H */

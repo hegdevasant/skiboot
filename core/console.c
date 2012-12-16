@@ -123,9 +123,17 @@ ssize_t write(int fd __unused, const void *buf, size_t count)
 	return count;
 }
 
-ssize_t read(int fd __unused, void *buf __unused, size_t count __unused)
+ssize_t read(int fd __unused, void *buf, size_t req_count)
 {
-	return 0;
+	bool need_unlock = lock_recursive(&con_lock);
+	ssize_t count = 0;
+
+	if (con_driver && con_driver->read)
+		count = con_driver->read(buf, req_count);
+
+	if (need_unlock)
+		unlock(&con_lock);
+	return count;
 }
 
 void set_console(struct con_ops *driver)
@@ -162,17 +170,17 @@ static int64_t dummy_console_write_buffer_space(int64_t term_number,
 opal_call(OPAL_CONSOLE_WRITE_BUFFER_SPACE, dummy_console_write_buffer_space);
 
 static int64_t dummy_console_read(int64_t term_number, int64_t *length,
-				  uint8_t *buffer __unused)
+				  uint8_t *buffer)
 {
 	if (term_number != 0)
 		return OPAL_PARAMETER;
-	*length = 0;
+	*length = read(0, buffer, *length);
 
 	return OPAL_SUCCESS;
 }
 opal_call(OPAL_CONSOLE_READ, dummy_console_read);
 
-void add_dummy_console_nodes(struct dt_node *opal)
+void dummy_console_add_nodes(struct dt_node *opal)
 {
 	struct dt_node *con, *consoles;
 
@@ -187,4 +195,7 @@ void add_dummy_console_nodes(struct dt_node *opal)
 	dt_add_property_cells(con, "#write-buffer-size", INMEM_CON_LEN);
 	dt_add_property_cells(con, "reg", 0);
 	dt_add_property_string(con, "device_type", "serial");
+
+	dt_add_property_string(dt_chosen, "linux,stdout-path",
+			       "/ibm,opal/consoles/serial@0");
 }

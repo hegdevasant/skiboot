@@ -23,7 +23,6 @@ enum ipl_state ipl_state = ipl_initial;
 static uint64_t kernel_entry;
 static uint64_t kernel_top;
 static void *fdt;
-struct dt_node *dt_root;
 
 /* LID numbers. For now we hijack some of pHyp's own until i figure
  * out the whole business with the MasterLID
@@ -137,6 +136,7 @@ void load_and_boot_kernel(bool is_reboot)
 	 */
 	if (!is_reboot)
 		fsp_nvram_wait_open();
+	fsp_console_select_stdout();
 
 	op_display(OP_LOG, OP_MOD_INIT, 0x0007);
 
@@ -188,6 +188,9 @@ void main_cpu_entry(const void *fdt, u32 master_cpu)
 		parse_hdat(false);
 	else
 		dt_expand(fdt);
+
+	/* Put various bits & pieces in device-tree */
+	dt_init_misc();
 
 	/* Initialize the rest of the cpu thread structs */
 	init_all_cpus();

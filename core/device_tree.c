@@ -121,13 +121,6 @@ static void dump_fdt(void)
 #endif
 }
 
-static void add_chosen_node(void)
-{
-	dt_begin_node("chosen");
-	add_stdout_path();
-	dt_end_node();
-}
-
 static void flatten_dt_node(const struct dt_node *root)
 {
 	const struct dt_node *i;
@@ -188,7 +181,6 @@ void *create_dtb(const struct dt_node *root)
 
 		/* Add the remaining bits that haven't been converted yet */
 		add_cec_nodes();
-		add_chosen_node();
 
 		/* Close root node */
 		dt_end_node();
