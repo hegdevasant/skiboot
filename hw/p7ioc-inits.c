@@ -54,6 +54,14 @@ static void p7ioc_init_BI(struct p7ioc *ioc)
                 /* GX config */
                 REGW(0x3c00a0, 0x9C8929BE00880085);
         }
+
+	/*
+	 * Note: While running skiboot on Firebird-L, I have
+	 * to print something or wait for a while. The root
+	 * cause wasn't identified yet.
+	 */
+	time_wait_ms(100);
+
         /* Init_3: Upbound Credit Config */
         REGW(0x3c00c8, 0x0303060403030000);
         /* Init_4: Credit Init Timer */
