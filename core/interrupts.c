@@ -221,10 +221,12 @@ opal_call(OPAL_GET_XIVE, opal_get_xive);
 int64_t opal_handle_interrupt(uint32_t isn, uint64_t *outstanding_event_mask)
 {
 	struct irq_source *is = irq_find_source(isn);
-	int64_t rc = OPAL_PARAMETER;
+	int64_t rc = OPAL_SUCCESS;
 
-	if (!is || !is->ops->interrupt)
+	if (!is || !is->ops->interrupt) {
+		rc = OPAL_PARAMETER;
 		goto bail;
+	}
 
 	is->ops->interrupt(is->data, isn);
 
