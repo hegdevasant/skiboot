@@ -474,30 +474,21 @@ static int64_t opal_pci_reset(uint64_t phb_id, uint8_t reset_scope,
 
 	phb->ops->lock(phb);
 
-	/*
-	 * We currently only handle IODA reset. The IODA tables
-	 * as well as the table caches will be cleared since the
-	 * hypervisor will figure them out again.
-	 */
 	switch(reset_scope) {
 	case OPAL_PHB_COMPLETE:
 		if (!phb->ops->phb_reset) {
 			rc = OPAL_UNSUPPORTED;
 			break;
 		}
-
-		/* We need do nothing for deassert time */
-		if (assert_state != OPAL_ASSERT_RESET)
-			break;
-		if (phb->ops->phb_reset)
-			phb->ops->phb_reset(phb);
-		break;
+		/* Fall through */
 	case OPAL_PCI_FUNDAMENTAL_RESET:
 		desc = (assert_state == OPAL_ASSERT_RESET) ? "off" : "on";
 		if (phb->reset_type < 0 && phb->reset_stage < 0) {
-			if (assert_state == OPAL_ASSERT_RESET)
+			if (assert_state == OPAL_ASSERT_RESET) {
+				if (reset_scope == OPAL_PHB_COMPLETE)
+					phb->ops->phb_reset(phb);
 				rc = phb->ops->slot_power_off(phb);
-			else
+			} else
 				rc = phb->ops->slot_power_on(phb);
 			if (rc < 0) {
 				prerror("PHB#%d: Failure on power-%s for "
