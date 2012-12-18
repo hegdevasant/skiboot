@@ -2081,61 +2081,6 @@ void p7ioc_phb_setup(struct p7ioc *ioc, uint8_t index, bool active)
 	pci_register_phb(&p->phb);
 }
 
-/* Synchronous PEST code used at boot */
-static void p7ioc_phb_sync_perst(struct p7ioc_phb *p)
-{
-	uint64_t reg;
-	unsigned int timeout;
-
-	/* XXX This is only needed if the slot is powered up ...
-	 *
-	 * It seems that the slots are off after we do a hot
-	 * reset sequence, so we probably want to consider
-	 * turning power with PERST asserted or something like
-	 * that in that case...
-	 */
-
-	/* Disable link to avoid training issues */
-	reg = in_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL);
-	PHBDBG(p, "[PERST] old TRAIN_CTL: 0x%016llx\n", reg);
-	reg |= PHB_PCIE_DLP_TCTX_DISABLE;
-	PHBDBG(p, "[PERST] wr  TRAIN_CTL: 0x%016llx\n", reg);
-	out_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL, reg);
-
-	/* Wait for link disabled status */
-	for (timeout = 0; timeout < 12; timeout++) {
-		reg = in_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL);
-		if (reg & PHB_PCIE_DLP_TCRX_DISABLED)
-			break;
-		time_wait_ms(10);
-	}
-
-	PHBDBG(p, "[PERST] new TRAIN_CTL: 0x%016llx\n", reg);
-
-	/* Link disable not set, what do we do ? We seem to hit that
-	 * when doing the boot-time PERST and so far nothing bad
-	 * seem to have come from it but definitely worth investigating
-	 */
-	if (!(reg & PHB_PCIE_DLP_TCRX_DISABLED))
-		PHBERR(p, "Timeout waiting for link disable !\n");
-
-	/* Issue PERST. We keep PERST asserted for 1s like pHyp */
-	reg = in_be64(p->regs + PHB_RESET);
-	reg &= ~0x2000000000000000ul;
-	out_be64(p->regs + PHB_RESET, reg);
-	time_wait_ms(1000);
-	reg |= 0x2000000000000000ul;
-	out_be64(p->regs + PHB_RESET, reg);
-
-	/* Wait 200ms for things to settle */
-	time_wait_ms(200);
-
-	/* Restore link control */
-	reg = in_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL);
-	reg &= ~PHB_PCIE_DLP_TCTX_DISABLE;
-	out_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL, reg);
-}
-
 static bool p7ioc_phb_wait_dlp_reset(struct p7ioc_phb *p)
 {
 	unsigned int i;
@@ -2615,11 +2560,6 @@ int64_t p7ioc_phb_init(struct p7ioc_phb *p)
 
 	/* Mark the PHB as functional which enables all the various sequences */
 	p->state = P7IOC_PHB_STATE_FUNCTIONAL;
-
-	/* This is an addition to the standard sequence, we perform a PERST
-	 * with the links disabled to work around a training issue
-	 */
-	p7ioc_phb_sync_perst(p);
 
 	return OPAL_SUCCESS;
 
