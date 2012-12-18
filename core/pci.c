@@ -178,7 +178,8 @@ static void pci_check_clear_freeze(struct phb *phb)
 	if (rc)
 		return;
 	/* We can't handle anything worse than an ER here */
-	if (sev > OPAL_EEH_SEV_DEV_ER)
+	if (sev > OPAL_EEH_SEV_NO_ERROR &&
+	    sev < OPAL_EEH_SEV_PE_ER)
 		return;
 	if (freeze_state == OPAL_EEH_STOPPED_NOT_FROZEN)
 		return;

@@ -529,7 +529,7 @@ static int64_t p5ioc2_eeh_freeze_status(struct phb *phb, uint64_t pe_number,
 
 	if (severity &&
 	    (cfgrw & (CAP_PCFGRW_MMIO_FROZEN | CAP_PCFGRW_MMIO_FROZEN)))
-		*severity = OPAL_EEH_SEV_DEV_ER;
+		*severity = OPAL_EEH_SEV_PE_ER;
 
 	/* XXX Don't bother populating pci_error_type */
 	/* Should read the bits from PLSSR */
@@ -549,7 +549,7 @@ static int64_t p5ioc2_eeh_next_error(struct phb *phb, uint64_t *first_frozen_pe,
 
 	cfgrw = in_be32(p->regs + CAP_PCFGRW);
 	if (cfgrw & (CAP_PCFGRW_MMIO_FROZEN | CAP_PCFGRW_MMIO_FROZEN))
-		*severity = OPAL_EEH_SEV_DEV_ER;
+		*severity = OPAL_EEH_SEV_PE_ER;
 
 	return OPAL_SUCCESS;
 }

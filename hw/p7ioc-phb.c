@@ -680,7 +680,7 @@ static int64_t p7ioc_eeh_freeze_status(struct phb *phb, uint64_t pe_number,
 	/* Indicate that we have an ER pending */
 	p7ioc_phb_set_err_pending(p, true);
 	if (severity)
-		*severity = OPAL_EEH_SEV_DEV_ER;
+		*severity = OPAL_EEH_SEV_PE_ER;
 
 	/* Read the PESTA & PESTB */
 	p7ioc_phb_ioda_sel(p, IODA_TBL_PESTA, pe_number, false);
@@ -791,7 +791,7 @@ static int64_t p7ioc_eeh_next_error(struct phb *phb, uint64_t *first_frozen_pe,
 			break;
 		case P7IOC_ERR_CLASS_ER:
 			*pci_error_type = OPAL_EEH_PE_ERROR;
-			*severity = OPAL_EEH_SEV_DEV_ER;
+			*severity = OPAL_EEH_SEV_PE_ER;
 			p7ioc_phb_ioda_sel(p, IODA_TBL_PEEV, 0, true);
 			peev0 = in_be64(p->regs + PHB_IODA_DATA0);
 			peev1 = in_be64(p->regs + PHB_IODA_DATA0);

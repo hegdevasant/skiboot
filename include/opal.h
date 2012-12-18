@@ -131,11 +131,11 @@ enum OpalPciStatusToken {
 
 enum OpalPciErrorSeverity {
 	OPAL_EEH_SEV_NO_ERROR	= 0,
-	OPAL_EEH_SEV_INF	= 1,	/* Informational only */
-	OPAL_EEH_SEV_DEV_ER	= 2,	/* Individual PEs in error state */
-	OPAL_EEH_SEV_PHB_FENCED	= 3,	/* PHB needs a reset */
-	OPAL_EEH_SEV_PHB_DEAD	= 4,	/* Entire PHB dead (unrecoverable) */
-	OPAL_EEH_SEV_IOC_DEAD	= 5	/* Entire IOC dead */
+	OPAL_EEH_SEV_IOC_DEAD	= 1,
+	OPAL_EEH_SEV_PHB_DEAD	= 2,
+	OPAL_EEH_SEV_PHB_FENCED	= 3,
+	OPAL_EEH_SEV_PE_ER	= 4,
+	OPAL_EEH_SEV_INF	= 5
 };
 
 enum OpalShpcAction {
