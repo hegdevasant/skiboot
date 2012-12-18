@@ -198,7 +198,11 @@ enum p7ioc_phb_state {
 	P7IOC_PHB_STATE_SPDOWN_SLOT_STATUS,	/* Step 3 waiting for status */
 
 	/* Hot Reset sequence */
+	P7IOC_PHB_STATE_HRESET_DISABLE_LINK,	/* Disable Link training */
+	P7IOC_PHB_STATE_HRESET_ASSERT,		/* Hot reset assert */
 	P7IOC_PHB_STATE_HRESET_DELAY,		/* Hot reset delay */
+	P7IOC_PHB_STATE_HRESET_ENABLE_LINK,	/* Enable Link training */
+	P7IOC_PHB_STATE_HRESET_WAIT_LINK,	/* Wait link traing */
 
 	/* Normal PHB functional state */
 	P7IOC_PHB_STATE_FUNCTIONAL,
