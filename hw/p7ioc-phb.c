@@ -1646,6 +1646,7 @@ static const struct phb_ops p7ioc_phb_ops = {
 	.slot_power_off		= p7ioc_slot_power_off,
 	.slot_power_on		= p7ioc_slot_power_on,
 	.hot_reset		= p7ioc_hot_reset,
+	.phb_reset		= p7ioc_phb_reset,
 	.poll			= p7ioc_poll,
 };
 
@@ -2501,8 +2502,9 @@ void p7ioc_phb_add_nodes(struct p7ioc_phb *p)
 	dt_end_node();
 }
 
-void p7ioc_phb_reset(struct p7ioc_phb *p)
+void p7ioc_phb_reset(struct phb *phb)
 {
+	struct p7ioc_phb *p = phb_to_p7ioc_phb(phb);
 	struct p7ioc *ioc = p->ioc;
 	uint64_t ci_idx, rreg;
 	unsigned int i;

@@ -261,6 +261,9 @@ struct phb_ops {
 	 */
 	int64_t (*hot_reset)(struct phb *phb);
 
+	/* Complete reset and reinit PHB */
+        void (*phb_reset)(struct phb *phb);
+
 	/* poll - Poll and advance asynchronous operations
 	 *
 	 * Returns a positive delay, 0 for success or a

@@ -843,7 +843,7 @@ static void p7ioc_init_PHBs(struct p7ioc *ioc)
 	 * fast reboot for consistency
 	 */
 	for (i = 0; i < P7IOC_NUM_PHBS; i++)
-		p7ioc_phb_reset(&ioc->phbs[i]);
+		p7ioc_phb_reset(&ioc->phbs[i].phb);
 }
 
 static void p7ioc_init_MISC(struct p7ioc *ioc)
@@ -1061,5 +1061,5 @@ void p7ioc_reset(struct io_hub *hub)
 
 	/* First clear all IODA tables and wait a bit */
 	for (i = 0; i < 6; i++)
-		p7ioc_phb_reset(&ioc->phbs[i]);
+		p7ioc_phb_reset(&ioc->phbs[i].phb);
 }
