@@ -678,7 +678,7 @@ static int64_t p7ioc_eeh_freeze_status(struct phb *phb, uint64_t pe_number,
 		return OPAL_SUCCESS;
 
 	/* Indicate that we have an ER pending */
-	p->er_pending = true;
+	p7ioc_phb_set_err_pending(p, true);
 	if (severity)
 		*severity = OPAL_EEH_SEV_DEV_ER;
 
@@ -711,8 +711,14 @@ static int64_t p7ioc_eeh_next_error(struct phb *phb, uint64_t *first_frozen_pe,
 				    uint16_t *pci_error_type, uint16_t *severity)
 {
 	struct p7ioc_phb *p = phb_to_p7ioc_phb(phb);
+	struct p7ioc *ioc = p->ioc;
 	uint64_t peev0, peev1;
 	unsigned int i;
+
+	/* Check if there're pending errors on the IOC. */
+	if (p7ioc_err_pending(ioc) &&
+	    p7ioc_check_LEM(ioc, pci_error_type, severity))
+		return OPAL_SUCCESS;
 
 	*first_frozen_pe = (uint64_t)-1;
 
@@ -736,8 +742,9 @@ static int64_t p7ioc_eeh_next_error(struct phb *phb, uint64_t *first_frozen_pe,
 	p7ioc_phb_ioda_sel(p, IODA_TBL_PEEV, 0, true);
 	peev0 = in_be64(p->regs + PHB_IODA_DATA0);
 	peev1 = in_be64(p->regs + PHB_IODA_DATA0);
-	p->er_pending = (peev0 || peev1);
-	if (p->er_pending) {
+	if (peev0 || peev1)
+		p7ioc_phb_set_err_pending(p, true);
+	if (p7ioc_phb_err_pending(p)) {
 		*pci_error_type = OPAL_EEH_PCI_ANY_ER;
 		*severity = OPAL_EEH_SEV_DEV_ER;
 		/* XXX use cntlz */
@@ -876,7 +883,10 @@ static int64_t p7ioc_eeh_freeze_clear(struct phb *phb, uint64_t pe_number,
 	p7ioc_phb_ioda_sel(p, IODA_TBL_PEEV, 0, true);
 	peev0 = in_be64(p->regs + PHB_IODA_DATA0);
 	peev1 = in_be64(p->regs + PHB_IODA_DATA0);
-	p->er_pending = (peev0 || peev1);
+	if (peev0 || peev1)
+		p7ioc_phb_set_err_pending(p, true);
+	else
+		p7ioc_phb_set_err_pending(p, false);
 
 	return OPAL_SUCCESS;
 }
@@ -1681,9 +1691,7 @@ static void p7ioc_phb_err_interrupt(void *data, uint32_t isn)
 
 	opal_update_pending_evt(OPAL_EVENT_PCI_ERROR, OPAL_EVENT_PCI_ERROR);
 
-	/*
-	 * If the PHB is broken, go away
-	 */
+	/* If the PHB is broken, go away */
 	if (p->state == P7IOC_PHB_STATE_BROKEN)
 		return;
 
@@ -1704,7 +1712,7 @@ static void p7ioc_phb_err_interrupt(void *data, uint32_t isn)
 	peev0 = in_be64(p->regs + PHB_IODA_DATA0);
 	peev1 = in_be64(p->regs + PHB_IODA_DATA0);
 	if (peev0 || peev1)
-		p->er_pending = true;
+		p7ioc_phb_set_err_pending(p, true);
 	unlock(&p->lock);
 }
 

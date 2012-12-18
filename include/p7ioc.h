@@ -204,6 +204,59 @@ enum p7ioc_phb_state {
 	P7IOC_PHB_STATE_FUNCTIONAL,
 };
 
+/*
+ * In order to support error detection and recovery on different
+ * types of IOCs (e.g. P5IOC, P7IOC, P8IOC), the best bet would
+ * be make the implementation to be 2 layers: OPAL layer and IOC
+ * layer. The OPAL layer just handles the general information and
+ * IOC layer should process much more detailed information, which
+ * is sensitive to itself.
+ */
+#define P7IOC_ERR_SRC_NONE	0
+#define P7IOC_ERR_SRC_EI	1
+#define P7IOC_ERR_SRC_RGC	2
+#define P7IOC_ERR_SRC_BI_UP	3
+#define P7IOC_ERR_SRC_BI_DOWN	4
+#define P7IOC_ERR_SRC_CI_P0	5
+#define P7IOC_ERR_SRC_CI_P1	6
+#define P7IOC_ERR_SRC_CI_P2	7
+#define P7IOC_ERR_SRC_CI_P3	8
+#define P7IOC_ERR_SRC_CI_P4	9
+#define P7IOC_ERR_SRC_CI_P5	10
+#define P7IOC_ERR_SRC_CI_P6	11
+#define P7IOC_ERR_SRC_CI_P7	12
+#define P7IOC_ERR_SRC_PHB0	13
+#define P7IOC_ERR_SRC_PHB1	14
+#define P7IOC_ERR_SRC_PHB2	15
+#define P7IOC_ERR_SRC_PHB3	16
+#define P7IOC_ERR_SRC_PHB4	17
+#define P7IOC_ERR_SRC_PHB5	18
+#define P7IOC_ERR_SRC_MISC	19
+#define P7IOC_ERR_SRC_I2C	20
+#define P7IOC_ERR_SRC_LAST	21
+
+#define P7IOC_ERR_CLASS_NONE	0
+#define P7IOC_ERR_CLASS_GXE	1
+#define P7IOC_ERR_CLASS_PLL	2
+#define P7IOC_ERR_CLASS_RGA	3
+#define P7IOC_ERR_CLASS_PHB	4
+#define P7IOC_ERR_CLASS_ER	5
+#define P7IOC_ERR_CLASS_INF	6
+#define P7IOC_ERR_CLASS_MAL	7
+#define P7IOC_ERR_CLASS_LAST	8
+
+/*
+ * P7IOC error descriptor. For errors from PHB and PE, they
+ * will be cached to the corresponding PHBs. However, the
+ * left errors (e.g. EI, CI Port0/1) will be cached to the
+ * IOC directly.
+ */
+struct p7ioc_err {
+	uint32_t err_src;
+	uint32_t err_class;
+	uint32_t err_bit;
+};
+
 struct p7ioc;
 
 struct p7ioc_phb {
@@ -233,7 +286,8 @@ struct p7ioc_phb {
 	uint64_t			iod_cache[128];
 	uint64_t			m32d_cache[128];
 	uint64_t			m64d_cache[128];
-	bool				er_pending;
+	bool				err_pending;
+	struct p7ioc_err		err;
 	struct p7ioc			*ioc;
 	struct phb			phb;
 };
@@ -241,6 +295,16 @@ struct p7ioc_phb {
 static inline struct p7ioc_phb *phb_to_p7ioc_phb(struct phb *phb)
 {
 	return container_of(phb, struct p7ioc_phb, phb);
+}
+
+static inline bool p7ioc_phb_err_pending(struct p7ioc_phb *p)
+{
+	return p->err_pending;
+}
+
+static inline void p7ioc_phb_set_err_pending(struct p7ioc_phb *p, bool val)
+{
+	p->err_pending = val;
 }
 
 /*
@@ -274,6 +338,8 @@ struct p7ioc {
 
 	/* XIVT cache for RGC interrupts */
 	uint64_t			xive_cache[16];
+	bool				err_pending;
+	struct p7ioc_err		err;
 
 	/* PHB array */
 	struct p7ioc_phb		phbs[P7IOC_NUM_PHBS];
@@ -286,6 +352,16 @@ static inline struct p7ioc *iohub_to_p7ioc(struct io_hub *hub)
 	return container_of(hub, struct p7ioc, hub);
 }
 
+static inline bool p7ioc_err_pending(struct p7ioc *ioc)
+{
+	return ioc->err_pending;
+}
+
+static inline void p7ioc_set_err_pending(struct p7ioc *ioc, bool val)
+{
+	ioc->err_pending = val;
+}
+
 extern struct io_hub *p7ioc_create_hub(const struct cechub_io_hub *hub,
 				       uint32_t id);
 extern int64_t p7ioc_inits(struct p7ioc *ioc);
@@ -294,6 +370,8 @@ extern void p7ioc_phb_setup(struct p7ioc *ioc, uint8_t index, bool active);
 extern int64_t p7ioc_phb_init(struct p7ioc_phb *p);
 extern void p7ioc_phb_add_nodes(struct p7ioc_phb *p);
 
+extern bool p7ioc_check_LEM(struct p7ioc *ioc, uint16_t *pci_error_type,
+			    uint16_t *severity);
 extern int64_t p7ioc_phb_get_xive(struct p7ioc_phb *p, uint32_t isn,
 				  uint16_t *server, uint8_t *prio);
 extern int64_t p7ioc_phb_set_xive(struct p7ioc_phb *p, uint32_t isn,
