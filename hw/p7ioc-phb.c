@@ -1367,6 +1367,9 @@ static int64_t p7ioc_ioda_reset(struct phb *phb, bool purge)
 	unsigned int i;
 	uint64_t reg64;
 	uint64_t data64, data64_hi;
+	uint8_t prio;
+	uint16_t server;
+	uint64_t m_server, m_prio;
 
 	/* If the "purge" argument is set, we clear the table cache */
 	if (purge)
@@ -1392,6 +1395,20 @@ static int64_t p7ioc_ioda_reset(struct phb *phb, bool purge)
 	p7ioc_phb_ioda_sel(p, IODA_TBL_LXIVT, 0, true);
 	for (i = 0; i < 8; i++) {
 		data64 = p->lxive_cache[i];
+		server = GETFIELD(IODA_XIVT_SERVER, data64);
+		prio = GETFIELD(IODA_XIVT_PRIORITY, data64);
+
+		/* Now we mangle the server and priority */
+		if (prio == 0xff) {
+			m_server = 0;
+			m_prio = 0xff;
+		} else {
+			m_server = server >> 3;
+			m_prio = (prio >> 3) | ((server & 7) << 5);
+		}
+
+		data64 = SETFIELD(IODA_XIVT_SERVER,   data64, m_server);
+		data64 = SETFIELD(IODA_XIVT_PRIORITY, data64, m_prio);
 		out_be64(p->regs + PHB_IODA_DATA0, data64);
 	}
 
@@ -1404,6 +1421,20 @@ static int64_t p7ioc_ioda_reset(struct phb *phb, bool purge)
 	p7ioc_phb_ioda_sel(p, IODA_TBL_MXIVT, 0, true);
 	for (i = 0; i < 256; i++) {
 		data64 = p->mxive_cache[i];
+		server = GETFIELD(IODA_XIVT_SERVER, data64);
+		prio = GETFIELD(IODA_XIVT_PRIORITY, data64);
+
+		/* Now we mangle the server and priority */
+		if (prio == 0xff) {
+			m_server = 0;
+			m_prio = 0xff;
+		} else {
+			m_server = server >> 3;
+			m_prio = (prio >> 3) | ((server & 7) << 5);
+		}
+
+		data64 = SETFIELD(IODA_XIVT_SERVER,   data64, m_server);
+		data64 = SETFIELD(IODA_XIVT_PRIORITY, data64, m_prio);
 		out_be64(p->regs + PHB_IODA_DATA0, data64);
 	}
 
