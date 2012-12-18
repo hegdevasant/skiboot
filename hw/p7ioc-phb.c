@@ -1586,17 +1586,14 @@ static int64_t p7ioc_lsi_get_xive(void *data, uint32_t isn,
 				  uint16_t *server, uint8_t *prio)
 {
 	struct p7ioc_phb *p = data;
-	uint32_t irq, fbuid = IRQ_FBUID(isn);
+	uint32_t irq = (isn & 0x7);
+	uint32_t fbuid = IRQ_FBUID(isn);
 	uint64_t xive;
 
 	if (fbuid != p->buid_lsi)
 		return OPAL_PARAMETER;
-	irq = isn & 0xf;
-	if (irq > 7)
-		return OPAL_PARAMETER;
 
 	xive = p->lxive_cache[irq];
-
 	*server = GETFIELD(IODA_XIVT_SERVER, xive);
 	*prio = GETFIELD(IODA_XIVT_PRIORITY, xive);
 
@@ -1608,23 +1605,22 @@ static int64_t p7ioc_lsi_set_xive(void *data, uint32_t isn,
 				  uint16_t server, uint8_t prio)
 {
 	struct p7ioc_phb *p = data;
-	uint32_t irq, fbuid = IRQ_FBUID(isn);
+	uint32_t irq = (isn & 0x7);
+	uint32_t fbuid = IRQ_FBUID(isn);
 	uint64_t xive, m_server, m_prio;
 
 	if (fbuid != p->buid_lsi)
 		return OPAL_PARAMETER;
-	irq = isn & 0xf;
-	if (irq > 7)
-		return OPAL_PARAMETER;
 
 	xive = SETFIELD(IODA_XIVT_SERVER, 0ull, server);
 	xive = SETFIELD(IODA_XIVT_PRIORITY, xive, prio);
-	p->lxive_cache[irq] = xive;
 
-	/* We cache the arguments because we have to mangle
+	/*
+	 * We cache the arguments because we have to mangle
 	 * it in order to hijack 3 bits of priority to extend
 	 * the server number
 	 */
+	p->lxive_cache[irq] = xive;
 
 	/* Now we mangle the server and priority */
 	if (prio == 0xff) {
@@ -1732,7 +1728,7 @@ void p7ioc_phb_setup(struct p7ioc *ioc, uint8_t index, bool active)
 
 	/* Register internal interrupt source (LSI 7) */
 	register_irq_source(&p7ioc_phb_err_irq_ops, p,
-			    (p->buid_lsi << 4) + 7, 1);
+			    (p->buid_lsi << 4) + PHB_LSI_PCIE_ERROR, 1);
 
 	/* Initialize IODA table caches */
 	p7ioc_phb_init_ioda_cache(p);
