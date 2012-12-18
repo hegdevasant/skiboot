@@ -273,16 +273,87 @@ static int64_t p7ioc_power_state(struct phb *phb)
 	return OPAL_SHPC_POWER_OFF;
 }
 
-/* p7ioc_sm_slot_power_off - Slot power off state machine
- */
 static int64_t p7ioc_sm_slot_power_off(struct p7ioc_phb *p)
 {
+	uint64_t reg;
+
 	switch(p->state) {
+	case P7IOC_PHB_STATE_FENCED:
+	case P7IOC_PHB_STATE_FUNCTIONAL:
+		/*
+		 * Check the presence and power status. If be not
+		 * be present or power down, we stop here.
+		 */
+		reg = in_be64(p->regs + PHB_PCIE_SLOTCTL2);
+		if (!(reg & PHB_PCIE_SLOTCTL2_PRSTN_STAT)) {
+			PHBDBG(p, "Slot power off: no device\n");
+			return OPAL_CLOSED;
+		}
+		reg = in_be64(p->regs + PHB_PCIE_SLOTCTL2);
+		if (!(reg & PHB_PCIE_SLOTCTL2_PWR_EN_STAT)) {
+			PHBDBG(p, "Slot power off: already off\n");
+			p->state = P7IOC_PHB_STATE_FUNCTIONAL;
+			return OPAL_SUCCESS;
+		}
+
+		/*
+		 * Mask PCIE port interrupt and turn power off
+		 *
+		 * We have to set bit 0 and clear it explicitly on PHB
+		 * hotplug override register when doing power-off on the
+		 * PHB slot. Otherwise, it won't take effect. That's the
+		 * similar thing as we did for power-on.
+		 */
+		out_be64(p->regs + UTL_PCIE_PORT_IRQ_EN, 0x7e00000000000000);
+		reg = in_be64(p->regs + PHB_HOTPLUG_OVERRIDE);
+		reg &= ~(0x8c00000000000000ul);
+		reg |= 0x8400000000000000ul;
+		out_be64(p->regs + PHB_HOTPLUG_OVERRIDE, reg);
+		reg &= ~(0x8c00000000000000ul);
+		reg |= 0x0c00000000000000ul;
+		out_be64(p->regs + PHB_HOTPLUG_OVERRIDE, reg);
+		PHBDBG(p, "Slot power off: powering off...\n");
+
+		p->state = P7IOC_PHB_STATE_SPDOWN_STABILIZE_DELAY;
+		return p7ioc_set_sm_timeout(p, secs_to_tb(2));
+	case P7IOC_PHB_STATE_SPDOWN_STABILIZE_DELAY:
+		/*
+		 * The link should be stablizied after 2 seconds.
+		 * We still need poll registers to make sure the
+		 * power is really down every 1ms until limited
+		 * 1000 times.
+		 */
+		p->retries = 1000;
+		p->state = P7IOC_PHB_STATE_SPDOWN_SLOT_STATUS;
+		PHBDBG(p, "Slot power off: waiting for power off\n");
+	case P7IOC_PHB_STATE_SPDOWN_SLOT_STATUS:
+		reg = in_be64(p->regs + PHB_PCIE_SLOTCTL2);
+		if (!(reg & PHB_PCIE_SLOTCTL2_PWR_EN_STAT)) {
+			/*
+			 * We completed the task. Clear link errors
+			 * and restore PCIE port interrupts.
+			 */
+			out_be64(p->regs + UTL_PCIE_PORT_STATUS,
+				0x00E0000000000000ul);
+			out_be64(p->regs + UTL_PCIE_PORT_IRQ_EN,
+				0xFE65000000000000ul);
+
+			PHBDBG(p, "Slot power off: power off completely\n");
+			p->state = P7IOC_PHB_STATE_FUNCTIONAL;
+			return OPAL_SUCCESS;
+		}
+
+		if (p->retries-- == 0) {
+			PHBERR(p, "Timeout powering off\n");
+			goto error;
+		}
+		return p7ioc_set_sm_timeout(p, msecs_to_tb(1));
 	default:
 		break;
 	}
 
-	/* Unknown state, hardware error ? */
+error:
+	p->state = P7IOC_PHB_STATE_FUNCTIONAL;
 	return OPAL_HARDWARE;
 }
 

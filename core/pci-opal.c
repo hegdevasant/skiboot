@@ -467,6 +467,10 @@ static int64_t opal_pci_reset(uint64_t phb_id, uint8_t reset_scope,
 
 	if (!phb)
 		return OPAL_PARAMETER;
+	if (assert_state != OPAL_ASSERT_RESET &&
+	    assert_state != OPAL_DEASSERT_RESET)
+		return OPAL_PARAMETER;
+
 	phb->ops->lock(phb);
 
 	/*
@@ -487,6 +491,56 @@ static int64_t opal_pci_reset(uint64_t phb_id, uint8_t reset_scope,
 		if (phb->ops->phb_reset)
 			phb->ops->phb_reset(phb);
 		break;
+	case OPAL_PCI_FUNDAMENTAL_RESET:
+		if (assert_state == OPAL_ASSERT_RESET) {
+			rc = phb->ops->slot_power_off(phb);
+			if (rc < 0) {
+				prerror("PHB#%d: Failure on power-off for "
+					"fundamental reset, rc=%lld\n",
+					phb->opal_id, rc);
+				break;
+			}
+
+			/* Continous state machine (SM) */
+			while (rc > 0) {
+				time_wait(rc);
+				rc = phb->ops->poll(phb);
+			}
+
+			if (rc < 0) {
+				prerror("PHB#%d: Failure on power-off for "
+					"fundamental reset, rc=%lld\n",
+					phb->opal_id, rc);
+				break;
+			}
+		} else {
+			/*
+			 * We needn't check if the slot is present since the
+			 * previous power off should have checked that.
+			 */
+			rc = phb->ops->slot_power_on(phb);
+			if (rc < 0) {
+				prerror("PHB#%d: Failure on power-on for "
+					"fundamental reset, rc=%lld\n",
+					phb->opal_id, rc);
+				break;
+			}
+
+			/* Continuous state machine (SM) */
+			while (rc > 0) {
+				time_wait(rc);
+				rc = phb->ops->poll(phb);
+			}
+
+			if (rc < 0) {
+				prerror("PHB#%d: Failure on power-on for "
+					"fundamental reset, rc=%lld\n",
+					phb->opal_id, rc);
+				break;
+			}
+		}
+
+                break;
 	case OPAL_PCI_IODA_TABLE_RESET:
 		if (assert_state != OPAL_ASSERT_RESET)
 			break;
