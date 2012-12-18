@@ -188,21 +188,24 @@ enum p7ioc_phb_state {
 	P7IOC_PHB_STATE_FENCED,
 
 	/* Slot Power up state machine */
-	P7IOC_PHB_STATE_SPUP_STABILIZE_DELAY,	/* Step 3 Delay 2s */
-	P7IOC_PHB_STATE_SPUP_SLOT_STATUS,	/* Step 4 waiting for status */
-	P7IOC_PHB_STATE_SPUP_WAIT_LINK,		/* Step 9 Wait link training */
-	P7IOC_PHB_STATE_SPUP_HOT_RESET_DELAY,	/* Step 12 Activate Hot Reset */
+	P7IOC_PHB_STATE_SPUP_STABILIZE_DELAY,		/* Step 3 Delay 2s		*/
+	P7IOC_PHB_STATE_SPUP_SLOT_STATUS,		/* Step 4 waiting for status	*/
+	P7IOC_PHB_STATE_SPUP_HRESET_DISABLE_LINK,	/*	  Disable link training	*/
+	P7IOC_PHB_STATE_SPUP_HRESET_ASSERT,		/*	  Hot reset assert	*/
+	P7IOC_PHB_STATE_SPUP_HRESET_DELAY,		/*	  Hot reset delay	*/
+	P7IOC_PHB_STATE_SPUP_HRESET_ENABLE_LINK,	/*	  Enable link training	*/
+	P7IOC_PHB_STATE_SPUP_HRESET_WAIT_LINK,		/* Step 9 Wait link training	*/
 
 	/* Slot Power down state machine */
-	P7IOC_PHB_STATE_SPDOWN_STABILIZE_DELAY,	/* Step 2 Delay 2s */
-	P7IOC_PHB_STATE_SPDOWN_SLOT_STATUS,	/* Step 3 waiting for status */
+	P7IOC_PHB_STATE_SPDOWN_STABILIZE_DELAY,	/* Step 2 Delay 2s		*/
+	P7IOC_PHB_STATE_SPDOWN_SLOT_STATUS,	/* Step 3 waiting for status	*/
 
 	/* Hot Reset sequence */
-	P7IOC_PHB_STATE_HRESET_DISABLE_LINK,	/* Disable Link training */
-	P7IOC_PHB_STATE_HRESET_ASSERT,		/* Hot reset assert */
-	P7IOC_PHB_STATE_HRESET_DELAY,		/* Hot reset delay */
-	P7IOC_PHB_STATE_HRESET_ENABLE_LINK,	/* Enable Link training */
-	P7IOC_PHB_STATE_HRESET_WAIT_LINK,	/* Wait link traing */
+	P7IOC_PHB_STATE_HRESET_DISABLE_LINK,	/* Disable Link training	*/
+	P7IOC_PHB_STATE_HRESET_ASSERT,		/* Hot reset assert		*/
+	P7IOC_PHB_STATE_HRESET_DELAY,		/* Hot reset delay		*/
+	P7IOC_PHB_STATE_HRESET_ENABLE_LINK,	/* Enable Link training		*/
+	P7IOC_PHB_STATE_HRESET_WAIT_LINK,	/* Wait link traing		*/
 
 	/* Normal PHB functional state */
 	P7IOC_PHB_STATE_FUNCTIONAL,

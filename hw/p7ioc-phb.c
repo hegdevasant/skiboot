@@ -410,80 +410,90 @@ static int64_t p7ioc_sm_slot_power_on(struct p7ioc_phb *p)
 		}
 		/* Power is already on */
 	power_ok:
-		/* Ensure hot reset is deasserted */
-		p7ioc_pcicfg_read16(&p->phb, 0, PCI_CFG_BRCTL, &brctl);
-		brctl &= ~PCI_CFG_BRCTL_SECONDARY_RESET;
-		p7ioc_pcicfg_write16(&p->phb, 0, PCI_CFG_BRCTL, brctl);
-		p->retries = 40;
-		p->state = P7IOC_PHB_STATE_SPUP_WAIT_LINK;
-		PHBDBG(p, "Slot power on: waiting for link\n");
-		/* Fall through */
-	case P7IOC_PHB_STATE_SPUP_WAIT_LINK:
-		reg = in_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL);
-		/* Link is up ? Complete */
-
-		/* XXX TODO: Check link width problem and if present
-		 * go straight to the host reset code path.
-		 */
-		if (reg & PHB_PCIE_DLP_TC_DL_LINKACT) {
-			/* Restore UTL interrupts */
-			out_be64(p->regs + UTL_PCIE_PORT_IRQ_EN,
-				 0xfe65000000000000);
-			p->state = P7IOC_PHB_STATE_FUNCTIONAL;
-			PHBDBG(p, "Slot power on: up !\n");
-			return OPAL_SUCCESS;
-		}
-		/* Retries */
-		p->retries--;
-		if (p->retries == 0) {
-			/* XXX Improve logging */
-			PHBERR(p,"Slot power on: Timeout waiting for link\n");
-			goto error;
-		}
-		/* Check time elapsed */
-		if ((p->retries % 20) != 0)
-			return p7ioc_set_sm_timeout(p, msecs_to_tb(10));
-
-		/* >200ms, time to try a hot reset after clearing the
-		 * link status bit (doco says to do so)
-		 */
-		out_be64(p->regs + UTL_PCIE_PORT_STATUS, 0x0080000000000000);
-
-		/* Mask receiver error status in AER */
+		/* Mask AER receiver error */
 		p7ioc_pcicfg_read32(&p->phb, 0,
-				    p->aercap + PCIECAP_AER_CE_MASK, &reg32);
+			p->aercap + PCIECAP_AER_CE_MASK, &reg32);
 		reg32 |= PCIECAP_AER_CE_RECVR_ERR;
 		p7ioc_pcicfg_write32(&p->phb, 0,
-				     p->aercap + PCIECAP_AER_CE_MASK, reg32);
+			p->aercap + PCIECAP_AER_CE_MASK, reg32);
 
-		/* Turn on host reset */
-		p7ioc_pcicfg_read16(&p->phb, 0, PCI_CFG_BRCTL, &brctl);
-		brctl |= PCI_CFG_BRCTL_SECONDARY_RESET;
-		p7ioc_pcicfg_write16(&p->phb, 0, PCI_CFG_BRCTL, brctl);
-		p->state = P7IOC_PHB_STATE_SPUP_HOT_RESET_DELAY;
-		PHBDBG(p, "Slot power on: soft reset...\n");
-		return p7ioc_set_sm_timeout(p, secs_to_tb(1));
-	case P7IOC_PHB_STATE_SPUP_HOT_RESET_DELAY:
+		/* Disable link to avoid training issues */
+		reg = in_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL);
+		reg |= PHB_PCIE_DLP_TCTX_DISABLE;
+		out_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL, reg);
+		PHBDBG(p, "Slot power on: disable link training\n");
+
+                p->state = P7IOC_PHB_STATE_SPUP_HRESET_DISABLE_LINK;
+		p->retries = 12;
+		return p7ioc_set_sm_timeout(p, msecs_to_tb(10));
+	case P7IOC_PHB_STATE_SPUP_HRESET_DISABLE_LINK:
+		reg = in_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL);
+		if (reg & PHB_PCIE_DLP_TCRX_DISABLED) {
+			/* Turn on host reset */
+			p7ioc_pcicfg_read16(&p->phb, 0, PCI_CFG_BRCTL, &brctl);
+			brctl |= PCI_CFG_BRCTL_SECONDARY_RESET;
+			p7ioc_pcicfg_write16(&p->phb, 0, PCI_CFG_BRCTL, brctl);
+			PHBDBG(p, "Slot power on: assert hot reset\n");
+
+			p->state = P7IOC_PHB_STATE_SPUP_HRESET_DELAY;
+			return p7ioc_set_sm_timeout(p, secs_to_tb(1));
+		}
+
+		p->retries--;
+		if (p->retries == 0) {
+			PHBDBG(p, "Slot power on: timeout to disable link training\n");
+			return OPAL_HARDWARE;
+		}
+
+                return p7ioc_set_sm_timeout(p, msecs_to_tb(10));
+	case P7IOC_PHB_STATE_SPUP_HRESET_DELAY:
 		/* Turn off host reset */
 		p7ioc_pcicfg_read16(&p->phb, 0, PCI_CFG_BRCTL, &brctl);
 		brctl &= ~PCI_CFG_BRCTL_SECONDARY_RESET;
 		p7ioc_pcicfg_write16(&p->phb, 0, PCI_CFG_BRCTL, brctl);
-		/* Clear spurrious errors */
-		out_be64(p->regs + UTL_PCIE_PORT_STATUS, 0x00e0000000000000);
-		p7ioc_pcicfg_write32(&p->phb, 0,
-				     p->aercap + PCIECAP_AER_CE_STATUS,
-				     PCIECAP_AER_CE_RECVR_ERR);
-		/* Unmask receiver error status in AER */
-		p7ioc_pcicfg_read32(&p->phb, 0,
-				    p->aercap + PCIECAP_AER_CE_MASK, &reg32);
-		reg32 &= ~PCIECAP_AER_CE_RECVR_ERR;
-		p7ioc_pcicfg_write32(&p->phb, 0,
-				     p->aercap + PCIECAP_AER_CE_MASK, reg32);
-		/* Go back to waiting for link */
-		p->state = P7IOC_PHB_STATE_SPUP_WAIT_LINK;
-		PHBDBG(p, "Slot power on: waiting for link (2)\n");
-		return p7ioc_set_sm_timeout(p, msecs_to_tb(10));
+		PHBDBG(p, "Slot power on: deassert hot reset\n");
 
+                p->state = P7IOC_PHB_STATE_SPUP_HRESET_ENABLE_LINK;
+                return p7ioc_set_sm_timeout(p, msecs_to_tb(200));
+	case P7IOC_PHB_STATE_SPUP_HRESET_ENABLE_LINK:
+		/* Restore link control */
+		reg = in_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL);
+		reg &= ~PHB_PCIE_DLP_TCTX_DISABLE;
+		out_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL, reg);
+		PHBDBG(p, "Slot power on: enable link training\n");
+
+		p->state = P7IOC_PHB_STATE_SPUP_HRESET_WAIT_LINK;
+		p->retries = 20;
+		return p7ioc_set_sm_timeout(p, msecs_to_tb(10));
+	case P7IOC_PHB_STATE_SPUP_HRESET_WAIT_LINK:
+		reg = in_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL);
+		if (reg & PHB_PCIE_DLP_TC_DL_LINKACT) {
+			/* Restore UTL interrupts */
+			out_be64(p->regs + UTL_PCIE_PORT_STATUS, 0x00E0000000000000);
+			out_be64(p->regs + UTL_PCIE_PORT_IRQ_EN, 0xFE65000000000000);
+
+			/* Clear AER receiver error status */
+			p7ioc_pcicfg_write32(&p->phb, 0,
+				p->aercap + PCIECAP_AER_CE_STATUS,
+				PCIECAP_AER_CE_RECVR_ERR);
+			/* Unmask receiver error status in AER */
+			p7ioc_pcicfg_read32(&p->phb, 0,
+				p->aercap + PCIECAP_AER_CE_MASK, &reg32);
+			reg32 &= ~PCIECAP_AER_CE_RECVR_ERR;
+			p7ioc_pcicfg_write32(&p->phb, 0,
+				p->aercap + PCIECAP_AER_CE_MASK, reg32);
+
+			p->state = P7IOC_PHB_STATE_FUNCTIONAL;
+			PHBDBG(p, "Slot power on: link up !\n");
+			return OPAL_SUCCESS;
+		}
+
+		if (p->retries-- == 0) {
+			PHBERR(p,"Slot power on: Timeout waiting for link\n");
+			goto error;
+		}
+
+		return p7ioc_set_sm_timeout(p, msecs_to_tb(10));
 	case P7IOC_PHB_STATE_SPUP_STABILIZE_DELAY:
 		/* Come here after the 2s delay after power up */
 		p->retries = 1000;
@@ -675,8 +685,11 @@ static int64_t p7ioc_poll(struct phb *phb)
 	switch(p->state) {
 	case P7IOC_PHB_STATE_SPUP_STABILIZE_DELAY:
 	case P7IOC_PHB_STATE_SPUP_SLOT_STATUS:
-	case P7IOC_PHB_STATE_SPUP_WAIT_LINK:
-	case P7IOC_PHB_STATE_SPUP_HOT_RESET_DELAY:
+	case P7IOC_PHB_STATE_SPUP_HRESET_DISABLE_LINK:
+	case P7IOC_PHB_STATE_SPUP_HRESET_ASSERT:
+	case P7IOC_PHB_STATE_SPUP_HRESET_DELAY:
+	case P7IOC_PHB_STATE_SPUP_HRESET_ENABLE_LINK:
+	case P7IOC_PHB_STATE_SPUP_HRESET_WAIT_LINK:
 		return p7ioc_sm_slot_power_on(p);
 	case P7IOC_PHB_STATE_SPDOWN_STABILIZE_DELAY:
 	case P7IOC_PHB_STATE_SPDOWN_SLOT_STATUS:
