@@ -541,6 +541,32 @@ static int64_t opal_pci_reset(uint64_t phb_id, uint8_t reset_scope,
 		}
 
                 break;
+	case OPAL_PCI_HOT_RESET:
+		/* We need do nothing on deassert time */
+		if (assert_state != OPAL_ASSERT_RESET)
+			break;
+
+		rc = phb->ops->hot_reset(phb);
+		if (rc < 0) {
+			prerror("PHB#%d: Failure on hot reset, rc=%lld\n",
+				phb->opal_id, rc);
+			break;
+		}
+
+		/* Continuous state machine (SM) */
+		while (rc > 0) {
+			time_wait(rc);
+			rc = phb->ops->poll(phb);
+		}
+
+		if (rc < 0) {
+			prerror("PHB#%d: Failure on hot reset, rc=%lld\n",
+				phb->opal_id, rc);
+			break;
+		}
+
+                break;
+
 	case OPAL_PCI_IODA_TABLE_RESET:
 		if (assert_state != OPAL_ASSERT_RESET)
 			break;

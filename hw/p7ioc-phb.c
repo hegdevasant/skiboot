@@ -527,7 +527,61 @@ static int64_t p7ioc_slot_power_on(struct phb *phb)
 
 static int64_t p7ioc_sm_hot_reset(struct p7ioc_phb *p)
 {
+	uint64_t reg;
+	uint32_t cfg32;
+	uint16_t brctl;
+
 	switch(p->state) {
+	case P7IOC_PHB_STATE_FUNCTIONAL:
+		/* If the slot isn't present, we needn't do it */
+		reg = in_be64(p->regs + PHB_PCIE_SLOTCTL2);
+		if (!(reg & PHB_PCIE_SLOTCTL2_PRSTN_STAT)) {
+			PHBDBG(p, "Slot hot reset: no device\n");
+			return OPAL_CLOSED;
+		}
+
+		/* Mask PCIE port interrupts and AER receiver error */
+		out_be64(p->regs + UTL_PCIE_PORT_IRQ_EN, 0x7E00000000000000);
+		p7ioc_pcicfg_read32(&p->phb, 0,
+			p->aercap + PCIECAP_AER_CE_MASK, &cfg32);
+		cfg32 |= PCIECAP_AER_CE_RECVR_ERR;
+		p7ioc_pcicfg_write32(&p->phb, 0,
+			p->aercap + PCIECAP_AER_CE_MASK, cfg32);
+
+		/* Turn on host reset */
+		p7ioc_pcicfg_read16(&p->phb, 0, PCI_CFG_BRCTL, &brctl);
+		brctl |= PCI_CFG_BRCTL_SECONDARY_RESET;
+		p7ioc_pcicfg_write16(&p->phb, 0, PCI_CFG_BRCTL, brctl);
+		PHBDBG(p, "Slot hot reset: assert reset\n");
+
+		p->state = P7IOC_PHB_STATE_HRESET_DELAY;
+		return p7ioc_set_sm_timeout(p, secs_to_tb(1));
+	case P7IOC_PHB_STATE_HRESET_DELAY:
+		/* Turn off host reset */
+		p7ioc_pcicfg_read16(&p->phb, 0, PCI_CFG_BRCTL, &brctl);
+		brctl &= ~PCI_CFG_BRCTL_SECONDARY_RESET;
+		p7ioc_pcicfg_write16(&p->phb, 0, PCI_CFG_BRCTL, brctl);
+
+		/*
+		 * Clear spurrious errors and enable PCIE port
+		 * interrupts
+		 */
+		out_be64(p->regs + UTL_PCIE_PORT_STATUS, 0x00E0000000000000);
+		out_be64(p->regs + UTL_PCIE_PORT_IRQ_EN, 0x7E00000000000000);
+
+		/* Clear AER receiver error status */
+		p7ioc_pcicfg_write32(&p->phb, 0,
+			p->aercap + PCIECAP_AER_CE_STATUS,
+			PCIECAP_AER_CE_RECVR_ERR);
+		/* Unmask receiver error status in AER */
+		p7ioc_pcicfg_read32(&p->phb, 0,
+			p->aercap + PCIECAP_AER_CE_MASK, &cfg32);
+		cfg32 &= ~PCIECAP_AER_CE_RECVR_ERR;
+		p7ioc_pcicfg_write32(&p->phb, 0,
+			p->aercap + PCIECAP_AER_CE_MASK, cfg32);
+
+		p->state = P7IOC_PHB_STATE_FUNCTIONAL;
+		return OPAL_SUCCESS;
 	default:
 		break;
 	}
