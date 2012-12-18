@@ -647,12 +647,12 @@ static int64_t p7ioc_eeh_freeze_status(struct phb *phb, uint64_t pe_number,
 
 	/* Defaults: not frozen */
 	*freeze_state = OPAL_EEH_STOPPED_NOT_FROZEN;
-	*pci_error_type = OPAL_EEH_PHB_NO_ERROR;
+	*pci_error_type = OPAL_EEH_NO_ERROR;
 
 	/* Check dead */
 	if (p->state == P7IOC_PHB_STATE_BROKEN) {
 		*freeze_state = OPAL_EEH_STOPPED_MMIO_DMA_FREEZE;
-		*pci_error_type = OPAL_EEH_PHB_FATAL;
+		*pci_error_type = OPAL_EEH_PHB_ERROR;
 		if (severity)
 			*severity = OPAL_EEH_SEV_PHB_DEAD;
 		goto bail;
@@ -662,7 +662,7 @@ static int64_t p7ioc_eeh_freeze_status(struct phb *phb, uint64_t pe_number,
 	if (p7ioc_phb_fenced(p)) {
 		/* Should be OPAL_EEH_STOPPED_TEMP_UNAVAIL ? */
 		*freeze_state = OPAL_EEH_STOPPED_MMIO_DMA_FREEZE;
-		*pci_error_type = OPAL_EEH_PHB_FATAL;
+		*pci_error_type = OPAL_EEH_PHB_ERROR;
 		if (severity)
 			*severity = OPAL_EEH_SEV_PHB_FENCED;
 		p->state = P7IOC_PHB_STATE_FENCED;
@@ -696,9 +696,9 @@ static int64_t p7ioc_eeh_freeze_status(struct phb *phb, uint64_t pe_number,
 
 	/* XXX Handle more causes */
 	if (pesta & IODA_PESTA_MMIO_CAUSE)
-		*pci_error_type = OPAL_EEH_PCI_MMIO_ERROR;
+		*pci_error_type = OPAL_EEH_PE_MMIO_ERROR;
 	else
-		*pci_error_type = OPAL_EEH_PCI_DMA_ERROR;
+		*pci_error_type = OPAL_EEH_PE_DMA_ERROR;
 
  bail:
 	if (phb_status)
@@ -721,13 +721,13 @@ static int64_t p7ioc_eeh_next_error(struct phb *phb, uint64_t *first_frozen_pe,
 		return OPAL_SUCCESS;
 
 	/* Clear result */
-	*pci_error_type	= OPAL_EEH_PHB_NO_ERROR;
+	*pci_error_type	= OPAL_EEH_NO_ERROR;
         *severity	= OPAL_EEH_SEV_NO_ERROR;
 	*first_frozen_pe = (uint64_t)-1;
 
 	/* Check dead */
 	if (p->state == P7IOC_PHB_STATE_BROKEN) {
-		*pci_error_type = OPAL_EEH_PHB_FATAL;
+		*pci_error_type = OPAL_EEH_PHB_ERROR;
 		*severity = OPAL_EEH_SEV_PHB_DEAD;
 		return OPAL_SUCCESS;
 	}
@@ -735,7 +735,7 @@ static int64_t p7ioc_eeh_next_error(struct phb *phb, uint64_t *first_frozen_pe,
 	/* Check fence */
 	if (p7ioc_phb_fenced(p)) {
 		/* Should be OPAL_EEH_STOPPED_TEMP_UNAVAIL ? */
-		*pci_error_type = OPAL_EEH_PHB_FATAL;
+		*pci_error_type = OPAL_EEH_PHB_ERROR;
 		*severity = OPAL_EEH_SEV_PHB_FENCED;
 		p->state = P7IOC_PHB_STATE_FENCED;
 		return OPAL_SUCCESS;
@@ -781,16 +781,16 @@ static int64_t p7ioc_eeh_next_error(struct phb *phb, uint64_t *first_frozen_pe,
 		 */
 		switch (p->err.err_class) {
 		case P7IOC_ERR_CLASS_PHB:
-			*pci_error_type = OPAL_EEH_PHB_FATAL;
+			*pci_error_type = OPAL_EEH_PHB_ERROR;
 			*severity = OPAL_EEH_SEV_PHB_FENCED;
 			break;
 		case P7IOC_ERR_CLASS_MAL:
 		case P7IOC_ERR_CLASS_INF:
-			*pci_error_type = OPAL_EEH_PHB_FATAL;
+			*pci_error_type = OPAL_EEH_PHB_ERROR;
 			*severity = OPAL_EEH_SEV_INF;
 			break;
 		case P7IOC_ERR_CLASS_ER:
-			*pci_error_type = OPAL_EEH_PCI_ANY_ER;
+			*pci_error_type = OPAL_EEH_PE_ERROR;
 			*severity = OPAL_EEH_SEV_DEV_ER;
 			p7ioc_phb_ioda_sel(p, IODA_TBL_PEEV, 0, true);
 			peev0 = in_be64(p->regs + PHB_IODA_DATA0);
@@ -813,7 +813,7 @@ static int64_t p7ioc_eeh_next_error(struct phb *phb, uint64_t *first_frozen_pe,
 
 			/* No frozen PE? */
 			if (*first_frozen_pe == (uint64_t)-1) {
-				*pci_error_type = OPAL_EEH_PHB_NO_ERROR;
+				*pci_error_type = OPAL_EEH_NO_ERROR;
 				*severity = OPAL_EEH_SEV_NO_ERROR;
 				p->err.err_src   = P7IOC_ERR_SRC_NONE;
 				p->err.err_class = P7IOC_ERR_CLASS_NONE;
@@ -823,7 +823,7 @@ static int64_t p7ioc_eeh_next_error(struct phb *phb, uint64_t *first_frozen_pe,
 
 			break;
 		default:
-			*pci_error_type = OPAL_EEH_PHB_NO_ERROR;
+			*pci_error_type = OPAL_EEH_NO_ERROR;
 			*severity = OPAL_EEH_SEV_NO_ERROR;
 			p->err.err_src   = P7IOC_ERR_SRC_NONE;
 			p->err.err_class = P7IOC_ERR_CLASS_NONE;
