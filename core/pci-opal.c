@@ -463,6 +463,7 @@ static int64_t opal_pci_reset(uint64_t phb_id, uint8_t reset_scope,
 			      uint8_t assert_state)
 {
 	struct phb *phb = pci_get_phb(phb_id);
+	const char *desc = NULL;
 	int64_t rc = OPAL_SUCCESS;
 
 	if (!phb)
@@ -492,77 +493,81 @@ static int64_t opal_pci_reset(uint64_t phb_id, uint8_t reset_scope,
 			phb->ops->phb_reset(phb);
 		break;
 	case OPAL_PCI_FUNDAMENTAL_RESET:
-		if (assert_state == OPAL_ASSERT_RESET) {
-			rc = phb->ops->slot_power_off(phb);
+		desc = (assert_state == OPAL_ASSERT_RESET) ? "off" : "on";
+		if (phb->reset_type < 0 && phb->reset_stage < 0) {
+			if (assert_state == OPAL_ASSERT_RESET)
+				rc = phb->ops->slot_power_off(phb);
+			else
+				rc = phb->ops->slot_power_on(phb);
 			if (rc < 0) {
-				prerror("PHB#%d: Failure on power-off for "
+				prerror("PHB#%d: Failure on power-%s for "
 					"fundamental reset, rc=%lld\n",
-					phb->opal_id, rc);
+					phb->opal_id, desc, rc);
 				break;
 			}
 
-			/* Continous state machine (SM) */
-			while (rc > 0) {
-				time_wait(rc);
-				rc = phb->ops->poll(phb);
-			}
-
-			if (rc < 0) {
-				prerror("PHB#%d: Failure on power-off for "
-					"fundamental reset, rc=%lld\n",
-					phb->opal_id, rc);
-				break;
-			}
+			phb->reset_type = OPAL_PCI_FUNDAMENTAL_RESET;
+			phb->reset_stage = assert_state;
 		} else {
-			/*
-			 * We needn't check if the slot is present since the
-			 * previous power off should have checked that.
-			 */
-			rc = phb->ops->slot_power_on(phb);
-			if (rc < 0) {
-				prerror("PHB#%d: Failure on power-on for "
-					"fundamental reset, rc=%lld\n",
-					phb->opal_id, rc);
+			if (phb->reset_type != OPAL_PCI_FUNDAMENTAL_RESET ||
+			    phb->reset_stage != assert_state) {
+				prerror("PHB#%d: Failure on power-%s for "
+					"fundamental reset (%d, %d)\n",
+					phb->opal_id, desc, phb->reset_type,
+					phb->reset_stage);
+				rc = OPAL_WRONG_STATE;
+				phb->reset_type = -1;
+				phb->reset_stage = -1;
 				break;
 			}
 
-			/* Continuous state machine (SM) */
-			while (rc > 0) {
-				time_wait(rc);
-				rc = phb->ops->poll(phb);
-			}
-
-			if (rc < 0) {
-				prerror("PHB#%d: Failure on power-on for "
+			rc = phb->ops->poll(phb);
+			if (rc < 0)
+				prerror("PHB#%d: Failure on power-%s for "
 					"fundamental reset, rc=%lld\n",
-					phb->opal_id, rc);
-				break;
+					phb->opal_id, desc, rc);
+			if (rc <= 0) {
+				phb->reset_type = -1;
+				phb->reset_stage = -1;
 			}
 		}
 
-                break;
+		break;
 	case OPAL_PCI_HOT_RESET:
 		/* We need do nothing on deassert time */
 		if (assert_state != OPAL_ASSERT_RESET)
 			break;
 
-		rc = phb->ops->hot_reset(phb);
-		if (rc < 0) {
-			prerror("PHB#%d: Failure on hot reset, rc=%lld\n",
-				phb->opal_id, rc);
-			break;
-		}
+		if (phb->reset_type < 0 && phb->reset_stage < 0) {
+			rc = phb->ops->hot_reset(phb);
+			if (rc < 0) {
+				prerror("PHB#%d: Failure on hot reset, rc=%lld\n",
+					phb->opal_id, rc);
+				break;
+			}
 
-		/* Continuous state machine (SM) */
-		while (rc > 0) {
-			time_wait(rc);
+			phb->reset_type = OPAL_PCI_HOT_RESET;
+			phb->reset_stage = assert_state;
+		} else {
+			if (phb->reset_type != OPAL_PCI_HOT_RESET ||
+			    phb->reset_stage != assert_state) {
+				prerror("PHB#%d: Failure on hot reset (%d, %d)\n",
+					phb->opal_id, phb->reset_type,
+					phb->reset_stage);
+				rc = OPAL_WRONG_STATE;
+				phb->reset_type = -1;
+				phb->reset_stage = -1;
+				break;
+			}
+
 			rc = phb->ops->poll(phb);
-		}
-
-		if (rc < 0) {
-			prerror("PHB#%d: Failure on hot reset, rc=%lld\n",
-				phb->opal_id, rc);
-			break;
+			if (rc < 0)
+				prerror("PHB#%d: Failure on hot reset, rc=%lld\n",
+					phb->opal_id, rc);
+			if (rc <= 0) {
+				phb->reset_type = -1;
+				phb->reset_stage = -1;
+			}
 		}
 
                 break;

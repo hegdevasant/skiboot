@@ -286,6 +286,8 @@ struct phb {
 	uint32_t		scan_map;
 	enum phb_type		phb_type;
 	struct list_head	devices;
+	int			reset_type;
+	int			reset_stage;
 	const struct phb_ops	*ops;
 };
 
