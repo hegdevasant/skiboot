@@ -712,14 +712,17 @@ static int64_t p7ioc_eeh_next_error(struct phb *phb, uint64_t *first_frozen_pe,
 {
 	struct p7ioc_phb *p = phb_to_p7ioc_phb(phb);
 	struct p7ioc *ioc = p->ioc;
-	uint64_t peev0, peev1;
-	unsigned int i;
+	uint64_t fir, peev0, peev1;
+	uint32_t cfg32, i;
 
 	/* Check if there're pending errors on the IOC. */
 	if (p7ioc_err_pending(ioc) &&
 	    p7ioc_check_LEM(ioc, pci_error_type, severity))
 		return OPAL_SUCCESS;
 
+	/* Clear result */
+	*pci_error_type	= OPAL_EEH_PHB_NO_ERROR;
+        *severity	= OPAL_EEH_SEV_NO_ERROR;
 	*first_frozen_pe = (uint64_t)-1;
 
 	/* Check dead */
@@ -738,68 +741,107 @@ static int64_t p7ioc_eeh_next_error(struct phb *phb, uint64_t *first_frozen_pe,
 		return OPAL_SUCCESS;
 	}
 
-	/* Check ERs */
-	p7ioc_phb_ioda_sel(p, IODA_TBL_PEEV, 0, true);
-	peev0 = in_be64(p->regs + PHB_IODA_DATA0);
-	peev1 = in_be64(p->regs + PHB_IODA_DATA0);
-	if (peev0 || peev1)
-		p7ioc_phb_set_err_pending(p, true);
-	if (p7ioc_phb_err_pending(p)) {
-		*pci_error_type = OPAL_EEH_PCI_ANY_ER;
-		*severity = OPAL_EEH_SEV_DEV_ER;
-		/* XXX use cntlz */
-		for (i = 0 ; i < 64; i++) {
-			if (PPC_BIT(i) & peev1) {
-				*first_frozen_pe = i + 64;
-				break;
-			}
+	/*
+	 * If we don't have pending errors, which might be moved
+	 * from IOC to the PHB, then check if there has any frozen PEs.
+	 */
+	if (!p7ioc_phb_err_pending(p)) {
+		p7ioc_phb_ioda_sel(p, IODA_TBL_PEEV, 0, true);
+		peev0 = in_be64(p->regs + PHB_IODA_DATA0);
+		peev1 = in_be64(p->regs + PHB_IODA_DATA0);
+		if (peev0 || peev1) {
+			p->err.err_src   = P7IOC_ERR_SRC_PHB0 + p->index;
+			p->err.err_class = P7IOC_ERR_CLASS_ER;
+			p->err.err_bit   = 0;
+			p7ioc_phb_set_err_pending(p, true);
 		}
-		for (i = 0 ; i < 64; i++) {
-			if (PPC_BIT(i) & peev0) {
-				*first_frozen_pe = i;
-				break;
-			}
-		}
-		return OPAL_SUCCESS;
 	}
 
-	/* XXX Add INF */
+	/* Check the pending errors, which might come from IOC */
+	if (p7ioc_phb_err_pending(p)) {
+		/*
+		 * If the frozen PE is caused by malfunctional TLP, we
+		 * need reset the PHB. So convert ER to PHB-fatal error
+		 * for the case.
+		 */
+		if (p->err.err_class == P7IOC_ERR_CLASS_ER) {
+			fir = in_be64(p->regs_asb + PHB_LEM_FIR_ACCUM);
+			if (fir & PPC_BIT(60)) {
+				p7ioc_pcicfg_read32(&p->phb, 0,
+					p->aercap + PCIECAP_AER_UE_STATUS, &cfg32);
+				if (cfg32 & PCIECAP_AER_UE_MALFORMED_TLP)
+					p->err.err_class = P7IOC_ERR_CLASS_PHB;
+                        }
+                }
 
-	*pci_error_type = OPAL_EEH_PHB_NO_ERROR;
-	*severity = OPAL_EEH_SEV_NO_ERROR;
+		/*
+		 * Map P7IOC internal error class to that one OS can handle.
+		 * For P7IOC_ERR_CLASS_ER, we also need figure out the frozen
+		 * PE.
+		 */
+		switch (p->err.err_class) {
+		case P7IOC_ERR_CLASS_PHB:
+			*pci_error_type = OPAL_EEH_PHB_FATAL;
+			*severity = OPAL_EEH_SEV_PHB_FENCED;
+			break;
+		case P7IOC_ERR_CLASS_MAL:
+		case P7IOC_ERR_CLASS_INF:
+			*pci_error_type = OPAL_EEH_PHB_FATAL;
+			*severity = OPAL_EEH_SEV_INF;
+			break;
+		case P7IOC_ERR_CLASS_ER:
+			*pci_error_type = OPAL_EEH_PCI_ANY_ER;
+			*severity = OPAL_EEH_SEV_DEV_ER;
+			p7ioc_phb_ioda_sel(p, IODA_TBL_PEEV, 0, true);
+			peev0 = in_be64(p->regs + PHB_IODA_DATA0);
+			peev1 = in_be64(p->regs + PHB_IODA_DATA0);
+
+			for (i = 0 ; i < 64; i++) {
+				if (PPC_BIT(i) & peev1) {
+					*first_frozen_pe = i + 64;
+					break;
+				}
+			}
+			for (i = 0 ;
+			     *first_frozen_pe == (uint64_t)-1 && i < 64;
+			     i++) {
+				if (PPC_BIT(i) & peev0) {
+					*first_frozen_pe = i;
+					break;
+				}
+			}
+
+			/* No frozen PE? */
+			if (*first_frozen_pe == (uint64_t)-1) {
+				*pci_error_type = OPAL_EEH_PHB_NO_ERROR;
+				*severity = OPAL_EEH_SEV_NO_ERROR;
+				p->err.err_src   = P7IOC_ERR_SRC_NONE;
+				p->err.err_class = P7IOC_ERR_CLASS_NONE;
+				p->err.err_bit   = 0;
+				p7ioc_phb_set_err_pending(p, false);
+			}
+
+			break;
+		default:
+			*pci_error_type = OPAL_EEH_PHB_NO_ERROR;
+			*severity = OPAL_EEH_SEV_NO_ERROR;
+			p->err.err_src   = P7IOC_ERR_SRC_NONE;
+			p->err.err_class = P7IOC_ERR_CLASS_NONE;
+			p->err.err_bit   = 0;
+			p7ioc_phb_set_err_pending(p, false);
+		}
+	}
+
 	return OPAL_SUCCESS;
 }
 
-static int64_t p7ioc_eeh_freeze_clear(struct phb *phb, uint64_t pe_number,
-				      uint64_t eeh_action_token)
+static void p7ioc_ER_err_clear(struct p7ioc_phb *p)
 {
-	struct p7ioc_phb *p = phb_to_p7ioc_phb(phb);
-	uint64_t peev0, peev1;
-
-	/* XXX Now this is a heavy hammer, coming roughly from the P7IOC doc
-	 * and my old "pseudopal" code. It will need to be refined. In general
-	 * error handling will have to be reviewed and probably done properly	
-	 * "from scratch" based on the description in the p7IOC spec.
-	 *
-	 * XXX Additionally, when handling interrupts, we might want to consider
-	 * masking while processing and/or ack'ing interrupt bits etc...
-	 */
 	u64 err, lem;
 	u32 val;
 
-	/* Summary. If nothing, move to clearing the PESTs which can
-	 * contain a freeze state from a previous error or simply set
-	 * explicitely by the user
-	 */
-	err = in_be64(p->regs + PHB_ETU_ERR_SUMMARY);
-	if (err == 0)
-		goto clear_pest;
-
 	/* Rec 1,2 */
 	lem = in_be64(p->regs + PHB_LEM_FIR_ACCUM);
-	/* XXX Check bit 60. If set, check AER 104 (malformed packet)
-	 * and if set, go to PHB fatal
-	 */
 
 	/* Rec 3,4,5 AER registers (could use cfg space accessors) */
 	out_be64(p->regs + PHB_CONFIG_ADDRESS, 0x8000001c00000000ull);
@@ -862,6 +904,33 @@ static int64_t p7ioc_eeh_freeze_clear(struct phb *phb, uint64_t pe_number,
 	/* Rec 67, 68 LEM */
 	out_be64(p->regs + PHB_LEM_FIR_AND_MASK, ~lem);
 	out_be64(p->regs + PHB_LEM_WOF, 0);
+}
+
+static int64_t p7ioc_eeh_freeze_clear(struct phb *phb, uint64_t pe_number,
+				      uint64_t eeh_action_token)
+{
+	struct p7ioc_phb *p = phb_to_p7ioc_phb(phb);
+	uint64_t peev0, peev1;
+
+	/* XXX Now this is a heavy hammer, coming roughly from the P7IOC doc
+	 * and my old "pseudopal" code. It will need to be refined. In general
+	 * error handling will have to be reviewed and probably done properly
+	 * "from scratch" based on the description in the p7IOC spec.
+	 *
+	 * XXX Additionally, when handling interrupts, we might want to consider
+	 * masking while processing and/or ack'ing interrupt bits etc...
+	 */
+	u64 err;
+
+	/* Summary. If nothing, move to clearing the PESTs which can
+	 * contain a freeze state from a previous error or simply set
+	 * explicitely by the user
+	 */
+	err = in_be64(p->regs + PHB_ETU_ERR_SUMMARY);
+	if (err == 0)
+		goto clear_pest;
+
+	p7ioc_ER_err_clear(p);
 
  clear_pest:
 	/* XXX We just clear the whole PESTA for MMIO clear and PESTB
@@ -883,9 +952,12 @@ static int64_t p7ioc_eeh_freeze_clear(struct phb *phb, uint64_t pe_number,
 	p7ioc_phb_ioda_sel(p, IODA_TBL_PEEV, 0, true);
 	peev0 = in_be64(p->regs + PHB_IODA_DATA0);
 	peev1 = in_be64(p->regs + PHB_IODA_DATA0);
-	if (peev0 || peev1)
+	if (peev0 || peev1) {
+		p->err.err_src   = P7IOC_ERR_SRC_PHB0 + p->index;
+		p->err.err_class = P7IOC_ERR_CLASS_ER;
+		p->err.err_bit   = 0;
 		p7ioc_phb_set_err_pending(p, true);
-	else
+	} else
 		p7ioc_phb_set_err_pending(p, false);
 
 	return OPAL_SUCCESS;
@@ -895,12 +967,27 @@ static int64_t p7ioc_get_diag_data(struct phb *phb, void *diag_buffer,
 				   uint64_t diag_buffer_len)
 {
 	struct p7ioc_phb *p = phb_to_p7ioc_phb(phb);
+	struct OpalIoP7IOCPhbErrorData *data = diag_buffer;
 
 	if (diag_buffer_len < sizeof(struct OpalIoP7IOCPhbErrorData))
 		return OPAL_PARAMETER;
 
-	p7ioc_eeh_read_phb_status(p, (struct OpalIoP7IOCPhbErrorData *)
-				  diag_buffer);
+	p7ioc_eeh_read_phb_status(p, data);
+
+	/*
+	 * We're running to here probably because of errors (MAL
+	 * or INF class) from IOC. For the case, we need clear
+	 * the pending errors and mask the error bit for MAL class
+	 * error. Fortunately, we shouldn't get MAL class error from
+	 * IOC on P7IOC.
+	 */
+	if (!p7ioc_phb_err_pending(p)			||
+	     p->err.err_class != P7IOC_ERR_CLASS_INF	||
+	     p->err.err_src < P7IOC_ERR_SRC_PHB0	||
+	     p->err.err_src > P7IOC_ERR_SRC_PHB5)
+		return OPAL_SUCCESS;
+
+	p7ioc_ER_err_clear(p);
 
 	return OPAL_SUCCESS;
 }
@@ -1696,8 +1783,8 @@ static void p7ioc_phb_err_interrupt(void *data, uint32_t isn)
 		return;
 
 	/*
-	 * Check if there's an error pending and update PHB fence state
-	 * and return, the ER error is drowned at this point
+	 * Check if there's an error pending and update PHB fence
+	 * state and return, the ER error is drowned at this point
 	 */
 	lock(&p->lock);
 	if (p7ioc_phb_fenced(p)) {
@@ -1707,12 +1794,29 @@ static void p7ioc_phb_err_interrupt(void *data, uint32_t isn)
 		return;
 	}
 
-	/* Check the PEEV */
+	/*
+	 * If we already had pending errors, which might be
+	 * moved from IOC, then we needn't check PEEV to avoid
+	 * overwritting the errors from IOC.
+	 */
+	if (!p7ioc_phb_err_pending(p)) {
+		unlock(&p->lock);
+		return;
+	}
+
+	/*
+	 * We don't have pending errors from IOC, it's safe
+	 * to check PEEV for frozen PEs.
+	 */
 	p7ioc_phb_ioda_sel(p, IODA_TBL_PEEV, 0, true);
 	peev0 = in_be64(p->regs + PHB_IODA_DATA0);
 	peev1 = in_be64(p->regs + PHB_IODA_DATA0);
-	if (peev0 || peev1)
+	if (peev0 || peev1) {
+		p->err.err_src   = P7IOC_ERR_SRC_PHB0 + p->index;
+		p->err.err_class = P7IOC_ERR_CLASS_ER;
+		p->err.err_bit   = 0;
 		p7ioc_phb_set_err_pending(p, true);
+	}
 	unlock(&p->lock);
 }
 
