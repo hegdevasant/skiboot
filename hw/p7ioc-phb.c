@@ -278,7 +278,6 @@ static int64_t p7ioc_sm_slot_power_off(struct p7ioc_phb *p)
 	uint64_t reg;
 
 	switch(p->state) {
-	case P7IOC_PHB_STATE_FENCED:
 	case P7IOC_PHB_STATE_FUNCTIONAL:
 		/*
 		 * Check the presence and power status. If be not
@@ -535,6 +534,47 @@ static int64_t p7ioc_slot_power_on(struct phb *phb)
 	return p7ioc_sm_slot_power_on(p);
 }
 
+static int64_t p7ioc_complete_reset(struct phb *phb, uint8_t assert)
+{
+	struct p7ioc_phb *p = phb_to_p7ioc_phb(phb);
+	uint64_t now = mftb();
+
+	if (assert == OPAL_ASSERT_RESET) {
+		if (p->state == P7IOC_PHB_STATE_FUNCTIONAL ||
+		    p->state == P7IOC_PHB_STATE_FENCED) {
+			p7ioc_phb_reset(phb);
+			return p7ioc_sm_slot_power_off(p);
+		} else {
+			/* Check timer */
+			if (p->delay_tgt_tb &&
+			    tb_compare(now, p->delay_tgt_tb) == TB_ABEFOREB)
+				return p->delay_tgt_tb - now;
+
+			/* Expired (or not armed), clear it */
+			p->delay_tgt_tb = 0;
+
+			return p7ioc_sm_slot_power_off(p);
+		}
+	} else {
+		if (p->state == P7IOC_PHB_STATE_FUNCTIONAL) {
+			return p7ioc_sm_slot_power_on(p);
+		} else {
+			/* Check timer */
+                        if (p->delay_tgt_tb &&
+                            tb_compare(now, p->delay_tgt_tb) == TB_ABEFOREB)
+                                return p->delay_tgt_tb - now;
+
+                        /* Expired (or not armed), clear it */
+                        p->delay_tgt_tb = 0;
+
+			return p7ioc_sm_slot_power_on(p);
+		}
+	}
+
+	/* We shouldn't run to here */
+	return OPAL_PARAMETER;
+}
+
 /*
  * We have to mask errors prior to disabling link training.
  * Otherwise it would cause infinite frozen PEs. Also, we
@@ -657,11 +697,19 @@ error:
 static int64_t p7ioc_hot_reset(struct phb *phb)
 {
 	struct p7ioc_phb *p = phb_to_p7ioc_phb(phb);
+	uint64_t now = mftb();
 
-	if (p->state != P7IOC_PHB_STATE_FUNCTIONAL)
-		return OPAL_BUSY;
+	if (p->state == P7IOC_PHB_STATE_FUNCTIONAL)
+		p7ioc_sm_hot_reset(p);
 
-	/* run state machine */
+	/* Check timer */
+	if (p->delay_tgt_tb &&
+	    tb_compare(now, p->delay_tgt_tb) == TB_ABEFOREB)
+		return p->delay_tgt_tb - now;
+
+	/* Expired (or not armed), clear it */
+	p->delay_tgt_tb = 0;
+
 	return p7ioc_sm_hot_reset(p);
 }
 
@@ -796,12 +844,20 @@ error:
 static int64_t p7ioc_freset(struct phb *phb)
 {
 	struct p7ioc_phb *p = phb_to_p7ioc_phb(phb);
+	uint64_t now = mftb();
 
-	if (p->state != P7IOC_PHB_STATE_FUNCTIONAL)
-		return OPAL_BUSY;
+	if (p->state == P7IOC_PHB_STATE_FUNCTIONAL)
+		p7ioc_sm_freset(p);
 
-	/* run state machine */
-	return p7ioc_sm_hot_reset(p);
+	/* Check timer */
+	if (p->delay_tgt_tb &&
+	    tb_compare(now, p->delay_tgt_tb) == TB_ABEFOREB)
+		return p->delay_tgt_tb - now;
+
+	/* Expired (or not armed), clear it */
+	p->delay_tgt_tb = 0;
+
+	return p7ioc_sm_freset(p);
 }
 
 static int64_t p7ioc_poll(struct phb *phb)
@@ -1986,9 +2042,9 @@ static const struct phb_ops p7ioc_phb_ops = {
 	.power_state		= p7ioc_power_state,
 	.slot_power_off		= p7ioc_slot_power_off,
 	.slot_power_on		= p7ioc_slot_power_on,
+	.complete_reset		= p7ioc_complete_reset,
 	.hot_reset		= p7ioc_hot_reset,
 	.fundamental_reset	= p7ioc_freset,
-	.phb_reset		= p7ioc_phb_reset,
 	.poll			= p7ioc_poll,
 };
 
@@ -2198,8 +2254,6 @@ void p7ioc_phb_setup(struct p7ioc *ioc, uint8_t index, bool active)
 	p->active = active;
 	p->phb.ops = &p7ioc_phb_ops;
 	p->phb.phb_type = phb_type_pcie_v2;
-	p->phb.reset_type = -1;		/* Invalid reset type	*/
-	p->phb.reset_stage = -1;	/* Invalid reset stage	*/
 	p->regs_asb = ioc->regs + PHBn_ASB_BASE(index);
 	p->regs = ioc->regs + PHBn_AIB_BASE(index);
 	p->buid_lsi = buid_base + PHB_BUID_LSI_OFFSET;

@@ -460,14 +460,15 @@ static int64_t opal_pci_map_pe_dma_window_real(uint64_t phb_id,
 opal_call(OPAL_PCI_MAP_PE_DMA_WINDOW_REAL, opal_pci_map_pe_dma_window_real);
 
 static int64_t opal_pci_reset(uint64_t phb_id, uint8_t reset_scope,
-			      uint8_t assert_state)
+                              uint8_t assert_state)
 {
 	struct phb *phb = pci_get_phb(phb_id);
-	const char *desc = NULL;
 	int64_t rc = OPAL_SUCCESS;
 
 	if (!phb)
 		return OPAL_PARAMETER;
+	if (!phb->ops)
+		return OPAL_UNSUPPORTED;
 	if (assert_state != OPAL_ASSERT_RESET &&
 	    assert_state != OPAL_DEASSERT_RESET)
 		return OPAL_PARAMETER;
@@ -476,93 +477,46 @@ static int64_t opal_pci_reset(uint64_t phb_id, uint8_t reset_scope,
 
 	switch(reset_scope) {
 	case OPAL_PHB_COMPLETE:
-		if (!phb->ops->phb_reset) {
+		if (!phb->ops->complete_reset) {
 			rc = OPAL_UNSUPPORTED;
 			break;
 		}
-		/* Fall through */
+
+		rc = phb->ops->complete_reset(phb, assert_state);
+		if (rc < 0)
+			prerror("PHB#%d: Failure on complete reset, rc=%lld\n",
+				phb->opal_id, rc);
+		break;
 	case OPAL_PCI_FUNDAMENTAL_RESET:
-		desc = (assert_state == OPAL_ASSERT_RESET) ? "off" : "on";
-		if (phb->reset_type < 0 && phb->reset_stage < 0) {
-			if (assert_state == OPAL_ASSERT_RESET) {
-				if (reset_scope == OPAL_PHB_COMPLETE)
-					phb->ops->phb_reset(phb);
-				rc = phb->ops->slot_power_off(phb);
-			} else
-				rc = phb->ops->slot_power_on(phb);
-			if (rc < 0) {
-				prerror("PHB#%d: Failure on power-%s for "
-					"fundamental reset, rc=%lld\n",
-					phb->opal_id, desc, rc);
-				break;
-			}
-
-			phb->reset_type = OPAL_PCI_FUNDAMENTAL_RESET;
-			phb->reset_stage = assert_state;
-		} else {
-			if (phb->reset_type != OPAL_PCI_FUNDAMENTAL_RESET ||
-			    phb->reset_stage != assert_state) {
-				prerror("PHB#%d: Failure on power-%s for "
-					"fundamental reset (%d, %d)\n",
-					phb->opal_id, desc, phb->reset_type,
-					phb->reset_stage);
-				rc = OPAL_WRONG_STATE;
-				phb->reset_type = -1;
-				phb->reset_stage = -1;
-				break;
-			}
-
-			rc = phb->ops->poll(phb);
-			if (rc < 0)
-				prerror("PHB#%d: Failure on power-%s for "
-					"fundamental reset, rc=%lld\n",
-					phb->opal_id, desc, rc);
-			if (rc <= 0) {
-				phb->reset_type = -1;
-				phb->reset_stage = -1;
-			}
+		if (!phb->ops->fundamental_reset) {
+			rc = OPAL_UNSUPPORTED;
+			break;
 		}
 
-		break;
-	case OPAL_PCI_HOT_RESET:
 		/* We need do nothing on deassert time */
 		if (assert_state != OPAL_ASSERT_RESET)
 			break;
 
-		if (phb->reset_type < 0 && phb->reset_stage < 0) {
-			rc = phb->ops->hot_reset(phb);
-			if (rc < 0) {
-				prerror("PHB#%d: Failure on hot reset, rc=%lld\n",
-					phb->opal_id, rc);
-				break;
-			}
-
-			phb->reset_type = OPAL_PCI_HOT_RESET;
-			phb->reset_stage = assert_state;
-		} else {
-			if (phb->reset_type != OPAL_PCI_HOT_RESET ||
-			    phb->reset_stage != assert_state) {
-				prerror("PHB#%d: Failure on hot reset (%d, %d)\n",
-					phb->opal_id, phb->reset_type,
-					phb->reset_stage);
-				rc = OPAL_WRONG_STATE;
-				phb->reset_type = -1;
-				phb->reset_stage = -1;
-				break;
-			}
-
-			rc = phb->ops->poll(phb);
-			if (rc < 0)
-				prerror("PHB#%d: Failure on hot reset, rc=%lld\n",
-					phb->opal_id, rc);
-			if (rc <= 0) {
-				phb->reset_type = -1;
-				phb->reset_stage = -1;
-			}
+		rc = phb->ops->fundamental_reset(phb);
+		if (rc < 0)
+			prerror("PHB#%d: Failure on fundamental reset, rc=%lld\n",
+				phb->opal_id, rc);
+		break;
+	case OPAL_PCI_HOT_RESET:
+		if (!phb->ops->hot_reset) {
+			rc = OPAL_UNSUPPORTED;
+			break;
 		}
 
-                break;
+		/* We need do nothing on deassert time */
+		if (assert_state != OPAL_ASSERT_RESET)
+			break;
 
+		rc = phb->ops->hot_reset(phb);
+		if (rc < 0)
+			prerror("PHB#%d: Failure on hot reset, rc=%lld\n",
+				phb->opal_id, rc);
+		break;
 	case OPAL_PCI_IODA_TABLE_RESET:
 		if (assert_state != OPAL_ASSERT_RESET)
 			break;
@@ -575,7 +529,7 @@ static int64_t opal_pci_reset(uint64_t phb_id, uint8_t reset_scope,
 	phb->ops->unlock(phb);
 	pci_put_phb(phb);
 
-	return rc;
+	return (rc > 0) ? tb_to_msecs(rc) : rc;
 }
 opal_call(OPAL_PCI_RESET, opal_pci_reset);
 
