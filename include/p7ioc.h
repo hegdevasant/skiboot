@@ -200,6 +200,12 @@ enum p7ioc_phb_state {
 	P7IOC_PHB_STATE_SPDOWN_STABILIZE_DELAY,	/* Step 2 Delay 2s		*/
 	P7IOC_PHB_STATE_SPDOWN_SLOT_STATUS,	/* Step 3 waiting for status	*/
 
+	/* Fundamental reset sequence */
+	P7IOC_PHB_STATE_FRESET_DISABLE_LINK,	/* Disable link training		*/
+	P7IOC_PHB_STATE_FRESET_ASSERT_DELAY,	/* Delay on fundamental reset assert	*/
+	P7IOC_PHB_STATE_FRESET_DEASSERT_DELAY,	/* Delay on fundamental reset deassert	*/
+	P7IOC_PHB_STATE_FRESET_WAIT_LINK,	/* Wait for link up			*/
+
 	/* Hot Reset sequence */
 	P7IOC_PHB_STATE_HRESET_DISABLE_LINK,	/* Disable Link training	*/
 	P7IOC_PHB_STATE_HRESET_ASSERT,		/* Hot reset assert		*/

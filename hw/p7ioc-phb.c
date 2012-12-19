@@ -665,6 +665,145 @@ static int64_t p7ioc_hot_reset(struct phb *phb)
 	return p7ioc_sm_hot_reset(p);
 }
 
+static int64_t p7ioc_sm_freset(struct p7ioc_phb *p)
+{
+	uint64_t reg;
+	uint32_t cfg32;
+	uint64_t ci_idx = p->index + 2;
+
+	switch(p->state) {
+	case P7IOC_PHB_STATE_FUNCTIONAL:
+		/* If the slot isn't present, we needn't do it */
+		reg = in_be64(p->regs + PHB_PCIE_SLOTCTL2);
+		if (!(reg & PHB_PCIE_SLOTCTL2_PRSTN_STAT)) {
+			PHBDBG(p, "Slot freset: no device\n");
+			return OPAL_CLOSED;
+		}
+
+		/* Mask PCIE port interrupts and AER receiver error */
+		out_be64(p->regs + UTL_PCIE_PORT_IRQ_EN, 0x7E00000000000000);
+		p7ioc_pcicfg_read32(&p->phb, 0,
+			p->aercap + PCIECAP_AER_CE_MASK, &cfg32);
+		cfg32 |= PCIECAP_AER_CE_RECVR_ERR;
+		p7ioc_pcicfg_write32(&p->phb, 0,
+			p->aercap + PCIECAP_AER_CE_MASK, cfg32);
+
+		/* Mask CI port error and clear it */
+		out_be64(p->ioc->regs + P7IOC_CIn_LEM_ERR_MASK(ci_idx),
+			 0xa4f4000000000000ul);
+		out_be64(p->regs + PHB_LEM_ERROR_MASK,
+			 0xadb650c9808dd051ul);
+		out_be64(p->ioc->regs + P7IOC_CIn_LEM_FIR(ci_idx),
+			 0x0ul);
+
+		/* Disable link to avoid training issues */
+		reg = in_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL);
+		reg |= PHB_PCIE_DLP_TCTX_DISABLE;
+		out_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL, reg);
+		PHBDBG(p, "Slot freset: disable link training\n");
+
+		p->state = P7IOC_PHB_STATE_FRESET_DISABLE_LINK;
+		p->retries = 12;
+		return p7ioc_set_sm_timeout(p, msecs_to_tb(10));
+	case P7IOC_PHB_STATE_FRESET_DISABLE_LINK:
+		reg = in_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL);
+		if (reg & PHB_PCIE_DLP_TCRX_DISABLED) {
+			/* Turn on freset */
+			reg = in_be64(p->regs + PHB_RESET);
+			reg &= ~0x2000000000000000ul;
+			out_be64(p->regs + PHB_RESET, reg);
+			PHBDBG(p, "Slot freset: assert\n");
+
+			p->state = P7IOC_PHB_STATE_FRESET_ASSERT_DELAY;
+			return p7ioc_set_sm_timeout(p, secs_to_tb(1));
+		}
+
+		if (p->retries-- == 0) {
+			PHBDBG(p, "Slot freset: timeout to disable link training\n");
+			goto error;
+		}
+
+		return p7ioc_set_sm_timeout(p, msecs_to_tb(10));
+	case P7IOC_PHB_STATE_FRESET_ASSERT_DELAY:
+		/* Turn off freset */
+		reg = in_be64(p->regs + PHB_RESET);
+		reg |= 0x2000000000000000ul;
+		out_be64(p->regs + PHB_RESET, reg);
+		PHBDBG(p, "Slot freset: deassert\n");
+
+		p->state = P7IOC_PHB_STATE_FRESET_DEASSERT_DELAY;
+		return p7ioc_set_sm_timeout(p, msecs_to_tb(200));
+	case P7IOC_PHB_STATE_FRESET_DEASSERT_DELAY:
+		/* Restore link control */
+		reg = in_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL);
+		reg &= ~PHB_PCIE_DLP_TCTX_DISABLE;
+		out_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL, reg);
+		PHBDBG(p, "Slot freset: enable link training\n");
+
+		p->state = P7IOC_PHB_STATE_FRESET_WAIT_LINK;
+		p->retries = 20;
+		return p7ioc_set_sm_timeout(p, msecs_to_tb(10));
+	case P7IOC_PHB_STATE_FRESET_WAIT_LINK:
+		reg = in_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL);
+		if (reg & PHB_PCIE_DLP_TC_DL_LINKACT) {
+			/*
+			 * Clear spurrious errors and enable PCIE port
+			 * interrupts
+			 */
+			out_be64(p->regs + UTL_PCIE_PORT_STATUS, 0x00E0000000000000);
+			out_be64(p->regs + UTL_PCIE_PORT_IRQ_EN, 0xFE65000000000000);
+
+			/* Clear AER receiver error status */
+			p7ioc_pcicfg_write32(&p->phb, 0,
+				p->aercap + PCIECAP_AER_CE_STATUS,
+				PCIECAP_AER_CE_RECVR_ERR);
+			/* Unmask receiver error status in AER */
+			p7ioc_pcicfg_read32(&p->phb, 0,
+				p->aercap + PCIECAP_AER_CE_MASK, &cfg32);
+			cfg32 &= ~PCIECAP_AER_CE_RECVR_ERR;
+			p7ioc_pcicfg_write32(&p->phb, 0,
+				p->aercap + PCIECAP_AER_CE_MASK, cfg32);
+			/* Clear and Unmask CI port and PHB errors */
+			out_be64(p->ioc->regs + P7IOC_CIn_LEM_FIR(ci_idx),
+				 0x0ul);
+			out_be64(p->regs + PHB_LEM_FIR_ACCUM,
+				 0x0ul);
+			out_be64(p->ioc->regs + P7IOC_CIn_LEM_ERR_MASK_AND(ci_idx),
+				 0x0ul);
+			out_be64(p->regs + PHB_LEM_ERROR_MASK,
+				 0x1249a1147f500f2cul);
+			PHBDBG(p, "Slot freset: link up!\n");
+
+			p->state = P7IOC_PHB_STATE_FUNCTIONAL;
+			return OPAL_SUCCESS;
+		}
+
+		if (p->retries-- == 0) {
+			PHBDBG(p, "Slot freset: timeout for link up\n");
+			goto error;
+		}
+
+		return p7ioc_set_sm_timeout(p, msecs_to_tb(10));
+	default:
+		break;
+	}
+
+error:
+	p->state = P7IOC_PHB_STATE_FUNCTIONAL;
+	return OPAL_HARDWARE;
+}
+
+static int64_t p7ioc_freset(struct phb *phb)
+{
+	struct p7ioc_phb *p = phb_to_p7ioc_phb(phb);
+
+	if (p->state != P7IOC_PHB_STATE_FUNCTIONAL)
+		return OPAL_BUSY;
+
+	/* run state machine */
+	return p7ioc_sm_hot_reset(p);
+}
+
 static int64_t p7ioc_poll(struct phb *phb)
 {
 	struct p7ioc_phb *p = phb_to_p7ioc_phb(phb);
@@ -694,6 +833,11 @@ static int64_t p7ioc_poll(struct phb *phb)
 	case P7IOC_PHB_STATE_SPDOWN_STABILIZE_DELAY:
 	case P7IOC_PHB_STATE_SPDOWN_SLOT_STATUS:
 		return p7ioc_sm_slot_power_off(p);
+	case P7IOC_PHB_STATE_FRESET_DISABLE_LINK:
+	case P7IOC_PHB_STATE_FRESET_ASSERT_DELAY:
+	case P7IOC_PHB_STATE_FRESET_DEASSERT_DELAY:
+	case P7IOC_PHB_STATE_FRESET_WAIT_LINK:
+		return p7ioc_sm_freset(p);
 	case P7IOC_PHB_STATE_HRESET_DISABLE_LINK:
 	case P7IOC_PHB_STATE_HRESET_ASSERT:
 	case P7IOC_PHB_STATE_HRESET_DELAY:
@@ -703,6 +847,7 @@ static int64_t p7ioc_poll(struct phb *phb)
 	default:
 		break;
 	}
+
 	/* Unknown state, could be a HW error */
 	return OPAL_HARDWARE;
 }
@@ -1842,6 +1987,7 @@ static const struct phb_ops p7ioc_phb_ops = {
 	.slot_power_off		= p7ioc_slot_power_off,
 	.slot_power_on		= p7ioc_slot_power_on,
 	.hot_reset		= p7ioc_hot_reset,
+	.fundamental_reset	= p7ioc_freset,
 	.phb_reset		= p7ioc_phb_reset,
 	.poll			= p7ioc_poll,
 };

@@ -261,6 +261,9 @@ struct phb_ops {
 	 */
 	int64_t (*hot_reset)(struct phb *phb);
 
+	/* Fundamental reset */
+	int64_t (*fundamental_reset)(struct phb *phb);
+
 	/* Complete reset and reinit PHB */
         void (*phb_reset)(struct phb *phb);
 
