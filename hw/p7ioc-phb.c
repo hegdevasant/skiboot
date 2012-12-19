@@ -371,7 +371,7 @@ static int64_t p7ioc_sm_slot_power_on(struct p7ioc_phb *p)
 {
 	uint64_t reg;
 	uint32_t reg32;
-	uint16_t brctl;
+	uint64_t ci_idx = p->index + 2;
 
 	switch(p->state) {
 	case P7IOC_PHB_STATE_FUNCTIONAL:
@@ -416,25 +416,33 @@ static int64_t p7ioc_sm_slot_power_on(struct p7ioc_phb *p)
 		p7ioc_pcicfg_write32(&p->phb, 0,
 			p->aercap + PCIECAP_AER_CE_MASK, reg32);
 
+		/* Mask CI port error and clear it */
+		out_be64(p->ioc->regs + P7IOC_CIn_LEM_ERR_MASK(ci_idx),
+			 0xa4f4000000000000ul);
+		out_be64(p->regs + PHB_LEM_ERROR_MASK,
+			 0xadb650c9808dd051ul);
+		out_be64(p->ioc->regs + P7IOC_CIn_LEM_FIR(ci_idx),
+			 0x0ul);
+
 		/* Disable link to avoid training issues */
 		reg = in_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL);
 		reg |= PHB_PCIE_DLP_TCTX_DISABLE;
 		out_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL, reg);
 		PHBDBG(p, "Slot power on: disable link training\n");
 
-                p->state = P7IOC_PHB_STATE_SPUP_HRESET_DISABLE_LINK;
+                p->state = P7IOC_PHB_STATE_SPUP_FRESET_DISABLE_LINK;
 		p->retries = 12;
 		return p7ioc_set_sm_timeout(p, msecs_to_tb(10));
-	case P7IOC_PHB_STATE_SPUP_HRESET_DISABLE_LINK:
+	case P7IOC_PHB_STATE_SPUP_FRESET_DISABLE_LINK:
 		reg = in_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL);
 		if (reg & PHB_PCIE_DLP_TCRX_DISABLED) {
-			/* Turn on host reset */
-			p7ioc_pcicfg_read16(&p->phb, 0, PCI_CFG_BRCTL, &brctl);
-			brctl |= PCI_CFG_BRCTL_SECONDARY_RESET;
-			p7ioc_pcicfg_write16(&p->phb, 0, PCI_CFG_BRCTL, brctl);
-			PHBDBG(p, "Slot power on: assert hot reset\n");
+			/* Turn on freset */
+			reg = in_be64(p->regs + PHB_RESET);
+			reg &= ~0x2000000000000000ul;
+			out_be64(p->regs + PHB_RESET, reg);
+			PHBDBG(p, "Slot power on: assert freset\n");
 
-			p->state = P7IOC_PHB_STATE_SPUP_HRESET_DELAY;
+			p->state = P7IOC_PHB_STATE_SPUP_FRESET_ASSERT_DELAY;
 			return p7ioc_set_sm_timeout(p, secs_to_tb(1));
 		}
 
@@ -445,26 +453,26 @@ static int64_t p7ioc_sm_slot_power_on(struct p7ioc_phb *p)
 		}
 
                 return p7ioc_set_sm_timeout(p, msecs_to_tb(10));
-	case P7IOC_PHB_STATE_SPUP_HRESET_DELAY:
-		/* Turn off host reset */
-		p7ioc_pcicfg_read16(&p->phb, 0, PCI_CFG_BRCTL, &brctl);
-		brctl &= ~PCI_CFG_BRCTL_SECONDARY_RESET;
-		p7ioc_pcicfg_write16(&p->phb, 0, PCI_CFG_BRCTL, brctl);
-		PHBDBG(p, "Slot power on: deassert hot reset\n");
+	case P7IOC_PHB_STATE_SPUP_FRESET_ASSERT_DELAY:
+		/* Turn off freset */
+		reg = in_be64(p->regs + PHB_RESET);
+		reg |= 0x2000000000000000ul;
+		out_be64(p->regs + PHB_RESET, reg);
+		PHBDBG(p, "Slot power on: deassert freset\n");
 
-                p->state = P7IOC_PHB_STATE_SPUP_HRESET_ENABLE_LINK;
+                p->state = P7IOC_PHB_STATE_SPUP_FRESET_DEASSERT_DELAY;
                 return p7ioc_set_sm_timeout(p, msecs_to_tb(200));
-	case P7IOC_PHB_STATE_SPUP_HRESET_ENABLE_LINK:
+	case P7IOC_PHB_STATE_SPUP_FRESET_DEASSERT_DELAY:
 		/* Restore link control */
 		reg = in_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL);
 		reg &= ~PHB_PCIE_DLP_TCTX_DISABLE;
 		out_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL, reg);
 		PHBDBG(p, "Slot power on: enable link training\n");
 
-		p->state = P7IOC_PHB_STATE_SPUP_HRESET_WAIT_LINK;
-		p->retries = 20;
+		p->state = P7IOC_PHB_STATE_SPUP_FRESET_WAIT_LINK;
+		p->retries = 100;
 		return p7ioc_set_sm_timeout(p, msecs_to_tb(10));
-	case P7IOC_PHB_STATE_SPUP_HRESET_WAIT_LINK:
+	case P7IOC_PHB_STATE_SPUP_FRESET_WAIT_LINK:
 		reg = in_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL);
 		if (reg & PHB_PCIE_DLP_TC_DL_LINKACT) {
 			/* Restore UTL interrupts */
@@ -481,6 +489,16 @@ static int64_t p7ioc_sm_slot_power_on(struct p7ioc_phb *p)
 			reg32 &= ~PCIECAP_AER_CE_RECVR_ERR;
 			p7ioc_pcicfg_write32(&p->phb, 0,
 				p->aercap + PCIECAP_AER_CE_MASK, reg32);
+
+			/* Clear and Unmask CI port and PHB errors */
+			out_be64(p->ioc->regs + P7IOC_CIn_LEM_FIR(ci_idx),
+				 0x0ul);
+			out_be64(p->regs + PHB_LEM_FIR_ACCUM,
+				 0x0ul);
+			out_be64(p->ioc->regs + P7IOC_CIn_LEM_ERR_MASK_AND(ci_idx),
+				 0x0ul);
+			out_be64(p->regs + PHB_LEM_ERROR_MASK,
+				 0x1249a1147f500f2cul);
 
 			p->state = P7IOC_PHB_STATE_FUNCTIONAL;
 			PHBDBG(p, "Slot power on: link up !\n");
@@ -650,7 +668,7 @@ static int64_t p7ioc_sm_hot_reset(struct p7ioc_phb *p)
 		PHBDBG(p, "Slot hot reset: enable link training\n");
 
 		p->state = P7IOC_PHB_STATE_HRESET_WAIT_LINK;
-		p->retries = 20;
+		p->retries = 100;
 		return p7ioc_set_sm_timeout(p, msecs_to_tb(10));
 	case P7IOC_PHB_STATE_HRESET_WAIT_LINK:
 		reg = in_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL);
@@ -789,7 +807,7 @@ static int64_t p7ioc_sm_freset(struct p7ioc_phb *p)
 		PHBDBG(p, "Slot freset: enable link training\n");
 
 		p->state = P7IOC_PHB_STATE_FRESET_WAIT_LINK;
-		p->retries = 20;
+		p->retries = 100;
 		return p7ioc_set_sm_timeout(p, msecs_to_tb(10));
 	case P7IOC_PHB_STATE_FRESET_WAIT_LINK:
 		reg = in_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL);
@@ -880,11 +898,10 @@ static int64_t p7ioc_poll(struct phb *phb)
 	switch(p->state) {
 	case P7IOC_PHB_STATE_SPUP_STABILIZE_DELAY:
 	case P7IOC_PHB_STATE_SPUP_SLOT_STATUS:
-	case P7IOC_PHB_STATE_SPUP_HRESET_DISABLE_LINK:
-	case P7IOC_PHB_STATE_SPUP_HRESET_ASSERT:
-	case P7IOC_PHB_STATE_SPUP_HRESET_DELAY:
-	case P7IOC_PHB_STATE_SPUP_HRESET_ENABLE_LINK:
-	case P7IOC_PHB_STATE_SPUP_HRESET_WAIT_LINK:
+	case P7IOC_PHB_STATE_SPUP_FRESET_DISABLE_LINK:
+	case P7IOC_PHB_STATE_SPUP_FRESET_ASSERT_DELAY:
+	case P7IOC_PHB_STATE_SPUP_FRESET_DEASSERT_DELAY:
+	case P7IOC_PHB_STATE_SPUP_FRESET_WAIT_LINK:
 		return p7ioc_sm_slot_power_on(p);
 	case P7IOC_PHB_STATE_SPDOWN_STABILIZE_DELAY:
 	case P7IOC_PHB_STATE_SPDOWN_SLOT_STATUS:
