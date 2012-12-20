@@ -190,10 +190,6 @@ enum p7ioc_phb_state {
 	/* Slot Power up state machine */
 	P7IOC_PHB_STATE_SPUP_STABILIZE_DELAY,		/* Step 3 Delay 2s		*/
 	P7IOC_PHB_STATE_SPUP_SLOT_STATUS,		/* Step 4 waiting for status	*/
-	P7IOC_PHB_STATE_SPUP_FRESET_DISABLE_LINK,	/* Disable link training	*/
-	P7IOC_PHB_STATE_SPUP_FRESET_ASSERT_DELAY,	/* Fundamental reset assert	*/
-	P7IOC_PHB_STATE_SPUP_FRESET_DEASSERT_DELAY,	/* Fundamental reset deassert	*/
-	P7IOC_PHB_STATE_SPUP_FRESET_WAIT_LINK,		/* Step 9 Wait link training	*/
 
 	/* Slot Power down state machine */
 	P7IOC_PHB_STATE_SPDOWN_STABILIZE_DELAY,	/* Step 2 Delay 2s		*/

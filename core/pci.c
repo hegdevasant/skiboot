@@ -524,8 +524,8 @@ static void pci_init_slot(struct phb *phb)
 	}
 
 	/*
-	 * Power off/on the PHB, the PHB should be reset
-	 * in hot way while powering on.
+	 * Power on the PHB, the PHB should be reset in
+	 * fundamental way while powering on.
 	 */
 	rc = pci_reset_phb(phb);
 	if (rc)
