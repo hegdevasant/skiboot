@@ -460,21 +460,63 @@ static int64_t opal_pci_map_pe_dma_window_real(uint64_t phb_id,
 opal_call(OPAL_PCI_MAP_PE_DMA_WINDOW_REAL, opal_pci_map_pe_dma_window_real);
 
 static int64_t opal_pci_reset(uint64_t phb_id, uint8_t reset_scope,
-			      uint8_t assert_state)
+                              uint8_t assert_state)
 {
 	struct phb *phb = pci_get_phb(phb_id);
 	int64_t rc = OPAL_SUCCESS;
 
 	if (!phb)
 		return OPAL_PARAMETER;
+	if (!phb->ops)
+		return OPAL_UNSUPPORTED;
+	if (assert_state != OPAL_ASSERT_RESET &&
+	    assert_state != OPAL_DEASSERT_RESET)
+		return OPAL_PARAMETER;
+
 	phb->ops->lock(phb);
 
-	/*
-	 * We currently only handle IODA reset. The IODA tables
-	 * as well as the table caches will be cleared since the
-	 * hypervisor will figure them out again.
-	 */
 	switch(reset_scope) {
+	case OPAL_PHB_COMPLETE:
+		if (!phb->ops->complete_reset) {
+			rc = OPAL_UNSUPPORTED;
+			break;
+		}
+
+		rc = phb->ops->complete_reset(phb, assert_state);
+		if (rc < 0)
+			prerror("PHB#%d: Failure on complete reset, rc=%lld\n",
+				phb->opal_id, rc);
+		break;
+	case OPAL_PCI_FUNDAMENTAL_RESET:
+		if (!phb->ops->fundamental_reset) {
+			rc = OPAL_UNSUPPORTED;
+			break;
+		}
+
+		/* We need do nothing on deassert time */
+		if (assert_state != OPAL_ASSERT_RESET)
+			break;
+
+		rc = phb->ops->fundamental_reset(phb);
+		if (rc < 0)
+			prerror("PHB#%d: Failure on fundamental reset, rc=%lld\n",
+				phb->opal_id, rc);
+		break;
+	case OPAL_PCI_HOT_RESET:
+		if (!phb->ops->hot_reset) {
+			rc = OPAL_UNSUPPORTED;
+			break;
+		}
+
+		/* We need do nothing on deassert time */
+		if (assert_state != OPAL_ASSERT_RESET)
+			break;
+
+		rc = phb->ops->hot_reset(phb);
+		if (rc < 0)
+			prerror("PHB#%d: Failure on hot reset, rc=%lld\n",
+				phb->opal_id, rc);
+		break;
 	case OPAL_PCI_IODA_TABLE_RESET:
 		if (assert_state != OPAL_ASSERT_RESET)
 			break;
@@ -487,7 +529,7 @@ static int64_t opal_pci_reset(uint64_t phb_id, uint8_t reset_scope,
 	phb->ops->unlock(phb);
 	pci_put_phb(phb);
 
-	return rc;
+	return (rc > 0) ? tb_to_msecs(rc) : rc;
 }
 opal_call(OPAL_PCI_RESET, opal_pci_reset);
 

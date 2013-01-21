@@ -248,18 +248,14 @@ struct phb_ops {
 	 */
 	int64_t (*slot_power_on)(struct phb *phb);
 
-	/* hot_reset - Hot Reset sequence
-	 *
-	 * Asynchronous function, returns a positive delay
-	 * or a negative error code.
-	 *
-	 * Error codes (on completion, possibly via poll)
-	 *
-	 *  - OPAL_BUSY     : Another async op in progress
-	 *  - OPAL_HARDWARE : Any error including timeout waiting for link
-	 *  - OPAL_CLOSED   : No device detected in the slot
-	 */
+	/* PHB power off and on after complete init */
+	int64_t (*complete_reset)(struct phb *phb, uint8_t assert);
+
+	/* hot_reset - Hot Reset sequence */
 	int64_t (*hot_reset)(struct phb *phb);
+
+	/* Fundamental reset */
+	int64_t (*fundamental_reset)(struct phb *phb);
 
 	/* poll - Poll and advance asynchronous operations
 	 *

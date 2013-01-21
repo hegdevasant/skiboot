@@ -178,7 +178,8 @@ static void pci_check_clear_freeze(struct phb *phb)
 	if (rc)
 		return;
 	/* We can't handle anything worse than an ER here */
-	if (sev > OPAL_EEH_SEV_DEV_ER)
+	if (sev > OPAL_EEH_SEV_NO_ERROR &&
+	    sev < OPAL_EEH_SEV_PE_ER)
 		return;
 	if (freeze_state == OPAL_EEH_STOPPED_NOT_FROZEN)
 		return;
@@ -466,6 +467,49 @@ static uint8_t pci_scan(struct phb *phb, uint8_t bus, uint8_t max_bus,
 	return max_sub;
 }
 
+/*
+ * The power state would be checked. If the power has
+ * been on, we will issue fandamental reset. Otherwise,
+ * we will power it on before issuing fundamental reset.
+ */
+static int64_t pci_reset_phb(struct phb *phb)
+{
+	const char *desc;
+	int64_t rc;
+
+	rc = phb->ops->power_state(phb);
+	if (rc < 0) {
+		printf("PHB%d: Failed to get power state, rc=%lld\n",
+			phb->opal_id, rc);
+		return rc;
+	}
+
+	if (rc == OPAL_SHPC_POWER_ON) {
+		desc = "fundamental reset";
+		rc = phb->ops->fundamental_reset(phb);
+	} else {
+		desc = "power on";
+		rc = phb->ops->slot_power_on(phb);
+	}
+
+	if (rc < 0) {
+		printf("PHB%d: Failed to %s, rc=%lld\n",
+			phb->opal_id, desc, rc);
+		return rc;
+	}
+
+	/* Wait the internal state machine */
+	while (rc > 0) {
+		time_wait(rc);
+		rc = phb->ops->poll(phb);
+	}
+	if (rc < 0)
+		printf("PHB%d: Failed to %s, rc=%lld\n",
+			phb->opal_id, desc, rc);
+
+        return rc;
+}
+
 static void pci_init_slot(struct phb *phb)
 {
 	int64_t rc;
@@ -479,22 +523,13 @@ static void pci_init_slot(struct phb *phb)
 		return;
 	}
 
-	/* Power it up */
-	rc = phb->ops->slot_power_on(phb);
-	if (rc < 0) {
-		printf("PHB%d: Slot power on failed, rc=%lld\n",
-		       phb->opal_id, rc);
+	/*
+	 * Power on the PHB, the PHB should be reset in
+	 * fundamental way while powering on.
+	 */
+	rc = pci_reset_phb(phb);
+	if (rc)
 		return;
-	}
-	while(rc > 0) {
-		time_wait(rc);
-		rc = phb->ops->poll(phb);
-	}
-	if (rc < 0) {
-		printf("PHB%d: Slot power on failed, rc=%lld\n",
-		       phb->opal_id, rc);
-		return;
-	}
 
 	/* It's up, print some things */
 	rc = phb->ops->link_state(phb);
@@ -505,8 +540,8 @@ static void pci_init_slot(struct phb *phb)
 	}
 	if (phb->phb_type >= phb_type_pcie_v1)
 		printf("PHB%d: Link up at x%lld width\n", phb->opal_id, rc);
-	printf("PHB%d: Scanning...\n", phb->opal_id);
 
+	printf("PHB%d: Scanning...\n", phb->opal_id);
 	pci_scan(phb, 0, 0xff, &phb->devices, NULL);
 }
 

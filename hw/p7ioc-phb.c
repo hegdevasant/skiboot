@@ -260,6 +260,155 @@ static int64_t p7ioc_link_state(struct phb *phb)
 	return GETFIELD(PCICAP_EXP_LSTAT_WIDTH, lstat);
 }
 
+static int64_t p7ioc_sm_freset(struct p7ioc_phb *p)
+{
+	uint64_t reg;
+	uint32_t cfg32;
+	uint64_t ci_idx = p->index + 2;
+
+	switch(p->state) {
+	case P7IOC_PHB_STATE_FUNCTIONAL:
+		/* If the slot isn't present, we needn't do it */
+		reg = in_be64(p->regs + PHB_PCIE_SLOTCTL2);
+		if (!(reg & PHB_PCIE_SLOTCTL2_PRSTN_STAT)) {
+			PHBDBG(p, "Slot freset: no device\n");
+			return OPAL_CLOSED;
+		}
+
+		/* Mask PCIE port interrupts and AER receiver error */
+		out_be64(p->regs + UTL_PCIE_PORT_IRQ_EN, 0x7E00000000000000);
+		p7ioc_pcicfg_read32(&p->phb, 0,
+			p->aercap + PCIECAP_AER_CE_MASK, &cfg32);
+		cfg32 |= PCIECAP_AER_CE_RECVR_ERR;
+		p7ioc_pcicfg_write32(&p->phb, 0,
+			p->aercap + PCIECAP_AER_CE_MASK, cfg32);
+
+		/* Mask CI port error and clear it */
+		out_be64(p->ioc->regs + P7IOC_CIn_LEM_ERR_MASK(ci_idx),
+			 0xa4f4000000000000ul);
+		out_be64(p->regs + PHB_LEM_ERROR_MASK,
+			 0xadb650c9808dd051ul);
+		out_be64(p->ioc->regs + P7IOC_CIn_LEM_FIR(ci_idx),
+			 0x0ul);
+
+		/* Disable link to avoid training issues */
+		reg = in_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL);
+		reg |= PHB_PCIE_DLP_TCTX_DISABLE;
+		out_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL, reg);
+		PHBDBG(p, "Slot freset: disable link training\n");
+
+		p->state = P7IOC_PHB_STATE_FRESET_DISABLE_LINK;
+		p->retries = 12;
+		return p7ioc_set_sm_timeout(p, msecs_to_tb(10));
+	case P7IOC_PHB_STATE_FRESET_DISABLE_LINK:
+		reg = in_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL);
+		if (reg & PHB_PCIE_DLP_TCRX_DISABLED) {
+			/* Turn on freset */
+			reg = in_be64(p->regs + PHB_RESET);
+			reg &= ~0x2000000000000000ul;
+			out_be64(p->regs + PHB_RESET, reg);
+			PHBDBG(p, "Slot freset: assert\n");
+
+			p->state = P7IOC_PHB_STATE_FRESET_ASSERT_DELAY;
+			return p7ioc_set_sm_timeout(p, secs_to_tb(1));
+		}
+
+		if (p->retries-- == 0) {
+			PHBDBG(p, "Slot freset: timeout to disable link training\n");
+			goto error;
+		}
+
+		return p7ioc_set_sm_timeout(p, msecs_to_tb(10));
+	case P7IOC_PHB_STATE_FRESET_ASSERT_DELAY:
+		/* Turn off freset */
+		reg = in_be64(p->regs + PHB_RESET);
+		reg |= 0x2000000000000000ul;
+		out_be64(p->regs + PHB_RESET, reg);
+		PHBDBG(p, "Slot freset: deassert\n");
+
+		p->state = P7IOC_PHB_STATE_FRESET_DEASSERT_DELAY;
+		return p7ioc_set_sm_timeout(p, msecs_to_tb(200));
+	case P7IOC_PHB_STATE_FRESET_DEASSERT_DELAY:
+		/* Restore link control */
+		reg = in_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL);
+		reg &= ~PHB_PCIE_DLP_TCTX_DISABLE;
+		out_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL, reg);
+		PHBDBG(p, "Slot freset: enable link training\n");
+
+		p->state = P7IOC_PHB_STATE_FRESET_WAIT_LINK;
+		p->retries = 100;
+		return p7ioc_set_sm_timeout(p, msecs_to_tb(10));
+	case P7IOC_PHB_STATE_FRESET_WAIT_LINK:
+		reg = in_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL);
+		if (reg & PHB_PCIE_DLP_TC_DL_LINKACT) {
+			/*
+			 * Clear spurrious errors and enable PCIE port
+			 * interrupts
+			 */
+			out_be64(p->regs + UTL_PCIE_PORT_STATUS,
+				 0x00E0000000000000);
+                        out_be64(p->regs + UTL_PCIE_PORT_IRQ_EN,
+				 0xFE65000000000000);
+
+			/* Clear AER receiver error status */
+			p7ioc_pcicfg_write32(&p->phb, 0,
+				p->aercap + PCIECAP_AER_CE_STATUS,
+				PCIECAP_AER_CE_RECVR_ERR);
+			/* Unmask receiver error status in AER */
+			p7ioc_pcicfg_read32(&p->phb, 0,
+				p->aercap + PCIECAP_AER_CE_MASK, &cfg32);
+			cfg32 &= ~PCIECAP_AER_CE_RECVR_ERR;
+			p7ioc_pcicfg_write32(&p->phb, 0,
+				p->aercap + PCIECAP_AER_CE_MASK, cfg32);
+			/* Clear and Unmask CI port and PHB errors */
+			out_be64(p->ioc->regs + P7IOC_CIn_LEM_FIR(ci_idx),
+				 0x0ul);
+			out_be64(p->regs + PHB_LEM_FIR_ACCUM,
+				 0x0ul);
+			out_be64(p->ioc->regs + P7IOC_CIn_LEM_ERR_MASK_AND(ci_idx),
+				 0x0ul);
+			out_be64(p->regs + PHB_LEM_ERROR_MASK,
+				 0x1249a1147f500f2cul);
+			PHBDBG(p, "Slot freset: link up!\n");
+
+			p->state = P7IOC_PHB_STATE_FUNCTIONAL;
+			return OPAL_SUCCESS;
+		}
+
+		if (p->retries-- == 0) {
+			PHBDBG(p, "Slot freset: timeout for link up\n");
+			goto error;
+		}
+
+		return p7ioc_set_sm_timeout(p, msecs_to_tb(10));
+	default:
+		break;
+	}
+
+error:
+	p->state = P7IOC_PHB_STATE_FUNCTIONAL;
+	return OPAL_HARDWARE;
+}
+
+static int64_t p7ioc_freset(struct phb *phb)
+{
+	struct p7ioc_phb *p = phb_to_p7ioc_phb(phb);
+	uint64_t now = mftb();
+
+	if (p->state == P7IOC_PHB_STATE_FUNCTIONAL)
+		p7ioc_sm_freset(p);
+
+	/* Check timer */
+	if (p->delay_tgt_tb &&
+	    tb_compare(now, p->delay_tgt_tb) == TB_ABEFOREB)
+		return p->delay_tgt_tb - now;
+
+	/* Expired (or not armed), clear it */
+	p->delay_tgt_tb = 0;
+
+	return p7ioc_sm_freset(p);
+}
+
 static int64_t p7ioc_power_state(struct phb *phb)
 {
 	struct p7ioc_phb *p = phb_to_p7ioc_phb(phb);
@@ -273,16 +422,86 @@ static int64_t p7ioc_power_state(struct phb *phb)
 	return OPAL_SHPC_POWER_OFF;
 }
 
-/* p7ioc_sm_slot_power_off - Slot power off state machine
- */
 static int64_t p7ioc_sm_slot_power_off(struct p7ioc_phb *p)
 {
+	uint64_t reg;
+
 	switch(p->state) {
+	case P7IOC_PHB_STATE_FUNCTIONAL:
+		/*
+		 * Check the presence and power status. If be not
+		 * be present or power down, we stop here.
+		 */
+		reg = in_be64(p->regs + PHB_PCIE_SLOTCTL2);
+		if (!(reg & PHB_PCIE_SLOTCTL2_PRSTN_STAT)) {
+			PHBDBG(p, "Slot power off: no device\n");
+			return OPAL_CLOSED;
+		}
+		reg = in_be64(p->regs + PHB_PCIE_SLOTCTL2);
+		if (!(reg & PHB_PCIE_SLOTCTL2_PWR_EN_STAT)) {
+			PHBDBG(p, "Slot power off: already off\n");
+			p->state = P7IOC_PHB_STATE_FUNCTIONAL;
+			return OPAL_SUCCESS;
+		}
+
+		/*
+		 * Mask PCIE port interrupt and turn power off
+		 *
+		 * We have to set bit 0 and clear it explicitly on PHB
+		 * hotplug override register when doing power-off on the
+		 * PHB slot. Otherwise, it won't take effect. That's the
+		 * similar thing as we did for power-on.
+		 */
+		out_be64(p->regs + UTL_PCIE_PORT_IRQ_EN, 0x7e00000000000000);
+		reg = in_be64(p->regs + PHB_HOTPLUG_OVERRIDE);
+		reg &= ~(0x8c00000000000000ul);
+		reg |= 0x8400000000000000ul;
+		out_be64(p->regs + PHB_HOTPLUG_OVERRIDE, reg);
+		reg &= ~(0x8c00000000000000ul);
+		reg |= 0x0c00000000000000ul;
+		out_be64(p->regs + PHB_HOTPLUG_OVERRIDE, reg);
+		PHBDBG(p, "Slot power off: powering off...\n");
+
+		p->state = P7IOC_PHB_STATE_SPDOWN_STABILIZE_DELAY;
+		return p7ioc_set_sm_timeout(p, secs_to_tb(2));
+	case P7IOC_PHB_STATE_SPDOWN_STABILIZE_DELAY:
+		/*
+		 * The link should be stablizied after 2 seconds.
+		 * We still need poll registers to make sure the
+		 * power is really down every 1ms until limited
+		 * 1000 times.
+		 */
+		p->retries = 1000;
+		p->state = P7IOC_PHB_STATE_SPDOWN_SLOT_STATUS;
+		PHBDBG(p, "Slot power off: waiting for power off\n");
+	case P7IOC_PHB_STATE_SPDOWN_SLOT_STATUS:
+		reg = in_be64(p->regs + PHB_PCIE_SLOTCTL2);
+		if (!(reg & PHB_PCIE_SLOTCTL2_PWR_EN_STAT)) {
+			/*
+			 * We completed the task. Clear link errors
+			 * and restore PCIE port interrupts.
+			 */
+			out_be64(p->regs + UTL_PCIE_PORT_STATUS,
+				0x00E0000000000000ul);
+			out_be64(p->regs + UTL_PCIE_PORT_IRQ_EN,
+				0xFE65000000000000ul);
+
+			PHBDBG(p, "Slot power off: power off completely\n");
+			p->state = P7IOC_PHB_STATE_FUNCTIONAL;
+			return OPAL_SUCCESS;
+		}
+
+		if (p->retries-- == 0) {
+			PHBERR(p, "Timeout powering off\n");
+			goto error;
+		}
+		return p7ioc_set_sm_timeout(p, msecs_to_tb(1));
 	default:
 		break;
 	}
 
-	/* Unknown state, hardware error ? */
+error:
+	p->state = P7IOC_PHB_STATE_FUNCTIONAL;
 	return OPAL_HARDWARE;
 }
 
@@ -301,7 +520,7 @@ static int64_t p7ioc_sm_slot_power_on(struct p7ioc_phb *p)
 {
 	uint64_t reg;
 	uint32_t reg32;
-	uint16_t brctl;
+	uint64_t ci_idx = p->index + 2;
 
 	switch(p->state) {
 	case P7IOC_PHB_STATE_FUNCTIONAL:
@@ -339,80 +558,31 @@ static int64_t p7ioc_sm_slot_power_on(struct p7ioc_phb *p)
 		}
 		/* Power is already on */
 	power_ok:
-		/* Ensure hot reset is deasserted */
-		p7ioc_pcicfg_read16(&p->phb, 0, PCI_CFG_BRCTL, &brctl);
-		brctl &= ~PCI_CFG_BRCTL_SECONDARY_RESET;
-		p7ioc_pcicfg_write16(&p->phb, 0, PCI_CFG_BRCTL, brctl);
-		p->retries = 40;
-		p->state = P7IOC_PHB_STATE_SPUP_WAIT_LINK;
-		PHBDBG(p, "Slot power on: waiting for link\n");
-		/* Fall through */
-	case P7IOC_PHB_STATE_SPUP_WAIT_LINK:
-		reg = in_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL);
-		/* Link is up ? Complete */
-
-		/* XXX TODO: Check link width problem and if present
-		 * go straight to the host reset code path.
-		 */
-		if (reg & PHB_PCIE_DLP_TC_DL_LINKACT) {
-			/* Restore UTL interrupts */
-			out_be64(p->regs + UTL_PCIE_PORT_IRQ_EN,
-				 0xfe65000000000000);
-			p->state = P7IOC_PHB_STATE_FUNCTIONAL;
-			PHBDBG(p, "Slot power on: up !\n");
-			return OPAL_SUCCESS;
-		}
-		/* Retries */
-		p->retries--;
-		if (p->retries == 0) {
-			/* XXX Improve logging */
-			PHBERR(p,"Slot power on: Timeout waiting for link\n");
-			goto error;
-		}
-		/* Check time elapsed */
-		if ((p->retries % 20) != 0)
-			return p7ioc_set_sm_timeout(p, msecs_to_tb(10));
-
-		/* >200ms, time to try a hot reset after clearing the
-		 * link status bit (doco says to do so)
-		 */
-		out_be64(p->regs + UTL_PCIE_PORT_STATUS, 0x0080000000000000);
-
-		/* Mask receiver error status in AER */
+		/* Mask AER receiver error */
 		p7ioc_pcicfg_read32(&p->phb, 0,
-				    p->aercap + PCIECAP_AER_CE_MASK, &reg32);
+			p->aercap + PCIECAP_AER_CE_MASK, &reg32);
 		reg32 |= PCIECAP_AER_CE_RECVR_ERR;
 		p7ioc_pcicfg_write32(&p->phb, 0,
-				     p->aercap + PCIECAP_AER_CE_MASK, reg32);
+			p->aercap + PCIECAP_AER_CE_MASK, reg32);
 
-		/* Turn on host reset */
-		p7ioc_pcicfg_read16(&p->phb, 0, PCI_CFG_BRCTL, &brctl);
-		brctl |= PCI_CFG_BRCTL_SECONDARY_RESET;
-		p7ioc_pcicfg_write16(&p->phb, 0, PCI_CFG_BRCTL, brctl);
-		p->state = P7IOC_PHB_STATE_SPUP_HOT_RESET_DELAY;
-		PHBDBG(p, "Slot power on: soft reset...\n");
-		return p7ioc_set_sm_timeout(p, secs_to_tb(1));
-	case P7IOC_PHB_STATE_SPUP_HOT_RESET_DELAY:
-		/* Turn off host reset */
-		p7ioc_pcicfg_read16(&p->phb, 0, PCI_CFG_BRCTL, &brctl);
-		brctl &= ~PCI_CFG_BRCTL_SECONDARY_RESET;
-		p7ioc_pcicfg_write16(&p->phb, 0, PCI_CFG_BRCTL, brctl);
-		/* Clear spurrious errors */
-		out_be64(p->regs + UTL_PCIE_PORT_STATUS, 0x00e0000000000000);
-		p7ioc_pcicfg_write32(&p->phb, 0,
-				     p->aercap + PCIECAP_AER_CE_STATUS,
-				     PCIECAP_AER_CE_RECVR_ERR);
-		/* Unmask receiver error status in AER */
-		p7ioc_pcicfg_read32(&p->phb, 0,
-				    p->aercap + PCIECAP_AER_CE_MASK, &reg32);
-		reg32 &= ~PCIECAP_AER_CE_RECVR_ERR;
-		p7ioc_pcicfg_write32(&p->phb, 0,
-				     p->aercap + PCIECAP_AER_CE_MASK, reg32);
-		/* Go back to waiting for link */
-		p->state = P7IOC_PHB_STATE_SPUP_WAIT_LINK;
-		PHBDBG(p, "Slot power on: waiting for link (2)\n");
+		/* Mask CI port error and clear it */
+		out_be64(p->ioc->regs + P7IOC_CIn_LEM_ERR_MASK(ci_idx),
+			 0xa4f4000000000000ul);
+		out_be64(p->regs + PHB_LEM_ERROR_MASK,
+			 0xadb650c9808dd051ul);
+		out_be64(p->ioc->regs + P7IOC_CIn_LEM_FIR(ci_idx),
+			 0x0ul);
+
+		/* Disable link to avoid training issues */
+		reg = in_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL);
+		reg |= PHB_PCIE_DLP_TCTX_DISABLE;
+		out_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL, reg);
+		PHBDBG(p, "Slot power on: disable link training\n");
+
+		/* Switch to state machine of fundamental reset */
+                p->state = P7IOC_PHB_STATE_FRESET_DISABLE_LINK;
+		p->retries = 12;
 		return p7ioc_set_sm_timeout(p, msecs_to_tb(10));
-
 	case P7IOC_PHB_STATE_SPUP_STABILIZE_DELAY:
 		/* Come here after the 2s delay after power up */
 		p->retries = 1000;
@@ -454,25 +624,186 @@ static int64_t p7ioc_slot_power_on(struct phb *phb)
 	return p7ioc_sm_slot_power_on(p);
 }
 
+static int64_t p7ioc_complete_reset(struct phb *phb, uint8_t assert)
+{
+	struct p7ioc_phb *p = phb_to_p7ioc_phb(phb);
+	uint64_t now = mftb();
+
+	if (assert == OPAL_ASSERT_RESET) {
+		if (p->state == P7IOC_PHB_STATE_FUNCTIONAL ||
+		    p->state == P7IOC_PHB_STATE_FENCED) {
+			p7ioc_phb_reset(phb);
+			return p7ioc_sm_slot_power_off(p);
+		} else {
+			/* Check timer */
+			if (p->delay_tgt_tb &&
+			    tb_compare(now, p->delay_tgt_tb) == TB_ABEFOREB)
+				return p->delay_tgt_tb - now;
+
+			/* Expired (or not armed), clear it */
+			p->delay_tgt_tb = 0;
+
+			return p7ioc_sm_slot_power_off(p);
+		}
+	} else {
+		if (p->state == P7IOC_PHB_STATE_FUNCTIONAL) {
+			return p7ioc_sm_slot_power_on(p);
+		} else {
+			/* Check timer */
+                        if (p->delay_tgt_tb &&
+                            tb_compare(now, p->delay_tgt_tb) == TB_ABEFOREB)
+                                return p->delay_tgt_tb - now;
+
+                        /* Expired (or not armed), clear it */
+                        p->delay_tgt_tb = 0;
+
+			if (p->state == P7IOC_PHB_STATE_SPUP_STABILIZE_DELAY ||
+			    p->state == P7IOC_PHB_STATE_SPUP_SLOT_STATUS)
+				return p7ioc_sm_slot_power_on(p);
+			else
+				return p7ioc_sm_freset(p);
+		}
+	}
+
+	/* We shouldn't run to here */
+	return OPAL_PARAMETER;
+}
+
+/*
+ * We have to mask errors prior to disabling link training.
+ * Otherwise it would cause infinite frozen PEs. Also, we
+ * should have some delay after enabling link training. It's
+ * the conclusion from experiment and no document mentioned
+ * it.
+ */
 static int64_t p7ioc_sm_hot_reset(struct p7ioc_phb *p)
 {
+	uint64_t reg;
+	uint32_t cfg32;
+	uint16_t brctl;
+
 	switch(p->state) {
+	case P7IOC_PHB_STATE_FUNCTIONAL:
+		/* If the slot isn't present, we needn't do it */
+		reg = in_be64(p->regs + PHB_PCIE_SLOTCTL2);
+		if (!(reg & PHB_PCIE_SLOTCTL2_PRSTN_STAT)) {
+			PHBDBG(p, "Slot hot reset: no device\n");
+			return OPAL_CLOSED;
+		}
+
+		/* Mask PCIE port interrupts and AER receiver error */
+		out_be64(p->regs + UTL_PCIE_PORT_IRQ_EN, 0x7E00000000000000);
+		p7ioc_pcicfg_read32(&p->phb, 0,
+			p->aercap + PCIECAP_AER_CE_MASK, &cfg32);
+		cfg32 |= PCIECAP_AER_CE_RECVR_ERR;
+		p7ioc_pcicfg_write32(&p->phb, 0,
+			p->aercap + PCIECAP_AER_CE_MASK, cfg32);
+
+		/* Disable link to avoid training issues */
+		reg = in_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL);
+		reg |= PHB_PCIE_DLP_TCTX_DISABLE;
+		out_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL, reg);
+		PHBDBG(p, "Slot hot reset: disable link training\n");
+
+		p->state = P7IOC_PHB_STATE_HRESET_DISABLE_LINK;
+		p->retries = 12;
+		return p7ioc_set_sm_timeout(p, msecs_to_tb(10));
+	case P7IOC_PHB_STATE_HRESET_DISABLE_LINK:
+		reg = in_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL);
+		if (reg & PHB_PCIE_DLP_TCRX_DISABLED) {
+			/* Turn on host reset */
+			p7ioc_pcicfg_read16(&p->phb, 0, PCI_CFG_BRCTL, &brctl);
+			brctl |= PCI_CFG_BRCTL_SECONDARY_RESET;
+			p7ioc_pcicfg_write16(&p->phb, 0, PCI_CFG_BRCTL, brctl);
+			PHBDBG(p, "Slot hot reset: assert reset\n");
+
+			p->state = P7IOC_PHB_STATE_HRESET_DELAY;
+			return p7ioc_set_sm_timeout(p, secs_to_tb(1));
+		}
+
+		if (p->retries-- == 0) {
+			PHBDBG(p, "Slot hot reset: timeout to disable link training\n");
+			return OPAL_HARDWARE;
+		}
+
+		return p7ioc_set_sm_timeout(p, msecs_to_tb(10));
+	case P7IOC_PHB_STATE_HRESET_DELAY:
+		/* Turn off host reset */
+		p7ioc_pcicfg_read16(&p->phb, 0, PCI_CFG_BRCTL, &brctl);
+		brctl &= ~PCI_CFG_BRCTL_SECONDARY_RESET;
+		p7ioc_pcicfg_write16(&p->phb, 0, PCI_CFG_BRCTL, brctl);
+		PHBDBG(p, "Slot hot reset: deassert reset\n");
+
+		p->state = P7IOC_PHB_STATE_HRESET_ENABLE_LINK;
+		return p7ioc_set_sm_timeout(p, msecs_to_tb(200));
+	case P7IOC_PHB_STATE_HRESET_ENABLE_LINK:
+		/* Restore link control */
+		reg = in_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL);
+		reg &= ~PHB_PCIE_DLP_TCTX_DISABLE;
+		out_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL, reg);
+		PHBDBG(p, "Slot hot reset: enable link training\n");
+
+		p->state = P7IOC_PHB_STATE_HRESET_WAIT_LINK;
+		p->retries = 100;
+		return p7ioc_set_sm_timeout(p, msecs_to_tb(10));
+	case P7IOC_PHB_STATE_HRESET_WAIT_LINK:
+		reg = in_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL);
+                if (reg & PHB_PCIE_DLP_TC_DL_LINKACT) {
+			/*
+			 * Clear spurrious errors and enable PCIE port
+			 * interrupts
+			 */
+			out_be64(p->regs + UTL_PCIE_PORT_STATUS, 0x00E0000000000000);
+			out_be64(p->regs + UTL_PCIE_PORT_IRQ_EN, 0xFE65000000000000);
+
+			/* Clear AER receiver error status */
+			p7ioc_pcicfg_write32(&p->phb, 0,
+				p->aercap + PCIECAP_AER_CE_STATUS,
+				PCIECAP_AER_CE_RECVR_ERR);
+			/* Unmask receiver error status in AER */
+			p7ioc_pcicfg_read32(&p->phb, 0,
+				p->aercap + PCIECAP_AER_CE_MASK, &cfg32);
+			cfg32 &= ~PCIECAP_AER_CE_RECVR_ERR;
+			p7ioc_pcicfg_write32(&p->phb, 0,
+				p->aercap + PCIECAP_AER_CE_MASK, cfg32);
+			PHBDBG(p, "Slot hot reset: link up!\n");
+
+			p->state = P7IOC_PHB_STATE_FUNCTIONAL;
+			return OPAL_SUCCESS;
+		}
+
+		if (p->retries-- == 0) {
+			PHBDBG(p, "Slot hot reset: timeout for link up\n");
+			goto error;
+		}
+
+		return p7ioc_set_sm_timeout(p, msecs_to_tb(10));
 	default:
 		break;
 	}
 
 	/* Unknown state, hardware error ? */
+error:
+	p->state = P7IOC_PHB_STATE_FUNCTIONAL;
 	return OPAL_HARDWARE;
 }
 
 static int64_t p7ioc_hot_reset(struct phb *phb)
 {
 	struct p7ioc_phb *p = phb_to_p7ioc_phb(phb);
+	uint64_t now = mftb();
 
-	if (p->state != P7IOC_PHB_STATE_FUNCTIONAL)
-		return OPAL_BUSY;
+	if (p->state == P7IOC_PHB_STATE_FUNCTIONAL)
+		p7ioc_sm_hot_reset(p);
 
-	/* run state machine */
+	/* Check timer */
+	if (p->delay_tgt_tb &&
+	    tb_compare(now, p->delay_tgt_tb) == TB_ABEFOREB)
+		return p->delay_tgt_tb - now;
+
+	/* Expired (or not armed), clear it */
+	p->delay_tgt_tb = 0;
+
 	return p7ioc_sm_hot_reset(p);
 }
 
@@ -496,17 +827,25 @@ static int64_t p7ioc_poll(struct phb *phb)
 	switch(p->state) {
 	case P7IOC_PHB_STATE_SPUP_STABILIZE_DELAY:
 	case P7IOC_PHB_STATE_SPUP_SLOT_STATUS:
-	case P7IOC_PHB_STATE_SPUP_WAIT_LINK:
-	case P7IOC_PHB_STATE_SPUP_HOT_RESET_DELAY:
 		return p7ioc_sm_slot_power_on(p);
 	case P7IOC_PHB_STATE_SPDOWN_STABILIZE_DELAY:
 	case P7IOC_PHB_STATE_SPDOWN_SLOT_STATUS:
 		return p7ioc_sm_slot_power_off(p);
+	case P7IOC_PHB_STATE_FRESET_DISABLE_LINK:
+	case P7IOC_PHB_STATE_FRESET_ASSERT_DELAY:
+	case P7IOC_PHB_STATE_FRESET_DEASSERT_DELAY:
+	case P7IOC_PHB_STATE_FRESET_WAIT_LINK:
+		return p7ioc_sm_freset(p);
+	case P7IOC_PHB_STATE_HRESET_DISABLE_LINK:
+	case P7IOC_PHB_STATE_HRESET_ASSERT:
 	case P7IOC_PHB_STATE_HRESET_DELAY:
+	case P7IOC_PHB_STATE_HRESET_ENABLE_LINK:
+	case P7IOC_PHB_STATE_HRESET_WAIT_LINK:
 		return p7ioc_sm_hot_reset(p);
 	default:
 		break;
 	}
+
 	/* Unknown state, could be a HW error */
 	return OPAL_HARDWARE;
 }
@@ -647,12 +986,12 @@ static int64_t p7ioc_eeh_freeze_status(struct phb *phb, uint64_t pe_number,
 
 	/* Defaults: not frozen */
 	*freeze_state = OPAL_EEH_STOPPED_NOT_FROZEN;
-	*pci_error_type = OPAL_EEH_PHB_NO_ERROR;
+	*pci_error_type = OPAL_EEH_NO_ERROR;
 
 	/* Check dead */
 	if (p->state == P7IOC_PHB_STATE_BROKEN) {
 		*freeze_state = OPAL_EEH_STOPPED_MMIO_DMA_FREEZE;
-		*pci_error_type = OPAL_EEH_PHB_FATAL;
+		*pci_error_type = OPAL_EEH_PHB_ERROR;
 		if (severity)
 			*severity = OPAL_EEH_SEV_PHB_DEAD;
 		goto bail;
@@ -662,7 +1001,7 @@ static int64_t p7ioc_eeh_freeze_status(struct phb *phb, uint64_t pe_number,
 	if (p7ioc_phb_fenced(p)) {
 		/* Should be OPAL_EEH_STOPPED_TEMP_UNAVAIL ? */
 		*freeze_state = OPAL_EEH_STOPPED_MMIO_DMA_FREEZE;
-		*pci_error_type = OPAL_EEH_PHB_FATAL;
+		*pci_error_type = OPAL_EEH_PHB_ERROR;
 		if (severity)
 			*severity = OPAL_EEH_SEV_PHB_FENCED;
 		p->state = P7IOC_PHB_STATE_FENCED;
@@ -678,9 +1017,9 @@ static int64_t p7ioc_eeh_freeze_status(struct phb *phb, uint64_t pe_number,
 		return OPAL_SUCCESS;
 
 	/* Indicate that we have an ER pending */
-	p->er_pending = true;
+	p7ioc_phb_set_err_pending(p, true);
 	if (severity)
-		*severity = OPAL_EEH_SEV_DEV_ER;
+		*severity = OPAL_EEH_SEV_PE_ER;
 
 	/* Read the PESTA & PESTB */
 	p7ioc_phb_ioda_sel(p, IODA_TBL_PESTA, pe_number, false);
@@ -696,9 +1035,9 @@ static int64_t p7ioc_eeh_freeze_status(struct phb *phb, uint64_t pe_number,
 
 	/* XXX Handle more causes */
 	if (pesta & IODA_PESTA_MMIO_CAUSE)
-		*pci_error_type = OPAL_EEH_PCI_MMIO_ERROR;
+		*pci_error_type = OPAL_EEH_PE_MMIO_ERROR;
 	else
-		*pci_error_type = OPAL_EEH_PCI_DMA_ERROR;
+		*pci_error_type = OPAL_EEH_PE_DMA_ERROR;
 
  bail:
 	if (phb_status)
@@ -711,14 +1050,23 @@ static int64_t p7ioc_eeh_next_error(struct phb *phb, uint64_t *first_frozen_pe,
 				    uint16_t *pci_error_type, uint16_t *severity)
 {
 	struct p7ioc_phb *p = phb_to_p7ioc_phb(phb);
-	uint64_t peev0, peev1;
-	unsigned int i;
+	struct p7ioc *ioc = p->ioc;
+	uint64_t fir, peev0, peev1;
+	uint32_t cfg32, i;
 
+	/* Check if there're pending errors on the IOC. */
+	if (p7ioc_err_pending(ioc) &&
+	    p7ioc_check_LEM(ioc, pci_error_type, severity))
+		return OPAL_SUCCESS;
+
+	/* Clear result */
+	*pci_error_type	= OPAL_EEH_NO_ERROR;
+        *severity	= OPAL_EEH_SEV_NO_ERROR;
 	*first_frozen_pe = (uint64_t)-1;
 
 	/* Check dead */
 	if (p->state == P7IOC_PHB_STATE_BROKEN) {
-		*pci_error_type = OPAL_EEH_PHB_FATAL;
+		*pci_error_type = OPAL_EEH_PHB_ERROR;
 		*severity = OPAL_EEH_SEV_PHB_DEAD;
 		return OPAL_SUCCESS;
 	}
@@ -726,73 +1074,113 @@ static int64_t p7ioc_eeh_next_error(struct phb *phb, uint64_t *first_frozen_pe,
 	/* Check fence */
 	if (p7ioc_phb_fenced(p)) {
 		/* Should be OPAL_EEH_STOPPED_TEMP_UNAVAIL ? */
-		*pci_error_type = OPAL_EEH_PHB_FATAL;
+		*pci_error_type = OPAL_EEH_PHB_ERROR;
 		*severity = OPAL_EEH_SEV_PHB_FENCED;
 		p->state = P7IOC_PHB_STATE_FENCED;
 		return OPAL_SUCCESS;
 	}
 
-	/* Check ERs */
-	p7ioc_phb_ioda_sel(p, IODA_TBL_PEEV, 0, true);
-	peev0 = in_be64(p->regs + PHB_IODA_DATA0);
-	peev1 = in_be64(p->regs + PHB_IODA_DATA0);
-	p->er_pending = (peev0 || peev1);
-	if (p->er_pending) {
-		*pci_error_type = OPAL_EEH_PCI_ANY_ER;
-		*severity = OPAL_EEH_SEV_DEV_ER;
-		/* XXX use cntlz */
-		for (i = 0 ; i < 64; i++) {
-			if (PPC_BIT(i) & peev1) {
-				*first_frozen_pe = i + 64;
-				break;
-			}
+	/*
+	 * If we don't have pending errors, which might be moved
+	 * from IOC to the PHB, then check if there has any frozen PEs.
+	 */
+	if (!p7ioc_phb_err_pending(p)) {
+		p7ioc_phb_ioda_sel(p, IODA_TBL_PEEV, 0, true);
+		peev0 = in_be64(p->regs + PHB_IODA_DATA0);
+		peev1 = in_be64(p->regs + PHB_IODA_DATA0);
+		if (peev0 || peev1) {
+			p->err.err_src   = P7IOC_ERR_SRC_PHB0 + p->index;
+			p->err.err_class = P7IOC_ERR_CLASS_ER;
+			p->err.err_bit   = 0;
+			p7ioc_phb_set_err_pending(p, true);
 		}
-		for (i = 0 ; i < 64; i++) {
-			if (PPC_BIT(i) & peev0) {
-				*first_frozen_pe = i;
-				break;
-			}
-		}
-		return OPAL_SUCCESS;
 	}
 
-	/* XXX Add INF */
+	/* Check the pending errors, which might come from IOC */
+	if (p7ioc_phb_err_pending(p)) {
+		/*
+		 * If the frozen PE is caused by malfunctional TLP, we
+		 * need reset the PHB. So convert ER to PHB-fatal error
+		 * for the case.
+		 */
+		if (p->err.err_class == P7IOC_ERR_CLASS_ER) {
+			fir = in_be64(p->regs_asb + PHB_LEM_FIR_ACCUM);
+			if (fir & PPC_BIT(60)) {
+				p7ioc_pcicfg_read32(&p->phb, 0,
+					p->aercap + PCIECAP_AER_UE_STATUS, &cfg32);
+				if (cfg32 & PCIECAP_AER_UE_MALFORMED_TLP)
+					p->err.err_class = P7IOC_ERR_CLASS_PHB;
+                        }
+                }
 
-	*pci_error_type = OPAL_EEH_PHB_NO_ERROR;
-	*severity = OPAL_EEH_SEV_NO_ERROR;
+		/*
+		 * Map P7IOC internal error class to that one OS can handle.
+		 * For P7IOC_ERR_CLASS_ER, we also need figure out the frozen
+		 * PE.
+		 */
+		switch (p->err.err_class) {
+		case P7IOC_ERR_CLASS_PHB:
+			*pci_error_type = OPAL_EEH_PHB_ERROR;
+			*severity = OPAL_EEH_SEV_PHB_FENCED;
+			break;
+		case P7IOC_ERR_CLASS_MAL:
+		case P7IOC_ERR_CLASS_INF:
+			*pci_error_type = OPAL_EEH_PHB_ERROR;
+			*severity = OPAL_EEH_SEV_INF;
+			break;
+		case P7IOC_ERR_CLASS_ER:
+			*pci_error_type = OPAL_EEH_PE_ERROR;
+			*severity = OPAL_EEH_SEV_PE_ER;
+			p7ioc_phb_ioda_sel(p, IODA_TBL_PEEV, 0, true);
+			peev0 = in_be64(p->regs + PHB_IODA_DATA0);
+			peev1 = in_be64(p->regs + PHB_IODA_DATA0);
+
+			for (i = 0 ; i < 64; i++) {
+				if (PPC_BIT(i) & peev1) {
+					*first_frozen_pe = i + 64;
+					break;
+				}
+			}
+			for (i = 0 ;
+			     *first_frozen_pe == (uint64_t)-1 && i < 64;
+			     i++) {
+				if (PPC_BIT(i) & peev0) {
+					*first_frozen_pe = i;
+					break;
+				}
+			}
+
+			/* No frozen PE? */
+			if (*first_frozen_pe == (uint64_t)-1) {
+				*pci_error_type = OPAL_EEH_NO_ERROR;
+				*severity = OPAL_EEH_SEV_NO_ERROR;
+				p->err.err_src   = P7IOC_ERR_SRC_NONE;
+				p->err.err_class = P7IOC_ERR_CLASS_NONE;
+				p->err.err_bit   = 0;
+				p7ioc_phb_set_err_pending(p, false);
+			}
+
+			break;
+		default:
+			*pci_error_type = OPAL_EEH_NO_ERROR;
+			*severity = OPAL_EEH_SEV_NO_ERROR;
+			p->err.err_src   = P7IOC_ERR_SRC_NONE;
+			p->err.err_class = P7IOC_ERR_CLASS_NONE;
+			p->err.err_bit   = 0;
+			p7ioc_phb_set_err_pending(p, false);
+		}
+	}
+
 	return OPAL_SUCCESS;
 }
 
-static int64_t p7ioc_eeh_freeze_clear(struct phb *phb, uint64_t pe_number,
-				      uint64_t eeh_action_token)
+static void p7ioc_ER_err_clear(struct p7ioc_phb *p)
 {
-	struct p7ioc_phb *p = phb_to_p7ioc_phb(phb);
-	uint64_t peev0, peev1;
-
-	/* XXX Now this is a heavy hammer, coming roughly from the P7IOC doc
-	 * and my old "pseudopal" code. It will need to be refined. In general
-	 * error handling will have to be reviewed and probably done properly	
-	 * "from scratch" based on the description in the p7IOC spec.
-	 *
-	 * XXX Additionally, when handling interrupts, we might want to consider
-	 * masking while processing and/or ack'ing interrupt bits etc...
-	 */
 	u64 err, lem;
 	u32 val;
 
-	/* Summary. If nothing, move to clearing the PESTs which can
-	 * contain a freeze state from a previous error or simply set
-	 * explicitely by the user
-	 */
-	err = in_be64(p->regs + PHB_ETU_ERR_SUMMARY);
-	if (err == 0)
-		goto clear_pest;
-
 	/* Rec 1,2 */
 	lem = in_be64(p->regs + PHB_LEM_FIR_ACCUM);
-	/* XXX Check bit 60. If set, check AER 104 (malformed packet)
-	 * and if set, go to PHB fatal
-	 */
 
 	/* Rec 3,4,5 AER registers (could use cfg space accessors) */
 	out_be64(p->regs + PHB_CONFIG_ADDRESS, 0x8000001c00000000ull);
@@ -855,6 +1243,33 @@ static int64_t p7ioc_eeh_freeze_clear(struct phb *phb, uint64_t pe_number,
 	/* Rec 67, 68 LEM */
 	out_be64(p->regs + PHB_LEM_FIR_AND_MASK, ~lem);
 	out_be64(p->regs + PHB_LEM_WOF, 0);
+}
+
+static int64_t p7ioc_eeh_freeze_clear(struct phb *phb, uint64_t pe_number,
+				      uint64_t eeh_action_token)
+{
+	struct p7ioc_phb *p = phb_to_p7ioc_phb(phb);
+	uint64_t peev0, peev1;
+
+	/* XXX Now this is a heavy hammer, coming roughly from the P7IOC doc
+	 * and my old "pseudopal" code. It will need to be refined. In general
+	 * error handling will have to be reviewed and probably done properly
+	 * "from scratch" based on the description in the p7IOC spec.
+	 *
+	 * XXX Additionally, when handling interrupts, we might want to consider
+	 * masking while processing and/or ack'ing interrupt bits etc...
+	 */
+	u64 err;
+
+	/* Summary. If nothing, move to clearing the PESTs which can
+	 * contain a freeze state from a previous error or simply set
+	 * explicitely by the user
+	 */
+	err = in_be64(p->regs + PHB_ETU_ERR_SUMMARY);
+	if (err == 0)
+		goto clear_pest;
+
+	p7ioc_ER_err_clear(p);
 
  clear_pest:
 	/* XXX We just clear the whole PESTA for MMIO clear and PESTB
@@ -876,7 +1291,13 @@ static int64_t p7ioc_eeh_freeze_clear(struct phb *phb, uint64_t pe_number,
 	p7ioc_phb_ioda_sel(p, IODA_TBL_PEEV, 0, true);
 	peev0 = in_be64(p->regs + PHB_IODA_DATA0);
 	peev1 = in_be64(p->regs + PHB_IODA_DATA0);
-	p->er_pending = (peev0 || peev1);
+	if (peev0 || peev1) {
+		p->err.err_src   = P7IOC_ERR_SRC_PHB0 + p->index;
+		p->err.err_class = P7IOC_ERR_CLASS_ER;
+		p->err.err_bit   = 0;
+		p7ioc_phb_set_err_pending(p, true);
+	} else
+		p7ioc_phb_set_err_pending(p, false);
 
 	return OPAL_SUCCESS;
 }
@@ -885,12 +1306,27 @@ static int64_t p7ioc_get_diag_data(struct phb *phb, void *diag_buffer,
 				   uint64_t diag_buffer_len)
 {
 	struct p7ioc_phb *p = phb_to_p7ioc_phb(phb);
+	struct OpalIoP7IOCPhbErrorData *data = diag_buffer;
 
 	if (diag_buffer_len < sizeof(struct OpalIoP7IOCPhbErrorData))
 		return OPAL_PARAMETER;
 
-	p7ioc_eeh_read_phb_status(p, (struct OpalIoP7IOCPhbErrorData *)
-				  diag_buffer);
+	p7ioc_eeh_read_phb_status(p, data);
+
+	/*
+	 * We're running to here probably because of errors (MAL
+	 * or INF class) from IOC. For the case, we need clear
+	 * the pending errors and mask the error bit for MAL class
+	 * error. Fortunately, we shouldn't get MAL class error from
+	 * IOC on P7IOC.
+	 */
+	if (!p7ioc_phb_err_pending(p)			||
+	     p->err.err_class != P7IOC_ERR_CLASS_INF	||
+	     p->err.err_src < P7IOC_ERR_SRC_PHB0	||
+	     p->err.err_src > P7IOC_ERR_SRC_PHB5)
+		return OPAL_SUCCESS;
+
+	p7ioc_ER_err_clear(p);
 
 	return OPAL_SUCCESS;
 }
@@ -1367,6 +1803,9 @@ static int64_t p7ioc_ioda_reset(struct phb *phb, bool purge)
 	unsigned int i;
 	uint64_t reg64;
 	uint64_t data64, data64_hi;
+	uint8_t prio;
+	uint16_t server;
+	uint64_t m_server, m_prio;
 
 	/* If the "purge" argument is set, we clear the table cache */
 	if (purge)
@@ -1392,6 +1831,20 @@ static int64_t p7ioc_ioda_reset(struct phb *phb, bool purge)
 	p7ioc_phb_ioda_sel(p, IODA_TBL_LXIVT, 0, true);
 	for (i = 0; i < 8; i++) {
 		data64 = p->lxive_cache[i];
+		server = GETFIELD(IODA_XIVT_SERVER, data64);
+		prio = GETFIELD(IODA_XIVT_PRIORITY, data64);
+
+		/* Now we mangle the server and priority */
+		if (prio == 0xff) {
+			m_server = 0;
+			m_prio = 0xff;
+		} else {
+			m_server = server >> 3;
+			m_prio = (prio >> 3) | ((server & 7) << 5);
+		}
+
+		data64 = SETFIELD(IODA_XIVT_SERVER,   data64, m_server);
+		data64 = SETFIELD(IODA_XIVT_PRIORITY, data64, m_prio);
 		out_be64(p->regs + PHB_IODA_DATA0, data64);
 	}
 
@@ -1404,6 +1857,20 @@ static int64_t p7ioc_ioda_reset(struct phb *phb, bool purge)
 	p7ioc_phb_ioda_sel(p, IODA_TBL_MXIVT, 0, true);
 	for (i = 0; i < 256; i++) {
 		data64 = p->mxive_cache[i];
+		server = GETFIELD(IODA_XIVT_SERVER, data64);
+		prio = GETFIELD(IODA_XIVT_PRIORITY, data64);
+
+		/* Now we mangle the server and priority */
+		if (prio == 0xff) {
+			m_server = 0;
+			m_prio = 0xff;
+		} else {
+			m_server = server >> 3;
+			m_prio = (prio >> 3) | ((server & 7) << 5);
+		}
+
+		data64 = SETFIELD(IODA_XIVT_SERVER,   data64, m_server);
+		data64 = SETFIELD(IODA_XIVT_PRIORITY, data64, m_prio);
 		out_be64(p->regs + PHB_IODA_DATA0, data64);
 	}
 
@@ -1517,7 +1984,9 @@ static const struct phb_ops p7ioc_phb_ops = {
 	.power_state		= p7ioc_power_state,
 	.slot_power_off		= p7ioc_slot_power_off,
 	.slot_power_on		= p7ioc_slot_power_on,
+	.complete_reset		= p7ioc_complete_reset,
 	.hot_reset		= p7ioc_hot_reset,
+	.fundamental_reset	= p7ioc_freset,
 	.poll			= p7ioc_poll,
 };
 
@@ -1586,17 +2055,14 @@ static int64_t p7ioc_lsi_get_xive(void *data, uint32_t isn,
 				  uint16_t *server, uint8_t *prio)
 {
 	struct p7ioc_phb *p = data;
-	uint32_t irq, fbuid = IRQ_FBUID(isn);
+	uint32_t irq = (isn & 0x7);
+	uint32_t fbuid = IRQ_FBUID(isn);
 	uint64_t xive;
 
 	if (fbuid != p->buid_lsi)
 		return OPAL_PARAMETER;
-	irq = isn & 0xf;
-	if (irq > 7)
-		return OPAL_PARAMETER;
 
 	xive = p->lxive_cache[irq];
-
 	*server = GETFIELD(IODA_XIVT_SERVER, xive);
 	*prio = GETFIELD(IODA_XIVT_PRIORITY, xive);
 
@@ -1608,23 +2074,22 @@ static int64_t p7ioc_lsi_set_xive(void *data, uint32_t isn,
 				  uint16_t server, uint8_t prio)
 {
 	struct p7ioc_phb *p = data;
-	uint32_t irq, fbuid = IRQ_FBUID(isn);
+	uint32_t irq = (isn & 0x7);
+	uint32_t fbuid = IRQ_FBUID(isn);
 	uint64_t xive, m_server, m_prio;
 
 	if (fbuid != p->buid_lsi)
 		return OPAL_PARAMETER;
-	irq = isn & 0xf;
-	if (irq > 7)
-		return OPAL_PARAMETER;
 
 	xive = SETFIELD(IODA_XIVT_SERVER, 0ull, server);
 	xive = SETFIELD(IODA_XIVT_PRIORITY, xive, prio);
-	p->lxive_cache[irq] = xive;
 
-	/* We cache the arguments because we have to mangle
+	/*
+	 * We cache the arguments because we have to mangle
 	 * it in order to hijack 3 bits of priority to extend
 	 * the server number
 	 */
+	p->lxive_cache[irq] = xive;
 
 	/* Now we mangle the server and priority */
 	if (prio == 0xff) {
@@ -1654,15 +2119,13 @@ static void p7ioc_phb_err_interrupt(void *data, uint32_t isn)
 
 	opal_update_pending_evt(OPAL_EVENT_PCI_ERROR, OPAL_EVENT_PCI_ERROR);
 
-	/*
-	 * If the PHB is broken, go away
-	 */
+	/* If the PHB is broken, go away */
 	if (p->state == P7IOC_PHB_STATE_BROKEN)
 		return;
 
 	/*
-	 * Check if there's an error pending and update PHB fence state
-	 * and return, the ER error is drowned at this point
+	 * Check if there's an error pending and update PHB fence
+	 * state and return, the ER error is drowned at this point
 	 */
 	lock(&p->lock);
 	if (p7ioc_phb_fenced(p)) {
@@ -1672,12 +2135,29 @@ static void p7ioc_phb_err_interrupt(void *data, uint32_t isn)
 		return;
 	}
 
-	/* Check the PEEV */
+	/*
+	 * If we already had pending errors, which might be
+	 * moved from IOC, then we needn't check PEEV to avoid
+	 * overwritting the errors from IOC.
+	 */
+	if (!p7ioc_phb_err_pending(p)) {
+		unlock(&p->lock);
+		return;
+	}
+
+	/*
+	 * We don't have pending errors from IOC, it's safe
+	 * to check PEEV for frozen PEs.
+	 */
 	p7ioc_phb_ioda_sel(p, IODA_TBL_PEEV, 0, true);
 	peev0 = in_be64(p->regs + PHB_IODA_DATA0);
 	peev1 = in_be64(p->regs + PHB_IODA_DATA0);
-	if (peev0 || peev1)
-		p->er_pending = true;
+	if (peev0 || peev1) {
+		p->err.err_src   = P7IOC_ERR_SRC_PHB0 + p->index;
+		p->err.err_class = P7IOC_ERR_CLASS_ER;
+		p->err.err_bit   = 0;
+		p7ioc_phb_set_err_pending(p, true);
+	}
 	unlock(&p->lock);
 }
 
@@ -1732,7 +2212,7 @@ void p7ioc_phb_setup(struct p7ioc *ioc, uint8_t index, bool active)
 
 	/* Register internal interrupt source (LSI 7) */
 	register_irq_source(&p7ioc_phb_err_irq_ops, p,
-			    (p->buid_lsi << 4) + 7, 1);
+			    (p->buid_lsi << 4) + PHB_LSI_PCIE_ERROR, 1);
 
 	/* Initialize IODA table caches */
 	p7ioc_phb_init_ioda_cache(p);
@@ -1741,61 +2221,6 @@ void p7ioc_phb_setup(struct p7ioc *ioc, uint8_t index, bool active)
 	 * get a useful OPAL ID for it
 	 */
 	pci_register_phb(&p->phb);
-}
-
-/* Synchronous PEST code used at boot */
-static void p7ioc_phb_sync_perst(struct p7ioc_phb *p)
-{
-	uint64_t reg;
-	unsigned int timeout;
-
-	/* XXX This is only needed if the slot is powered up ...
-	 *
-	 * It seems that the slots are off after we do a hot
-	 * reset sequence, so we probably want to consider
-	 * turning power with PERST asserted or something like
-	 * that in that case...
-	 */
-
-	/* Disable link to avoid training issues */
-	reg = in_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL);
-	PHBDBG(p, "[PERST] old TRAIN_CTL: 0x%016llx\n", reg);
-	reg |= PHB_PCIE_DLP_TCTX_DISABLE;
-	PHBDBG(p, "[PERST] wr  TRAIN_CTL: 0x%016llx\n", reg);
-	out_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL, reg);
-
-	/* Wait for link disabled status */
-	for (timeout = 0; timeout < 12; timeout++) {
-		reg = in_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL);
-		if (reg & PHB_PCIE_DLP_TCRX_DISABLED)
-			break;
-		time_wait_ms(10);
-	}
-
-	PHBDBG(p, "[PERST] new TRAIN_CTL: 0x%016llx\n", reg);
-
-	/* Link disable not set, what do we do ? We seem to hit that
-	 * when doing the boot-time PERST and so far nothing bad
-	 * seem to have come from it but definitely worth investigating
-	 */
-	if (!(reg & PHB_PCIE_DLP_TCRX_DISABLED))
-		PHBERR(p, "Timeout waiting for link disable !\n");
-
-	/* Issue PERST. We keep PERST asserted for 1s like pHyp */
-	reg = in_be64(p->regs + PHB_RESET);
-	reg &= ~0x2000000000000000ul;
-	out_be64(p->regs + PHB_RESET, reg);
-	time_wait_ms(1000);
-	reg |= 0x2000000000000000ul;
-	out_be64(p->regs + PHB_RESET, reg);
-
-	/* Wait 200ms for things to settle */
-	time_wait_ms(200);
-
-	/* Restore link control */
-	reg = in_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL);
-	reg &= ~PHB_PCIE_DLP_TCTX_DISABLE;
-	out_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL, reg);
 }
 
 static bool p7ioc_phb_wait_dlp_reset(struct p7ioc_phb *p)
@@ -2278,11 +2703,6 @@ int64_t p7ioc_phb_init(struct p7ioc_phb *p)
 	/* Mark the PHB as functional which enables all the various sequences */
 	p->state = P7IOC_PHB_STATE_FUNCTIONAL;
 
-	/* This is an addition to the standard sequence, we perform a PERST
-	 * with the links disabled to work around a training issue
-	 */
-	p7ioc_phb_sync_perst(p);
-
 	return OPAL_SUCCESS;
 
  failed:
@@ -2362,8 +2782,9 @@ void p7ioc_phb_add_nodes(struct p7ioc_phb *p)
 	dt_end_node();
 }
 
-void p7ioc_phb_reset(struct p7ioc_phb *p)
+void p7ioc_phb_reset(struct phb *phb)
 {
+	struct p7ioc_phb *p = phb_to_p7ioc_phb(phb);
 	struct p7ioc *ioc = p->ioc;
 	uint64_t ci_idx, rreg;
 	unsigned int i;

@@ -43,9 +43,14 @@ static inline unsigned long secs_to_tb(unsigned long secs)
 	return secs * tb_hz;
 }
 
-static inline unsigned long msecs_to_tb(unsigned long  msecs)
+static inline unsigned long msecs_to_tb(unsigned long msecs)
 {
 	return msecs * (tb_hz / 1000);
+}
+
+static inline unsigned long tb_to_msecs(unsigned long tb)
+{
+	return (tb * 1000) / tb_hz;
 }
 
 /* wait_poll - Wait a certain number of TB ticks while polling FSP */

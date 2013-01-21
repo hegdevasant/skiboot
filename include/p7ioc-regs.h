@@ -8,6 +8,33 @@
  * the full list from the spec. For now I add them as I need them
  */
 
+/* RGC GEM registers */
+#define P7IOC_GEM_XFIR		0x3E0008
+#define P7IOC_GEM_RFIR		0x3E0010
+#define P7IOC_GEM_RIRQFIR	0x3E0018
+#define P7IOC_GEM_MASK		0x3E0020
+#define P7IOC_GEM_RWOF		0x3E0028
+
+/* LEM register base */
+#define P7IOC_RGC_LEM_BASE		0x3E1E00
+#define P7IOC_BI_UP_LEM_BASE		0x3C0000
+#define P7IOC_BI_DOWN_LEM_BASE		0x3C0050
+#define P7IOC_CI_PORTn_LEM_BASE(n)	(0x3d0200 | ((n) * 0x1000))
+#define P7IOC_PHBn_LEM_BASE(n)		(0x000C00 | ((n) * 0x10000))
+#define P7IOC_MISC_LEM_BASE		0x3EA000
+#define P7IOC_I2C_LEM_BASE		0x3EB000
+
+/* LEM register offset */
+#define P7IOC_LEM_FIR_OFFSET		0x00
+#define P7IOC_LEM_FIR_AND_OFFSET	0x08
+#define P7IOC_LEM_FIR_OR_OFFSET		0x10
+#define P7IOC_LEM_ERR_MASK_OFFSET	0x18
+#define P7IOC_LEM_ERR_MASK_AND_OFFSET	0x20
+#define P7IOC_LEM_ERR_MASK_OR_OFFSET	0x28
+#define P7IOC_LEM_ACTION_0_OFFSET	0x30
+#define P7IOC_LEM_ACTION_1_OFFSET	0x38
+#define P7IOC_LEM_WOF_OFFSET		0x40
+
 /* HSS registers */
 #define P7IOC_HSS_BASE          0x3E8000
 #define P7IOC_HSS_STRIDE        0x200
@@ -53,6 +80,7 @@
 
 /* Other random chip registers */
 #define P7IOC_CHIP_FENCE_SHADOW		0x3ec010
+#define P7IOC_CHIP_FENCE_WOF		0x3ec018
 #define P7IOC_CCRR			0x3e1c00
 
 /* CI registers */

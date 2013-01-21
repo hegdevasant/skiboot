@@ -121,26 +121,21 @@ enum OpalEehFreezeActionToken {
 };
 
 enum OpalPciStatusToken {
-	OPAL_EEH_PHB_NO_ERROR = 0,
-	OPAL_EEH_PHB_FATAL = 1,
-	OPAL_EEH_PHB_RECOVERABLE = 2,
-	OPAL_EEH_PHB_BUS_ERROR = 3,
-	OPAL_EEH_PCI_NO_DEVSEL = 4,
-	OPAL_EEH_PCI_TA = 5,
-	OPAL_EEH_PCIEX_UR = 6,
-	OPAL_EEH_PCIEX_CA = 7,
-	OPAL_EEH_PCI_MMIO_ERROR = 8,
-	OPAL_EEH_PCI_DMA_ERROR = 9,
-	OPAL_EEH_PCI_ANY_ER = 10,
+	OPAL_EEH_NO_ERROR	= 0,
+	OPAL_EEH_IOC_ERROR	= 1,
+	OPAL_EEH_PHB_ERROR	= 2,
+	OPAL_EEH_PE_ERROR	= 3,
+	OPAL_EEH_PE_MMIO_ERROR	= 4,
+	OPAL_EEH_PE_DMA_ERROR	= 5
 };
 
 enum OpalPciErrorSeverity {
-	OPAL_EEH_SEV_NO_ERROR = 0,
-	OPAL_EEH_SEV_INF = 1,		/* Informational only */
-	OPAL_EEH_SEV_DEV_ER = 2,	/* Individual PEs in error state */
-	OPAL_EEH_SEV_PHB_FENCED = 3,	/* PHB needs a reset */
-	OPAL_EEH_SEV_PHB_DEAD = 4,	/* Entire PHB dead (unrecoverable) */
-	OPAL_EEH_SEV_IOC_DEAD = 5,	/* Entire IOC dead */
+	OPAL_EEH_SEV_NO_ERROR	= 0,
+	OPAL_EEH_SEV_IOC_DEAD	= 1,
+	OPAL_EEH_SEV_PHB_DEAD	= 2,
+	OPAL_EEH_SEV_PHB_FENCED	= 3,
+	OPAL_EEH_SEV_PE_ER	= 4,
+	OPAL_EEH_SEV_INF	= 5
 };
 
 enum OpalShpcAction {
@@ -285,14 +280,17 @@ enum OpalMveEnableAction {
 };
 
 enum OpalPciResetAndReinitScope {
-	OPAL_PHB_COMPLETE = 1, OPAL_PCI_LINK = 2, OPAL_PHB_ERROR = 3,
-	OPAL_PCI_HOT_RESET = 4, OPAL_PCI_FUNDAMENTAL_RESET = 5,
-	OPAL_PCI_IODA_TABLE_RESET = 6,
+	OPAL_PHB_COMPLETE		= 1,
+	OPAL_PCI_LINK			= 2,
+	OPAL_PHB_ERROR			= 3,
+	OPAL_PCI_HOT_RESET		= 4,
+	OPAL_PCI_FUNDAMENTAL_RESET 	= 5,
+	OPAL_PCI_IODA_TABLE_RESET 	= 6
 };
 
 enum OpalPciResetState {
-	OPAL_DEASSERT_RESET = 0,
-	OPAL_ASSERT_RESET = 1
+	OPAL_DEASSERT_RESET	= 0,
+	OPAL_ASSERT_RESET	= 1
 };
 
 enum OpalPciMaskAction {
@@ -364,6 +362,55 @@ struct opal_machine_check_event {
 			uint8_t		reserved_2[16];
 		} tlb_error;
 	} u;
+};
+
+enum {
+	OPAL_P7IOC_DIAG_TYPE_NONE	= 0,
+	OPAL_P7IOC_DIAG_TYPE_RGC	= 1,
+	OPAL_P7IOC_DIAG_TYPE_BI		= 2,
+	OPAL_P7IOC_DIAG_TYPE_CI		= 3,
+	OPAL_P7IOC_DIAG_TYPE_MISC	= 4,
+	OPAL_P7IOC_DIAG_TYPE_I2C	= 5,
+	OPAL_P7IOC_DIAG_TYPE_LAST	= 6
+};
+
+struct OpalIoP7IOCErrorData {
+	uint16_t type;
+
+	/* GEM */
+	uint64_t gemXfir;
+	uint64_t gemRfir;
+	uint64_t gemRirqfir;
+	uint64_t gemMask;
+	uint64_t gemRwof;
+
+	/* LEM */
+	uint64_t lemFir;
+	uint64_t lemErrMask;
+	uint64_t lemAction0;
+	uint64_t lemAction1;
+	uint64_t lemWof;
+
+	union {
+		struct OpalIoP7IOCRgcErrorData {
+			uint64_t rgcStatus;		/* 3E1C10 */
+			uint64_t rgcLdcp;		/* 3E1C18 */
+		}rgc;
+		struct OpalIoP7IOCBiErrorData {
+			uint64_t biLdcp0;		/* 3C0100, 3C0118 */
+			uint64_t biLdcp1;		/* 3C0108, 3C0120 */
+			uint64_t biLdcp2;		/* 3C0110, 3C0128 */
+			uint64_t biFenceStatus;		/* 3C0130, 3C0130 */
+
+			uint8_t  biDownbound;		/* BI Downbound or Upbound */
+		}bi;
+		struct OpalIoP7IOCCiErrorData {
+			uint64_t ciPortStatus;		/* 3Dn008 */
+			uint64_t ciPortLdcp;		/* 3Dn010 */
+
+			uint8_t  ciPort;		/* Index of CI port: 0/1 */
+		}ci;
+	};
 };
 
 /**
