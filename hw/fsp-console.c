@@ -7,7 +7,6 @@
 #include <fsp.h>
 #include <console.h>
 #include <opal.h>
-#include <device_tree.h>
 #include <time.h>
 #include <device.h>
 

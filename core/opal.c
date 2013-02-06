@@ -3,7 +3,6 @@
 #include <stack.h>
 #include <lock.h>
 #include <fsp.h>
-#include <device_tree.h>
 #include <cpu.h>
 #include <interrupts.h>
 #include <op-panel.h>

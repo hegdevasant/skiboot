@@ -2,7 +2,6 @@
 #include <fsp.h>
 #include <lock.h>
 #include <opal.h>
-#include <device_tree.h>
 #include <device.h>
 
 static struct fsp_msg *op_msg;

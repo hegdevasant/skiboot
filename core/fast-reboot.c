@@ -1,7 +1,6 @@
 #include <skiboot.h>
 #include <cpu.h>
 #include <fsp.h>
-#include <device_tree.h>
 #include <opal.h>
 #include <xscom.h>
 #include <interrupts.h>

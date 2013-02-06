@@ -2,7 +2,6 @@
 #include <fsp.h>
 #include <opal.h>
 #include <lock.h>
-#include <device_tree.h>
 #include <device.h>
 
 //#define DBG(fmt...)	printf("RTC: " fmt)
