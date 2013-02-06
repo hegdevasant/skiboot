@@ -97,5 +97,8 @@ extern void init_replicated_sprs(void);
 extern void probe_p5ioc2(void);
 extern void probe_p7ioc(void);
 
+/* Flatten device-tree */
+extern void *create_dtb(const struct dt_node *root);
+
 #endif /* __SKIBOOT_H */
 

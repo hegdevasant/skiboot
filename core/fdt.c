@@ -1,7 +1,6 @@
 #include <skiboot.h>
 #include <stdarg.h>
 #include <libfdt.h>
-#include <device_tree.h>
 #include <device.h>
 #include <cpu.h>
 #include <memory.h>
@@ -30,7 +29,12 @@ static void __save_err(int err, const char *str)
 
 #define save_err(...) __save_err(__VA_ARGS__, #__VA_ARGS__)
 
-void __dt_begin_node(const char *name, uint32_t phandle)
+static void dt_property_cell(const char *name, u32 cell)
+{
+	save_err(fdt_property_cell(fdt, name, cell));
+}
+
+static void dt_begin_node(const char *name, uint32_t phandle)
 {
 	save_err(fdt_begin_node(fdt, name));
 
@@ -42,39 +46,12 @@ void __dt_begin_node(const char *name, uint32_t phandle)
 	dt_property_cell("phandle", phandle);
 }
 
-uint32_t dt_begin_node(const char *name)
-{
-	uint32_t phandle = ++last_phandle;
-
-	__dt_begin_node(name, phandle);
-	return phandle;
-}
-
-void dt_property_string(const char *name, const char *value)
-{
-	save_err(fdt_property_string(fdt, name, value));
-}
-
-void dt_property_cell(const char *name, u32 cell)
-{
-	save_err(fdt_property_cell(fdt, name, cell));
-}
-
-void dt_property_cells(const char *name, int count, ...)
-{
-	va_list args;
-
-	va_start(args, count);
-	save_err(fdt_property_cells_v(fdt, name, count, args));
-	va_end(args);
-}
-
-void dt_property(const char *name, const void *val, size_t size)
+static void dt_property(const char *name, const void *val, size_t size)
 {
 	save_err(fdt_property(fdt, name, val, size));
 }
 
-void dt_end_node(void)
+static void dt_end_node(void)
 {
 	save_err(fdt_end_node(fdt));
 }
@@ -140,7 +117,7 @@ static void flatten_dt_node(const struct dt_node *root)
 	}
 
 	list_for_each(&root->children, i, list) {
-		__dt_begin_node(i->name, i->phandle);
+		dt_begin_node(i->name, i->phandle);
 		flatten_dt_node(i);
 		dt_end_node();
 	}
@@ -174,7 +151,7 @@ void *create_dtb(const struct dt_node *root)
 		save_err(fdt_finish_reservemap(fdt));
 
 		/* Open root node */
-		__dt_begin_node(root->name, root->phandle);
+		dt_begin_node(root->name, root->phandle);
 
 		/* Unflatten our live tree */
 		flatten_dt_node(root);
