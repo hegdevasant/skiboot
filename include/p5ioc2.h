@@ -8,6 +8,7 @@
 #include <cec.h>
 #include <pci.h>
 #include <lock.h>
+#include <device.h>
 
 #include <ccan/container_of/container_of.h>
 
@@ -110,13 +111,14 @@ static inline struct p5ioc2_phb *phb_to_p5ioc2_phb(struct phb *phb)
 extern void p5ioc2_phb_setup(struct p5ioc2 *ioc, struct p5ioc2_phb *p,
 			     uint8_t ca, uint8_t index, bool active,
 			     uint32_t buid);
-extern void p5ioc2_phb_init(struct p5ioc2_phb *p);
-extern void p5ioc2_phb_add_nodes(struct p5ioc2_phb *p);
 
 /*
  * State structure for P5IOC2 IO HUB
  */
 struct p5ioc2 {
+	/* Device node */
+	struct dt_node			*dt_node;
+
 	/* MMIO regs for the chip */
 	void				*regs;
 
@@ -163,8 +165,5 @@ static inline struct p5ioc2 *iohub_to_p5ioc2(struct io_hub *hub)
 {
 	return container_of(hub, struct p5ioc2, hub);
 }
-
-extern struct io_hub *p5ioc2_create_hub(const struct cechub_io_hub *hub,
-					uint32_t id);
 
 #endif /* __P5IOC2_H */

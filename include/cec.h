@@ -18,9 +18,6 @@ struct io_hub_ops {
 	int64_t (*get_diag_data)(struct io_hub *hub, void *diag_buffer,
 				 uint64_t diag_buffer_len);
 
-	/* Called to build the device-tree portion for that hub */
-	void (*add_nodes)(struct io_hub *hub);
-
 	/* Called on fast reset */
 	void (*reset)(struct io_hub *hub);
 };
@@ -32,8 +29,7 @@ struct io_hub {
 
 extern struct io_hub *cec_get_hub_by_id(uint32_t hub_id);
 
-extern void add_cec_nodes(void);
-extern void cec_init(void);
 extern void cec_reset(void);
+extern void cec_register(struct io_hub *hub);
 
 #endif /* __CEC_H */

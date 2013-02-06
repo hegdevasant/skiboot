@@ -6,7 +6,6 @@
 #include <pci.h>
 #include <pci-cfg.h>
 #include <interrupts.h>
-#include <device_tree.h>
 #include <opal.h>
 #include <ccan/str/str.h>
 
@@ -2180,6 +2179,71 @@ static const struct irq_source_ops p7ioc_phb_err_irq_ops = {
 	.interrupt = p7ioc_phb_err_interrupt,
 };
 
+static void p7ioc_pcie_add_node(struct p7ioc_phb *p)
+{
+
+	uint64_t reg[2], m32b, iob, tkill;
+	uint32_t lsibase, icsp = get_ics_phandle();
+	struct dt_node *np;
+
+	reg[0] = cleanup_addr((uint64_t)p->regs);
+	reg[1] = 0x100000;
+
+	np = dt_new_addr(p->ioc->dt_node, "pciex", reg[0]);
+	p->phb.dt_node = np;
+	dt_add_property_strings(np, "compatible", "ibm,p7ioc-pciex",
+				"ibm,ioda-phb");
+	dt_add_property_strings(np, "device_type", "pciex");
+	dt_add_property(np, "reg", reg, sizeof(reg));
+	dt_add_property_cells(np, "#address-cells", 3);
+	dt_add_property_cells(np, "#size-cells", 2);
+	dt_add_property_cells(np, "#interrupt-cells", 1);
+	dt_add_property_cells(np, "bus-range", 0, 0xff);
+	dt_add_property_cells(np, "clock-frequency", 0x200, 0); /* ??? */
+	dt_add_property_cells(np, "interrupt-parent", icsp);
+	/* XXX FIXME: add slot-name */
+	//dt_property_cell("bus-width", 8); /* Figure it out from VPD ? */
+
+	/* "ranges", we only expose IO and M32
+	 *
+	 * Note: The kernel expects us to have chopped of 64k from the
+	 * M32 size (for the 32-bit MSIs). If we don't do that, it will
+	 * get confused (OPAL does it)
+	 */
+	iob = cleanup_addr(p->io_base);
+	m32b = cleanup_addr(p->m32_base + M32_PCI_START);
+	dt_add_property_cells(np, "ranges",
+			      /* IO space */
+			      0x01000000, 0x00000000, 0x00000000,
+			      hi32(iob), lo32(iob), 0, PHB_IO_SIZE,
+			      /* M32 space */
+			      0x02000000, 0x00000000, M32_PCI_START,
+			      hi32(m32b), lo32(m32b), 0,M32_PCI_SIZE - 0x10000);
+
+	/* XXX FIXME: add opal-memwin32, 64, dmawins, etc... */
+	dt_add_property_cells(np, "ibm,opal-msi-ports", 256);
+	dt_add_property_cells(np, "ibm,opal-num-pes", 128);
+	dt_add_property_cells(np, "ibm,opal-msi-ranges",
+			      p->buid_msi << 4, 0x100);
+	tkill = reg[0] + PHB_TCE_KILL;
+	dt_add_property_cells(np, "ibm,opal-tce-kill",
+			      hi32(tkill), lo32(tkill));
+
+	/* The interrupt maps will be generated in the RC node by the
+	 * PCI code based on the content of this structure:
+	 */
+	lsibase = p->buid_lsi << 4;
+	p->phb.lstate.int_size = 1;
+	p->phb.lstate.int_val[0][0] = lsibase + PHB_LSI_PCIE_INTA;
+	p->phb.lstate.int_val[1][0] = lsibase + PHB_LSI_PCIE_INTB;
+	p->phb.lstate.int_val[2][0] = lsibase + PHB_LSI_PCIE_INTC;
+	p->phb.lstate.int_val[3][0] = lsibase + PHB_LSI_PCIE_INTD;
+	p->phb.lstate.int_parent[0] = icsp;
+	p->phb.lstate.int_parent[1] = icsp;
+	p->phb.lstate.int_parent[2] = icsp;
+	p->phb.lstate.int_parent[3] = icsp;
+}
+
 /* p7ioc_phb_setup - Setup a p7ioc_phb data structure
  *
  * WARNING: This is called before the AIB register routing is
@@ -2205,6 +2269,9 @@ void p7ioc_phb_setup(struct p7ioc *ioc, uint8_t index, bool active)
 	p->m64_base = ioc->mmio2_win_start + PHBn_M64_BASE(index);
 	p->state = P7IOC_PHB_STATE_UNINITIALIZED;
 	p->phb.scan_map = 0x1; /* Only device 0 to scan */
+
+	/* Create device node for PHB */
+	p7ioc_pcie_add_node(p);
 
 	/* Register OS interrupt sources */
 	register_irq_source(&p7ioc_msi_irq_ops, p, p->buid_msi << 4, 256);
@@ -2710,76 +2777,6 @@ int64_t p7ioc_phb_init(struct p7ioc_phb *p)
 	p->state = P7IOC_PHB_STATE_BROKEN;
 
 	return OPAL_HARDWARE;
-}
-
-void p7ioc_phb_add_nodes(struct p7ioc_phb *p)
-{
-	char name[sizeof("pciex@") + STR_MAX_CHARS(p->regs)];
-	static const char p7ioc_phb_compat[] =
-		"ibm,p7ioc-pciex\0ibm,ioda-phb";
-	uint64_t reg[2], m32b, iob, tkill;
-	uint32_t lsibase, icsp = get_ics_phandle();
-	struct pci_lsi_state lstate;
-
-	reg[0] = cleanup_addr((uint64_t)p->regs);
-	reg[1] = 0x100000;
-
-	sprintf(name, "pciex@%llx", reg[0]);
-	dt_begin_node(name);
-	dt_property("compatible", p7ioc_phb_compat, sizeof(p7ioc_phb_compat));
-	dt_property_string("device_type", "pciex");
-	dt_property("reg", reg, sizeof(reg));
-	dt_property_cell("#address-cells", 3);
-	dt_property_cell("#size-cells", 2);
-	dt_property_cell("#interrupt-cells", 1);
-	dt_property_cells("bus-range", 2, 0, 0xff);
-	//dt_property_cell("bus-width", 8); /* Figure it out from VPD ? */
-	dt_property_cells("clock-frequency", 2, 0x400, 0); /* ??? */
-	dt_property_cells("ibm,opal-phbid", 2, 0, p->phb.opal_id);
-	dt_property_cell("interrupt-parent", get_ics_phandle());
-	/* XXX FIXME: add phb own interrupts */
-	/* XXX FIXME: add opal-memwin32, 64, dmawins, etc... */
-	dt_property_cell("ibm,opal-msi-ports", 256);
-	dt_property_cell("ibm,opal-num-pes", 128);
-	dt_property_cells("ibm,opal-msi-ranges", 2, p->buid_msi << 4, 0x100);
-	tkill = reg[0] + PHB_TCE_KILL;
-	dt_property_cells("ibm,opal-tce-kill", 2, hi32(tkill), lo32(tkill));
-
-	/* XXX FIXME: add slot-name */
-
-	/* "ranges", we only expose IO and M32
-	 *
-	 * Note: The kernel expects us to have chopped of 64k from the
-	 * M32 size (for the 32-bit MSIs). If we don't do that, it will
-	 * get confused (OPAL does it)
-	 */
-	iob = cleanup_addr(p->io_base);
-	m32b = cleanup_addr(p->m32_base + M32_PCI_START);
-	dt_property_cells("ranges", 14,
-			  /* IO space */
-			  0x01000000, 0x00000000, 0x00000000,
-			  hi32(iob), lo32(iob), 0, PHB_IO_SIZE,
-			  /* M32 space */
-			  0x02000000, 0x00000000, M32_PCI_START,
-			  hi32(m32b), lo32(m32b), 0, M32_PCI_SIZE - 0x10000);
-
-	/* The interrupt maps will be generated in the RC node by the
-	 * PCI code based on the content of this structure:
-	 */
-	lsibase = p->buid_lsi << 4;
-	lstate.int_size = 1;
-	lstate.int_val[0][0] = lsibase + PHB_LSI_PCIE_INTA;
-	lstate.int_val[1][0] = lsibase + PHB_LSI_PCIE_INTB;
-	lstate.int_val[2][0] = lsibase + PHB_LSI_PCIE_INTC;
-	lstate.int_val[3][0] = lsibase + PHB_LSI_PCIE_INTD;
-	lstate.int_parent[0] = icsp;
-	lstate.int_parent[1] = icsp;
-	lstate.int_parent[2] = icsp;
-	lstate.int_parent[3] = icsp;
-
-	/* Add the child nodes */
-	pci_add_nodes(&p->phb, &lstate);
-	dt_end_node();
 }
 
 void p7ioc_phb_reset(struct phb *phb)

@@ -3,7 +3,7 @@
 #include <pci-cfg.h>
 #include <time.h>
 #include <lock.h>
-#include <device_tree.h>
+#include <device.h>
 
 static struct lock pci_lock = LOCK_UNLOCKED;
 #define PCI_MAX_PHBs	64
@@ -560,6 +560,9 @@ int64_t pci_register_phb(struct phb *phb)
 	} else {
 		phbs[i] = phb;
 		phb->opal_id = i;
+		dt_add_property_cells(phb->dt_node, "ibm,opal-phbid",
+				      0, phb->opal_id);
+		printf("PCI: Registered PHB ID %d\n", i);
 	}
 	list_head_init(&phb->devices);
 	unlock(&pci_lock);
@@ -589,25 +592,6 @@ struct phb *pci_get_phb(uint64_t phb_id)
 
 	/* XXX See comment in pci_unregister_phb() about locking etc... */
 	return phbs[phb_id];
-}
-
-void pci_init_slots(void)
-{
-	unsigned int i;
-
-	printf("PCI: Initializing PHB slots...\n");
-
-	lock(&pci_lock);
-
-	/* XXX Do those in parallel (at least the power up
-	 * state machine could be done in parallel)
-	 */
-	for (i = 0; i < PCI_MAX_PHBs; i++) {
-		if (!phbs[i])
-			continue;
-		pci_init_slot(phbs[i]);
-	}
-	unlock(&pci_lock);
 }
 
 static const char *pci_class_name(uint32_t class_code)
@@ -836,7 +820,8 @@ static const char *pci_class_name(uint32_t class_code)
 	return "device";
 }
 
-void pci_std_swizzle_irq_map(struct pci_device *pd,
+void pci_std_swizzle_irq_map(struct dt_node *np,
+			     struct pci_device *pd,
 			     struct pci_lsi_state *lstate,
 			     uint8_t swizzle)
 {
@@ -872,10 +857,11 @@ void pci_std_swizzle_irq_map(struct pci_device *pd,
 	if (!pd || (pd->dev_type == PCIE_TYPE_ROOT_PORT ||
 		    pd->dev_type == PCIE_TYPE_SWITCH_DNPORT)) {
 		edevcount = 1;
-		dt_property_cells("interrupt-map-mask", 4, 0, 0, 0, 7);
+		dt_add_property_cells(np, "interrupt-map-mask", 0, 0, 0, 7);
 	} else {
 		edevcount = 32;
-		dt_property_cells("interrupt-map-mask", 4, 0xf800, 0, 0, 7);
+		dt_add_property_cells(np, "interrupt-map-mask",
+				      0xf800, 0, 0, 7);
 	}
 	map_size = esize * edevcount * 4 * sizeof(uint32_t);
 	map = p = zalloc(map_size);
@@ -902,14 +888,16 @@ void pci_std_swizzle_irq_map(struct pci_device *pd,
 		}
 	}
 
-	dt_property("interrupt-map", map, map_size);
+	dt_add_property(np, "interrupt-map", map, map_size);
 	free(map);
 }
 
 static void pci_add_one_node(struct phb *phb, struct pci_device *pd,
+			     struct dt_node *parent_node,
 			     struct pci_lsi_state *lstate, uint8_t swizzle)
 {
 	struct pci_device *child;
+	struct dt_node *np;
 	const char *cname;
 #define MAX_NAME 256
 	char name[MAX_NAME];
@@ -935,24 +923,24 @@ static void pci_add_one_node(struct phb *phb, struct pci_device *pd,
 	else
 		snprintf(name, MAX_NAME - 1, "%s@%x",
 			 cname, (pd->bdfn >> 3) & 0x1f);
-	dt_begin_node(name);
+	np = dt_new(parent_node, name);
 
 	/* XXX FIXME: make proper "compatible" properties */
 	if (pd->is_pcie) {
 		snprintf(compat, MAX_NAME, "pciex%x,%x",
 			 vdid & 0xffff, vdid >> 16);
-		dt_property_cell("ibm,pci-config-space-type", 1);
+		dt_add_property_cells(np, "ibm,pci-config-space-type", 1);
 	} else {
 		snprintf(compat, MAX_NAME, "pci%x,%x",
 			 vdid & 0xffff, vdid >> 16);
-		dt_property_cell("ibm,pci-config-space-type", 0);
+		dt_add_property_cells(np, "ibm,pci-config-space-type", 0);
 	}
-	dt_property_cell("class-code", rev_class >> 8);
-	dt_property_cell("revision-id", rev_class & 0xff);
-	dt_property_cell("vendor-id", vdid & 0xffff);
-	dt_property_cell("device-id", vdid >> 16);
+	dt_add_property_cells(np, "class-code", rev_class >> 8);
+	dt_add_property_cells(np, "revision-id", rev_class & 0xff);
+	dt_add_property_cells(np, "vendor-id", vdid & 0xffff);
+	dt_add_property_cells(np, "device-id", vdid >> 16);
 	if (intpin)
-		dt_property_cell("interrupts", intpin);
+		dt_add_property_cells(np, "interrupts", intpin);
 
 	/* XXX FIXME: Add a few missing ones such as
 	 *
@@ -970,25 +958,25 @@ static void pci_add_one_node(struct phb *phb, struct pci_device *pd,
 	 */
 	reg[0] = pd->bdfn << 8;
 	reg[1] = reg[2] = reg[3] = reg[4] = 0;
-	dt_property("reg", reg, sizeof(reg));
+	dt_add_property(np, "reg", reg, sizeof(reg));
 
 	if (!pd->is_bridge)
-		goto terminate;
+		return;
 
-	dt_property_cell("#address-cells", 3);
-	dt_property_cell("#size-cells", 2);
-	dt_property_cell("#interrupt-cells", 1);
+	dt_add_property_cells(np, "#address-cells", 3);
+	dt_add_property_cells(np, "#size-cells", 2);
+	dt_add_property_cells(np, "#interrupt-cells", 1);
 
 	/* We want "device_type" for bridges */
 	if (pd->is_pcie)
-		dt_property_string("device_type", "pciex");
+		dt_add_property_strings(np, "device_type", "pciex");
 	else
-		dt_property_string("device_type", "pci");
+		dt_add_property_strings(np, "device_type", "pci");
 
 	/* Update the current interrupt swizzling level based on our own
 	 * device number
 	 */
-	swizzle = (swizzle  + ((pd->bdfn >> 3) & 0x1f)) & 3;
+	swizzle = (swizzle + ((pd->bdfn >> 3) & 0x1f)) & 3;
 
 	/* We generate a standard-swizzling interrupt map. This is pretty
 	 * big, we *could* try to be smarter for things that aren't hotplug
@@ -996,26 +984,26 @@ static void pci_add_one_node(struct phb *phb, struct pci_device *pd,
 	 * an actual children (especially on PCI Express), but for now that
 	 * will do
 	 */
-	pci_std_swizzle_irq_map(pd, lstate, swizzle);
+	pci_std_swizzle_irq_map(np, pd, lstate, swizzle);
 
 	/* We do an empty ranges property for now, we haven't setup any
 	 * bridge windows, the kernel will deal with that
+	 *
+	 * XXX The kernel should probably fix that up
 	 */
-	dt_property("ranges", NULL, 0);
+	dt_add_property(np, "ranges", NULL, 0);
 
 	list_for_each(&pd->children, child, link)
-		pci_add_one_node(phb, child, lstate, swizzle);
-
- terminate:
-	dt_end_node();
+		pci_add_one_node(phb, child, np, lstate, swizzle);
 }
 
-void pci_add_nodes(struct phb *phb, struct pci_lsi_state *lstate)
+static void pci_add_nodes(struct phb *phb)
 {
+	struct pci_lsi_state *lstate = &phb->lstate;
 	struct pci_device *pd;
 
 	list_for_each(&phb->devices, pd, link)
-		pci_add_one_node(phb, pd, lstate, 0);
+		pci_add_one_node(phb, pd, phb->dt_node, lstate, 0);
 }
 
 static void __pci_reset(struct list_head *list)
@@ -1043,6 +1031,26 @@ void pci_reset(void)
 		if (!phbs[i])
 			continue;
 		__pci_reset(&phbs[i]->devices);
+	}
+	unlock(&pci_lock);
+}
+
+void pci_init_slots(void)
+{
+	unsigned int i;
+
+	printf("PCI: Probing PHB slots...\n");
+
+	lock(&pci_lock);
+
+	/* XXX Do those in parallel (at least the power up
+	 * state machine could be done in parallel)
+	 */
+	for (i = 0; i < PCI_MAX_PHBs; i++) {
+		if (!phbs[i])
+			continue;
+		pci_init_slot(phbs[i]);
+		pci_add_nodes(phbs[i]);
 	}
 	unlock(&pci_lock);
 }

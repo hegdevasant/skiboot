@@ -348,7 +348,7 @@ struct msvpd_pmover_bsr_synchro {
  */
 #define CECHUB_FRU_ID_DATA		0
 
-/* Idata index 1: ASCII Keyword VPS */
+/* Idata index 1: ASCII Keyword VPD */
 #define CECHUB_ASCII_KEYWORD_VPD	1
 
 /* Idata index 2: Hub FRU ID data area */

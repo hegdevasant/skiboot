@@ -13,8 +13,8 @@
  * the first 0x84, so it will skip all those 0's that the VPD
  * LIDs seem to contain
  */
-static const void *vpd_find_keyword(const void *rec, size_t rec_sz,
-				    const char *kw, uint8_t *kw_size)
+const void *vpd_find_keyword(const void *rec, size_t rec_sz,
+			     const char *kw, uint8_t *kw_size)
 {
 	const uint8_t *p = rec, *end = rec + rec_sz;
 
@@ -37,9 +37,9 @@ static const void *vpd_find_keyword(const void *rec, size_t rec_sz,
  * need to find the next keyword of a given type, for example
  * when having multiple MF/SM keyword pairs
  */
-static const void *vpd_find(const void *vpd, size_t vpd_size,
-			    const char *record, const char *keyword,
-			    uint8_t *sz)
+const void *vpd_find(const void *vpd, size_t vpd_size,
+		     const char *record, const char *keyword,
+		     uint8_t *sz)
 {
 	const uint8_t *p = vpd, *end = vpd + vpd_size;
 	bool first_start = true;
@@ -90,8 +90,7 @@ static const void *vpd_find(const void *vpd, size_t vpd_size,
 }
 
 /* Helper to load a VPD LID. Pass a ptr to the corresponding LX keyword */
-#define VPD_LOAD_LXRN_VINI	0xff
-static const void *vpd_lid_load(const uint8_t *lx, uint8_t lxrn, size_t *size)
+void *vpd_lid_load(const uint8_t *lx, uint8_t lxrn, size_t *size)
 {
 	/* Now this is a guess game as we don't have the info from the
 	 * pHyp folks. But basically, it seems to boil down to loading
@@ -159,6 +158,7 @@ static const void *vpd_lid_load(const uint8_t *lx, uint8_t lxrn, size_t *size)
 	}
 
 	/* Got it ! */
+	realloc(data, *size);
 	return data;
  fail:
 	free(data);

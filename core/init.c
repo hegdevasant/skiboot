@@ -10,6 +10,7 @@
 #include <elf.h>
 #include <cec.h>
 #include <device.h>
+#include <pci.h>
 #include <libfdt/libfdt.h>
 
 
@@ -231,11 +232,12 @@ void main_cpu_entry(const void *fdt, u32 master_cpu)
 
 	op_display(OP_LOG, OP_MOD_INIT, 0x0004);
 
-	/* Initialize CEC hardware. This will also call out into
-	 * Hubs, daugher cards etc... as needed and will take care
-	 * of the IO Hubs
-	 */
-	cec_init();
+	/* Probe IO hubs */
+	probe_p5ioc2();
+	probe_p7ioc();
+
+	/* Initialize PCI */
+	pci_init_slots();
 
 	op_display(OP_LOG, OP_MOD_INIT, 0x0005);
 

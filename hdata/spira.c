@@ -4,7 +4,6 @@
 #include <memory.h>
 #include <vpd.h>
 #include <ccan/str/str.h>
-#include <device_tree.h>
 
 #include "hdata.h"
 
@@ -73,7 +72,7 @@ bool spira_check_ptr(const void *ptr, const char *file, unsigned int line)
 	return false;
 }
 
-static void add_interrupt_controller(void)
+static struct dt_node *add_interrupt_controller(void)
 {
 	struct dt_node *ics = dt_new_addr(dt_root, "interrupt-controller", 0);
 	dt_add_property_cells(ics, "reg", 0, 0, 0, 0);
@@ -83,6 +82,8 @@ static void add_interrupt_controller(void)
 	dt_add_property_string(ics, "device_type",
 			       "PowerPC-Interrupt-Source-Controller");
 	dt_add_property(ics, "interrupt-controller", NULL, 0);
+
+	return ics;
 }
 
 static void add_xscom(void)
@@ -410,6 +411,8 @@ static void add_iplparams(void)
 
 void parse_hdat(bool is_opal)
 {
+	struct dt_node *ics;
+
 	cpu_type = PVR_TYPE(mfspr(SPR_PVR));
 
 	printf("\n");
@@ -446,7 +449,7 @@ void parse_hdat(bool is_opal)
 	memory_parse();
 
 	/* Add XICS nodes */
-	add_interrupt_controller();
+	ics = add_interrupt_controller();
 
 	/* Add XSCOM node */
 	add_xscom();
@@ -457,6 +460,9 @@ void parse_hdat(bool is_opal)
 	/* Add ChipTOD's */
 	add_chiptod_old();
 	add_chiptod_new();
+
+	/* Add IO HUBs and/or PHBs */
+	io_parse(ics);
 
 #if 0 /* Tests */
 	{

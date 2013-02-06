@@ -319,6 +319,9 @@ static inline void p7ioc_phb_set_err_pending(struct p7ioc_phb *p, bool val)
  * State structure for P7IOC IO HUB
  */
 struct p7ioc {
+	/* Device node */
+	struct dt_node			*dt_node;
+
 	/* MMIO regs */
 	void				*regs;
 
@@ -370,13 +373,10 @@ static inline void p7ioc_set_err_pending(struct p7ioc *ioc, bool val)
 	ioc->err_pending = val;
 }
 
-extern struct io_hub *p7ioc_create_hub(const struct cechub_io_hub *hub,
-				       uint32_t id);
 extern int64_t p7ioc_inits(struct p7ioc *ioc);
 
 extern void p7ioc_phb_setup(struct p7ioc *ioc, uint8_t index, bool active);
 extern int64_t p7ioc_phb_init(struct p7ioc_phb *p);
-extern void p7ioc_phb_add_nodes(struct p7ioc_phb *p);
 
 extern bool p7ioc_check_LEM(struct p7ioc *ioc, uint16_t *pci_error_type,
 			    uint16_t *severity);

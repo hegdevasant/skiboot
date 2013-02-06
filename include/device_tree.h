@@ -15,11 +15,5 @@ void dt_property_cells(const char *name, int count, ...);
 void dt_property(const char *name, const void *val, size_t size);
 void dt_end_node(void);
 
-/* Clean the stray high bit which the FSP inserts: we only have 52 bits real */
-static inline u64 cleanup_addr(u64 addr)
-{
-	return addr & ((1ULL << 52) - 1);
-}
-
 
 #endif /* __DEVICE_TREE_H */

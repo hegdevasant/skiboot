@@ -179,9 +179,6 @@ void *create_dtb(const struct dt_node *root)
 		/* Unflatten our live tree */
 		flatten_dt_node(root);
 
-		/* Add the remaining bits that haven't been converted yet */
-		add_cec_nodes();
-
 		/* Close root node */
 		dt_end_node();
 

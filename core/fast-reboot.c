@@ -8,6 +8,7 @@
 #include <cec.h>
 #include <time.h>
 #include <memory.h>
+#include <pci.h>
 
 /*
  * To get control of all threads, we sreset them via XSCOM after
@@ -272,8 +273,14 @@ void fast_reboot(void)
 	/* Reset/EOI the PSI interrupt */
 	fsp_psi_irq_reset();
 
-	/* Reset CEC */
+	/* Remove all PCI devices */
+	pci_reset();
+
+	/* Reset IO Hubs */
 	cec_reset();
+
+	/* Re-Initialize all discovered PCI slots */
+	pci_init_slots();
 
 	/* Clear memory */
 #ifdef FAST_REBOOT_CLEARS_MEMORY

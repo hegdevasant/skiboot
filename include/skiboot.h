@@ -65,6 +65,12 @@ static inline bool is_pow2(unsigned long val)
 #define lo32(x)	((x) & 0xffffffff)
 #define hi32(x)	(((x) >> 32) & 0xffffffff)
 
+/* Clean the stray high bit which the FSP inserts: we only have 52 bits real */
+static inline u64 cleanup_addr(u64 addr)
+{
+	return addr & ((1ULL << 52) - 1);
+}
+
 /* Start the kernel */
 extern void start_kernel(uint64_t entry, void* fdt,
 			 uint64_t mem_top) __noreturn;
@@ -86,6 +92,10 @@ extern void load_and_boot_kernel(bool is_reboot);
 extern void cleanup_tlb(void);
 extern void init_shared_sprs(void);
 extern void init_replicated_sprs(void);
+
+/* Various probe routines, to replace with an initcall system */
+extern void probe_p5ioc2(void);
+extern void probe_p7ioc(void);
 
 #endif /* __SKIBOOT_H */
 

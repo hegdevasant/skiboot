@@ -2,7 +2,6 @@
 #include <spira.h>
 #include <cpu.h>
 #include <fsp.h>
-#include <device_tree.h>
 #include <opal.h>
 #include <ccan/str/str.h>
 #include <device.h>

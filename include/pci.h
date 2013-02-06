@@ -2,6 +2,7 @@
 #define __PCI_H
 
 #include <opal.h>
+#include <device.h>
 #include <ccan/list/list.h>
 
 /*
@@ -275,11 +276,13 @@ enum phb_type {
 };
 
 struct phb {
+	struct dt_node		*dt_node;
 	int			opal_id;
 	uint32_t		scan_map;
 	enum phb_type		phb_type;
 	struct list_head	devices;
 	const struct phb_ops	*ops;
+	struct pci_lsi_state	lstate;
 };
 
 /* Config space ops wrappers */
@@ -331,8 +334,8 @@ extern struct phb *pci_get_phb(uint64_t phb_id);
 static inline void pci_put_phb(struct phb *phb __unused) { }
 
 /* Device tree */
-extern void pci_add_nodes(struct phb *phb, struct pci_lsi_state *lstate);
-extern void pci_std_swizzle_irq_map(struct pci_device *pd,
+extern void pci_std_swizzle_irq_map(struct dt_node *dt_node,
+				    struct pci_device *pd,
 				    struct pci_lsi_state *lstate,
 				    uint8_t swizzle);
 

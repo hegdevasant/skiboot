@@ -6,7 +6,6 @@
 #include <pci.h>
 #include <pci-cfg.h>
 #include <interrupts.h>
-#include <device_tree.h>
 #include <ccan/str/str.h>
 
 static void p5ioc2_phb_trace(struct p5ioc2_phb *p, FILE *s, const char *fmt, ...)
@@ -463,6 +462,31 @@ static int64_t p5ioc2_hot_reset(struct phb *phb)
 	return p5ioc2_sm_hot_reset(p);
 }
 
+static int64_t p5ioc2_sm_freset(struct p5ioc2_phb *p)
+{
+	switch(p->state) {
+	default:
+		break;
+	}
+
+	/* XXX Not implemented, return success to make
+	 * pci.c happy, otherwise probing of slots will
+	 * fail
+	 */
+	return OPAL_SUCCESS;
+}
+
+static int64_t p5ioc2_freset(struct phb *phb)
+{
+	struct p5ioc2_phb *p = phb_to_p5ioc2_phb(phb);
+
+	if (p->state != P5IOC2_PHB_STATE_FUNCTIONAL)
+		return OPAL_BUSY;
+
+	/* run state machine */
+	return p5ioc2_sm_freset(p);
+}
+
 static int64_t p5ioc2_poll(struct phb *phb)
 {
 	struct p5ioc2_phb *p = phb_to_p5ioc2_phb(phb);
@@ -753,6 +777,7 @@ static const struct phb_ops p5ioc2_phb_ops = {
 	.slot_power_off		= p5ioc2_slot_power_off,
 	.slot_power_on		= p5ioc2_slot_power_on,
 	.hot_reset		= p5ioc2_hot_reset,
+	.fundamental_reset	= p5ioc2_freset,
 	.poll			= p5ioc2_poll,
 };
 
@@ -845,51 +870,18 @@ static void p5ioc2_phb_init_pcie(struct p5ioc2_phb *p)
 	/* XXX plenty more to do ... */
 }
 
-void p5ioc2_phb_init(struct p5ioc2_phb *p)
+static void p5ioc2_phb_hwinit(struct p5ioc2_phb *p)
 {
-	uint32_t phbid;
 	uint16_t pcicmd;
+	uint32_t phbid;
 
-	printf("P5IOC2: Initializing PHB %d on CA%d, regs @%p, BUID 0x%04x\n",
-	       p->index, p->ca, p->regs, p->buid);
+	printf("P5IOC2: Initializing PHB HW...\n");
 
-	/* Query PHB type, enable PHB and and disable address decoding */
+	/* Enable PHB and and disable address decoding */
 	phbid = in_be32(p->ca_regs + CA_PHBIDn(p->index));
 	phbid |= CA_PHBID_PHB_ENABLE;
 	phbid &= ~CA_PHBID_ADDRSPACE_ENABLE;
 	out_be32(p->ca_regs + CA_PHBIDn(p->index), phbid);
-
-	switch(GETFIELD(CA_PHBID_PHB_TYPE, phbid)) {
-	case CA_PHBTYPE_PCIX1_0:
-		p->is_pcie = false;
-		p->phb.scan_map = 0x0003;
-		p->phb.phb_type = phb_type_pcix_v1;
-		printf("P5IOC2: PHB is PCI/PCI-X 1.0\n");
-		break;
-	case CA_PHBTYPE_PCIX2_0:
-		p->is_pcie = false;
-		p->phb.scan_map = 0x0003;
-		p->phb.phb_type = phb_type_pcix_v2;
-		printf("P5IOC2: PHB is PCI/PCI-X 2.0\n");
-		break;
-	case CA_PHBTYPE_PCIE_G1:
-		p->is_pcie = true;
-		p->phb.scan_map = 0x0001;
-		p->phb.phb_type = phb_type_pcie_v1;
-		printf("P5IOC2: PHB is PCI Express Gen 1\n");
-		break;
-	case CA_PHBTYPE_PCIE_G2:
-		p->is_pcie = true;
-		p->phb.scan_map = 0x0001;
-		p->phb.phb_type = phb_type_pcie_v2;
-		printf("P5IOC2: PHB is PCI Express Gen 2\n");
-		break;
-	default:
-		printf("P5IOC2: Unknown PHB type ! phbid=%08x\n", phbid);
-		p->is_pcie = true;
-		p->phb.scan_map = 0x0001;
-		p->phb.phb_type = phb_type_pcie_v1;
-	}
 
 	/* Set BUID */
 	out_be32(p->regs + CAP_BUID, SETFIELD(CAP_BUID, 0, BUID_BASE(p->buid)));
@@ -1003,10 +995,118 @@ void p5ioc2_phb_init(struct p5ioc2_phb *p)
 	p->state = P5IOC2_PHB_STATE_FUNCTIONAL;
 }
 
+static void p5ioc2_pcie_add_node(struct p5ioc2_phb *p)
+{
+	uint64_t reg[2], mmb, iob;
+	uint32_t lsibase, icsp = get_ics_phandle();
+	struct dt_node *np;
+
+	reg[0] = cleanup_addr((uint64_t)p->regs);
+	reg[1] = 0x1000;
+
+	np = dt_new_addr(p->ioc->dt_node, "pciex", reg[0]);
+	p->phb.dt_node = np;
+	dt_add_property_strings(np, "compatible", "ibm,p5ioc2-pciex");
+	dt_add_property_strings(np, "device_type", "pciex");
+	dt_add_property(np, "reg", reg, sizeof(reg));
+	dt_add_property_cells(np, "#address-cells", 3);
+	dt_add_property_cells(np, "#size-cells", 2);
+	dt_add_property_cells(np, "#interrupt-cells", 1);
+	dt_add_property_cells(np, "bus-range", 0, 0xff);
+	dt_add_property_cells(np, "clock-frequency", 0x200, 0); /* ??? */
+	dt_add_property_cells(np, "interrupt-parent", icsp);
+	/* XXX FIXME: add phb own interrupts */
+	dt_add_property_cells(np, "ibm,opal-num-pes", 1);
+	dt_add_property_cells(np, "ibm,opal-msi-ranges", (p->buid << 4) + 5, 8);
+	/* XXX FIXME: add slot-name */
+	iob = cleanup_addr(p->io_base + IO_PCI_START);
+	mmb = cleanup_addr(p->mm_base + MM_PCI_START);
+	dt_add_property_cells(np, "ranges",
+			      /* IO space */
+			      0x01000000, 0x00000000, 0x00000000,
+			      hi32(iob), lo32(iob), 0, IO_PCI_SIZE,
+			      /* M32 space */
+			      0x02000000, 0x00000000, MM_PCI_START,
+			      hi32(mmb), lo32(mmb), 0, MM_PCI_SIZE);
+
+	/* The interrupt maps will be generated in the RC node by the
+	 * PCI code based on the content of this structure:
+	 */
+	lsibase = p->buid << 4;
+	p->phb.lstate.int_size = 1;
+	p->phb.lstate.int_val[0][0] = lsibase + 1;
+	p->phb.lstate.int_val[1][0] = lsibase + 2;
+	p->phb.lstate.int_val[2][0] = lsibase + 3;
+	p->phb.lstate.int_val[3][0] = lsibase + 4;
+	p->phb.lstate.int_parent[0] = icsp;
+	p->phb.lstate.int_parent[1] = icsp;
+	p->phb.lstate.int_parent[2] = icsp;
+	p->phb.lstate.int_parent[3] = icsp;
+
+	/* reset clear timestamp... to add if we do a reset and want
+	 * to avoid waiting in skiboot
+	 */
+	//dt_property_cells("reset-clear-timestamp",....
+}
+
+static void p5ioc2_pcix_add_node(struct p5ioc2_phb *p)
+{
+	uint64_t reg[2], mmb, iob;
+	uint32_t lsibase, icsp = get_ics_phandle();
+	struct dt_node *np;
+
+	reg[0] = cleanup_addr((uint64_t)p->regs);
+	reg[1] = 0x1000;
+
+	np = dt_new_addr(p->ioc->dt_node, "pci", reg[0]);
+	p->phb.dt_node = np;
+	dt_add_property_strings(np, "compatible", "ibm,p5ioc2-pcix");
+	dt_add_property_strings(np, "device_type", "pci");
+	dt_add_property(np, "reg", reg, sizeof(reg));
+	dt_add_property_cells(np, "#address-cells", 3);
+	dt_add_property_cells(np, "#size-cells", 2);
+	dt_add_property_cells(np, "#interrupt-cells", 1);
+	dt_add_property_cells(np, "bus-range", 0, 0xff);
+	dt_add_property_cells(np, "clock-frequency", 0x200, 0); /* ??? */
+	//dt_add_property_cells(np, "bus-width", 8); /* Figure out from VPD ? */
+	dt_add_property_cells(np, "interrupt-parent", icsp);
+	/* XXX FIXME: add phb own interrupts */
+	dt_add_property_cells(np, "ibm,opal-num-pes", 1);
+	/* XXX FIXME: add slot-name */
+	iob = cleanup_addr(p->io_base + IO_PCI_START);
+	mmb = cleanup_addr(p->mm_base + MM_PCI_START);
+	dt_add_property_cells(np, "ranges",
+			      /* IO space */
+			      0x01000000, 0x00000000, 0x00000000,
+			      hi32(iob), lo32(iob), 0, IO_PCI_SIZE,
+			      /* M32 space */
+			      0x02000000, 0x00000000, MM_PCI_START,
+			      hi32(mmb), lo32(mmb), 0, MM_PCI_SIZE);
+
+	/* The interrupt maps will be generated in the RC node by the
+	 * PCI code based on the content of this structure:
+	 */
+	lsibase = p->buid << 4;
+	p->phb.lstate.int_size = 1;
+	p->phb.lstate.int_val[0][0] = lsibase + 1;
+	p->phb.lstate.int_val[1][0] = lsibase + 2;
+	p->phb.lstate.int_val[2][0] = lsibase + 3;
+	p->phb.lstate.int_val[3][0] = lsibase + 4;
+	p->phb.lstate.int_parent[0] = icsp;
+	p->phb.lstate.int_parent[1] = icsp;
+	p->phb.lstate.int_parent[2] = icsp;
+	p->phb.lstate.int_parent[3] = icsp;
+
+	/* On PCI-X we need to create an interrupt map here */
+	pci_std_swizzle_irq_map(np, NULL, &p->phb.lstate, 0);
+}
+
 void p5ioc2_phb_setup(struct p5ioc2 *ioc, struct p5ioc2_phb *p,
 		      uint8_t ca, uint8_t index, bool active,
 		      uint32_t buid)
 {
+	uint32_t phbid;
+
 	p->index = index;
 	p->ca = ca;
 	p->ioc = ioc;
@@ -1016,12 +1116,59 @@ void p5ioc2_phb_setup(struct p5ioc2 *ioc, struct p5ioc2_phb *p,
 	p->ca_regs = ca ? ioc->ca1_regs : ioc->ca0_regs;
 	p->regs = p->ca_regs + CA_PHBn_REGS(index);
 
+	printf("P5IOC2: Initializing PHB %d on CA%d, regs @%p, BUID 0x%04x\n",
+	       p->index, p->ca, p->regs, p->buid);
+
 	/* Memory map: described in p5ioc2.h */
 	p->mm_base = ca ? ioc->ca1_mm_region : ioc->ca0_mm_region;
 	p->mm_base += MM_WINDOW_SIZE * index;
 	p->io_base = (uint64_t)p->ca_regs;
 	p->io_base += IO_PCI_SIZE * (index + 1);
 	p->state = P5IOC2_PHB_STATE_UNINITIALIZED;
+
+	/* Query PHB type */
+	phbid = in_be32(p->ca_regs + CA_PHBIDn(p->index));
+
+	switch(GETFIELD(CA_PHBID_PHB_TYPE, phbid)) {
+	case CA_PHBTYPE_PCIX1_0:
+		p->is_pcie = false;
+		p->phb.scan_map = 0x0003;
+		p->phb.phb_type = phb_type_pcix_v1;
+		printf("P5IOC2: PHB is PCI/PCI-X 1.0\n");
+		break;
+	case CA_PHBTYPE_PCIX2_0:
+		p->is_pcie = false;
+		p->phb.scan_map = 0x0003;
+		p->phb.phb_type = phb_type_pcix_v2;
+		printf("P5IOC2: PHB is PCI/PCI-X 2.0\n");
+		break;
+	case CA_PHBTYPE_PCIE_G1:
+		p->is_pcie = true;
+		p->phb.scan_map = 0x0001;
+		p->phb.phb_type = phb_type_pcie_v1;
+		printf("P5IOC2: PHB is PCI Express Gen 1\n");
+		break;
+	case CA_PHBTYPE_PCIE_G2:
+		p->is_pcie = true;
+		p->phb.scan_map = 0x0001;
+		p->phb.phb_type = phb_type_pcie_v2;
+		printf("P5IOC2: PHB is PCI Express Gen 2\n");
+		break;
+	default:
+		printf("P5IOC2: Unknown PHB type ! phbid=%08x\n", phbid);
+		p->is_pcie = true;
+		p->phb.scan_map = 0x0001;
+		p->phb.phb_type = phb_type_pcie_v1;
+	}
+
+	/* Add device nodes */
+	if (p->is_pcie)
+		p5ioc2_pcie_add_node(p);
+	else
+		p5ioc2_pcix_add_node(p);
+
+	/* Initialize PHB HW */
+	p5ioc2_phb_hwinit(p);
 
 	/* Register all 16 interrupt sources for now as OS visible
 	 *
@@ -1040,132 +1187,4 @@ void p5ioc2_phb_setup(struct p5ioc2 *ioc, struct p5ioc2_phb *p,
 	 */
 	pci_register_phb(&p->phb);
 }
-
-static void p5ioc2_pcie_add_nodes(struct p5ioc2_phb *p)
-{
-	char name[sizeof("pciex@") + STR_MAX_CHARS(p->regs)];
-	uint64_t reg[2], mmb, iob;
-	uint32_t lsibase, icsp = get_ics_phandle();
-	struct pci_lsi_state lstate;
-
-	reg[0] = cleanup_addr((uint64_t)p->regs);
-	reg[1] = 0x1000;
-
-	sprintf(name, "pciex@%llx", reg[0]);
-	dt_begin_node(name);
-	dt_property_string("compatible", "ibm,p5ioc2-pciex");
-	dt_property_string("device_type", "pciex");
-	dt_property("reg", reg, sizeof(reg));
-	dt_property_cell("#address-cells", 3);
-	dt_property_cell("#size-cells", 2);
-	dt_property_cell("#interrupt-cells", 1);
-	dt_property_cells("bus-range", 2, 0, 0xff);
-	dt_property_cells("clock-frequency", 2, 0x200, 0); /* ??? */
-	dt_property_cells("ibm,opal-phbid", 2, 0, p->phb.opal_id);
-	dt_property_cell("interrupt-parent", get_ics_phandle());
-	/* XXX FIXME: add phb own interrupts */
-	dt_property_cell("ibm,opal-num-pes", 1);
-	dt_property_cells("ibm,opal-msi-ranges", 2,
-			  (p->buid << 4) + 5, 8);
-	/* XXX FIXME: add slot-name */
-	iob = cleanup_addr(p->io_base + IO_PCI_START);
-	mmb = cleanup_addr(p->mm_base + MM_PCI_START);
-	dt_property_cells("ranges", 14,
-			  /* IO space */
-			  0x01000000, 0x00000000, 0x00000000,
-			  hi32(iob), lo32(iob), 0, IO_PCI_SIZE,
-			  /* M32 space */
-			  0x02000000, 0x00000000, MM_PCI_START,
-			  hi32(mmb), lo32(mmb), 0, MM_PCI_SIZE);
-
-	/* The interrupt maps will be generated in the RC node by the
-	 * PCI code based on the content of this structure:
-	 */
-	lsibase = p->buid << 4;
-	lstate.int_size = 1;
-	lstate.int_val[0][0] = lsibase + 1;
-	lstate.int_val[1][0] = lsibase + 2;
-	lstate.int_val[2][0] = lsibase + 3;
-	lstate.int_val[3][0] = lsibase + 4;
-	lstate.int_parent[0] = icsp;
-	lstate.int_parent[1] = icsp;
-	lstate.int_parent[2] = icsp;
-	lstate.int_parent[3] = icsp;
-
-	/* reset clear timestamp... to add if we do a reset and want
-	 * to avoid waiting in skiboot
-	 */
-	//dt_property_cells("reset-clear-timestamp",....
-
-	/* Add the child nodes */
-	pci_add_nodes(&p->phb, &lstate);
-	dt_end_node();
-}
-
-static void p5ioc2_pcix_add_nodes(struct p5ioc2_phb *p)
-{
-	char name[sizeof("pci@") + STR_MAX_CHARS(p->regs)];
-	uint64_t reg[2], mmb, iob;
-	uint32_t lsibase, icsp = get_ics_phandle();
-	struct pci_lsi_state lstate;
-
-	reg[0] = cleanup_addr((uint64_t)p->regs);
-	reg[1] = 0x1000;
-
-	sprintf(name, "pci@%llx", reg[0]);
-	dt_begin_node(name);
-	dt_property_string("compatible", "ibm,p5ioc2-pcix");
-	dt_property_string("device_type", "pci");
-	dt_property("reg", reg, sizeof(reg));
-	dt_property_cell("#address-cells", 3);
-	dt_property_cell("#size-cells", 2);
-	dt_property_cell("#interrupt-cells", 1);
-	dt_property_cells("bus-range", 2, 0, 0xff);
-	//dt_property_cell("bus-width", 8); /* Figure it out from VPD ? */
-	dt_property_cells("clock-frequency", 2, 0x200, 0); /* ??? */
-	dt_property_cells("ibm,opal-phbid", 2, 0, p->phb.opal_id);
-	dt_property_cell("interrupt-parent", get_ics_phandle());
-	/* XXX FIXME: add phb own interrupts */
-	dt_property_cell("ibm,opal-num-pes", 1);
-	/* XXX FIXME: add slot-name */
-	iob = cleanup_addr(p->io_base + IO_PCI_START);
-	mmb = cleanup_addr(p->mm_base + MM_PCI_START);
-	dt_property_cells("ranges", 14,
-			  /* IO space */
-			  0x01000000, 0x00000000, 0x00000000,
-			  hi32(iob), lo32(iob), 0, IO_PCI_SIZE,
-			  /* M32 space */
-			  0x02000000, 0x00000000, MM_PCI_START,
-			  hi32(mmb), lo32(mmb), 0, MM_PCI_SIZE);
-
-	/* The interrupt maps will be generated in the RC node by the
-	 * PCI code based on the content of this structure:
-	 */
-	lsibase = p->buid << 4;
-	lstate.int_size = 1;
-	lstate.int_val[0][0] = lsibase + 1;
-	lstate.int_val[1][0] = lsibase + 2;
-	lstate.int_val[2][0] = lsibase + 3;
-	lstate.int_val[3][0] = lsibase + 4;
-	lstate.int_parent[0] = icsp;
-	lstate.int_parent[1] = icsp;
-	lstate.int_parent[2] = icsp;
-	lstate.int_parent[3] = icsp;
-
-	/* On PCI-X we need to create an interrupt map here */
-	pci_std_swizzle_irq_map(NULL, &lstate, 0);
-
-	/* Add the child nodes */
-	pci_add_nodes(&p->phb, &lstate);
-	dt_end_node();
-}
-
-void p5ioc2_phb_add_nodes(struct p5ioc2_phb *p)
-{
-	if (p->is_pcie)
-		p5ioc2_pcie_add_nodes(p);
-	else
-		p5ioc2_pcix_add_nodes(p);
-}
-
 
