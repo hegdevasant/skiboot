@@ -33,36 +33,17 @@ static void io_add_common(struct dt_node *hn, const struct cechub_io_hub *hub,
 	dt_add_property_cells(hn, "ibm,gx-bar-2",
 			      hi32(hub->gx_ctrl_bar2), lo32(hub->gx_ctrl_bar2));
 
-	/* Load VPD LID */
-	if (lxr) {
-		void *vpd;
-		size_t sz;
-
-		vpd = vpd_lid_load(lxr, lx_idx, &sz);
-		if (!vpd) {
-			prerror("CEC: Failed to load VPD LID\n");
-		} else {
-			dt_add_property(hn, "ibm,vpd", vpd, sz);
-			free(vpd);
-		}
-	}
+	/* Add the LX info */
+	dt_add_property_cells(hn, "ibm,vpd-lx-info",
+			      lx_idx,
+			      ((uint32_t *)lxr)[0],
+			      ((uint32_t *)lxr)[1]);
 }
 
-static void io_add_p5ioc2(const struct cechub_io_hub *hub, struct dt_node *ics,
-			  int lx_idx, const void *lxr)
+static struct dt_node *io_add_p5ioc2(const struct cechub_io_hub *hub)
 {
 	struct dt_node *hn;
 	uint64_t reg[2];
-
-	printf("P5IOC2: Chip: %d GX bus: %d Base BUID: 0x%x EC Level: 0x%x\n",
-	       hub->proc_chip_id, hub->gx_index, hub->buid_ext, hub->ec_level);
-
-	/* GX BAR assignment: see p5ioc2.h */
-	printf("P5IOC2: GX BAR 0 = 0x%016llx\n", hub->gx_ctrl_bar0);
-	printf("P5IOC2: GX BAR 1 = 0x%016llx\n", hub->gx_ctrl_bar1);
-	printf("P5IOC2: GX BAR 2 = 0x%016llx\n", hub->gx_ctrl_bar2);
-	printf("P5IOC2: GX BAR 3 = 0x%016llx\n", hub->gx_ctrl_bar3);
-	printf("P5IOC2: GX BAR 4 = 0x%016llx\n", hub->gx_ctrl_bar4);
 
 	/* We assume SBAR == GX0 + some hard coded offset */
 	reg[0] = cleanup_addr(hub->gx_ctrl_bar0 + P5IOC2_REGS_OFFSET);
@@ -72,24 +53,13 @@ static void io_add_p5ioc2(const struct cechub_io_hub *hub, struct dt_node *ics,
 	dt_add_property(hn, "reg", reg, sizeof(reg));
 	dt_add_property_strings(hn, "compatible", "ibm,p5ioc2");
 
-	io_add_common(hn, hub, ics, lx_idx, lxr);
+	return hn;
 }
 
-static void io_add_p7ioc(const struct cechub_io_hub *hub, struct dt_node *ics,
-			 int lx_idx, const void *lxr)
+static struct dt_node *io_add_p7ioc(const struct cechub_io_hub *hub)
 {
 	struct dt_node *hn;
 	uint64_t reg[2];
-
-	printf("P7IOC: Chip: %d GX bus: %d Base BUID: 0x%x EC Level: 0x%x\n",
-	       hub->proc_chip_id, hub->gx_index, hub->buid_ext, hub->ec_level);
-
-	/* GX BAR assignment: see p7ioc.h */
-	printf("P7IOC: GX BAR 0 = 0x%016llx\n", hub->gx_ctrl_bar0);
-	printf("P7IOC: GX BAR 1 = 0x%016llx\n", hub->gx_ctrl_bar1);
-	printf("P7IOC: GX BAR 2 = 0x%016llx\n", hub->gx_ctrl_bar2);
-	printf("P7IOC: GX BAR 3 = 0x%016llx\n", hub->gx_ctrl_bar3);
-	printf("P7IOC: GX BAR 4 = 0x%016llx\n", hub->gx_ctrl_bar4);
 
 	/* We only know about memory map 1 */
 	if (hub->mem_map_vers != 1) {
@@ -104,7 +74,7 @@ static void io_add_p7ioc(const struct cechub_io_hub *hub, struct dt_node *ics,
 	dt_add_property(hn, "reg", reg, sizeof(reg));
 	dt_add_property_strings(hn, "compatible", "ibm,p7ioc", "ibm,ioda-hub");
 
- 	io_add_common(hn, hub, ics, lx_idx, lxr);
+	return hn;
 }
 
 static void io_parse_fru(const void *sp_iohubs, struct dt_node *ics)
@@ -112,6 +82,7 @@ static void io_parse_fru(const void *sp_iohubs, struct dt_node *ics)
 	unsigned int i, kwvpd_sz;	
 	const void *kwvpd;
 	int count, lx_idx;
+	struct dt_node *hn;
 
 	count = HDIF_get_iarray_size(sp_iohubs, CECHUB_FRU_IO_HUBS);
 	if (count < 1) {
@@ -119,7 +90,7 @@ static void io_parse_fru(const void *sp_iohubs, struct dt_node *ics)
 		return;
 	}
 
-	printf("CEC:   %d chips:\n", count);
+	printf("CEC:   %d chips in FRU\n", count);
 
 	/*
 	 * Note about LXRn numbering ...
@@ -148,7 +119,7 @@ static void io_parse_fru(const void *sp_iohubs, struct dt_node *ics)
 			prerror("CEC:     IO-HUB Chip %d bad idata\n", i);
 			continue;
 		}
-		printf("CEC:   Chip %d:\n", i);
+		printf("CEC:   IO Hub Chip #%d:\n", i);
 		switch (hub->flags & CECHUB_HUB_FLAG_STATE_MASK) {
 		case CECHUB_HUB_FLAG_STATE_OK:
 			printf("CEC:     OK\n");
@@ -163,6 +134,17 @@ static void io_parse_fru(const void *sp_iohubs, struct dt_node *ics)
 			printf("CEC:     Unusable");
 			continue;
 		}
+
+		/* GX BAR assignment */
+		printf("CEC:   PChip: %d GX: %d BUID_Ext: 0x%x EC: 0x%x\n",
+		       hub->proc_chip_id, hub->gx_index, hub->buid_ext,
+		       hub->ec_level);
+
+		printf("    GX BAR 0 = 0x%016llx\n", hub->gx_ctrl_bar0);
+		printf("    GX BAR 1 = 0x%016llx\n", hub->gx_ctrl_bar1);
+		printf("    GX BAR 2 = 0x%016llx\n", hub->gx_ctrl_bar2);
+		printf("    GX BAR 3 = 0x%016llx\n", hub->gx_ctrl_bar3);
+		printf("    GX BAR 4 = 0x%016llx\n", hub->gx_ctrl_bar4);
 
 		lxr = NULL;
 		if (kwvpd) {
@@ -186,17 +168,19 @@ static void io_parse_fru(const void *sp_iohubs, struct dt_node *ics)
 					lx_idx = VPD_LOAD_LXRN_VINI;
 			}
 		}
-		printf("CEC:     LXRn=%d LXR=%.6s\n", lx_idx,
-		       lxr ? (char *)lxr : "<NULL>");
+		printf("CEC:     LXRn=%d LXR=%016lx\n", lx_idx,
+		       lxr ? *(unsigned long *)lxr : 0);
 
 		switch(hub->iohub_id) {
 		case CECHUB_HUB_P7IOC:
 			printf("CEC:     P7IOC !\n");
-			io_add_p7ioc(hub, ics, lx_idx, lxr);
+			hn = io_add_p7ioc(hub);
+			io_add_common(hn, hub, ics, lx_idx, lxr);
 			break;
 		case CECHUB_HUB_P5IOC2:
 			printf("CEC:     P5IOC2 !\n");
-			io_add_p5ioc2(hub, ics, lx_idx, lxr);
+			hn = io_add_p5ioc2(hub);
+			io_add_common(hn, hub, ics, lx_idx, lxr);
 			break;
 		default:
 			printf("CEC:     Hub ID 0x%04x unsupported !\n",

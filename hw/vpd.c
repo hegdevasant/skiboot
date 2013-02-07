@@ -90,7 +90,7 @@ const void *vpd_find(const void *vpd, size_t vpd_size,
 }
 
 /* Helper to load a VPD LID. Pass a ptr to the corresponding LX keyword */
-void *vpd_lid_load(const uint8_t *lx, uint8_t lxrn, size_t *size)
+static void *vpd_lid_load(const uint8_t *lx, uint8_t lxrn, size_t *size)
 {
 	/* Now this is a guess game as we don't have the info from the
 	 * pHyp folks. But basically, it seems to boil down to loading
@@ -101,13 +101,10 @@ void *vpd_lid_load(const uint8_t *lx, uint8_t lxrn, size_t *size)
 	 * actually 4 digits, though the lid number is limited to fff
 	 * so we weren't far off. ]
 	 *
-	 * So for a LID number, that means the LSB is the LSB of the
-	 * LX record.
-	 *
 	 * For safety, we look for a matching LX record in an LXRn
 	 * (n = lxrn argument) or in VINI if lxrn=0xff
 	 */
-	uint32_t lid_no = 0x80e00000 | (lx[4] << 4) | lx[5];
+	uint32_t lid_no = 0x80e00000 | ((lx[6] & 0xf) << 8) | lx[7];
 
 	/* We don't quite know how to get to the LID directory so
 	 * we don't know the size. Let's allocate 16K. All the VPD LIDs
@@ -134,6 +131,8 @@ void *vpd_lid_load(const uint8_t *lx, uint8_t lxrn, size_t *size)
 	if (!side || !strcmp(side, "temp"))
 		lid_no |= 0x8000;
 
+	printf("VPD: Trying to load VPD LID 0x%08x...\n", lid_no);
+
 	/* Load it from the FSP */
 	rc = fsp_fetch_data(0, FSP_DATASET_NONSP_LID, lid_no, 0, data, size);
 	if (rc) {
@@ -148,14 +147,16 @@ void *vpd_lid_load(const uint8_t *lx, uint8_t lxrn, size_t *size)
 		memcpy(record, "VINI", 4);
 
 	valid_lx = vpd_find(data, *size, record, "LX", &lx_size);
-	if (!valid_lx || lx_size != 6) {
+	if (!valid_lx || lx_size != 8) {
 		prerror("VPD: Cannot find validation LX record\n");
 		goto fail;
 	}
-	if (memcmp(valid_lx, lx, 6) != 0) {
+	if (memcmp(valid_lx, lx, 8) != 0) {
 		prerror("VPD: LX record mismatch !\n");
 		goto fail;
 	}
+
+	printf("VPD: Loaded %ld bytes\n", *size);
 
 	/* Got it ! */
 	realloc(data, *size);
@@ -163,6 +164,30 @@ void *vpd_lid_load(const uint8_t *lx, uint8_t lxrn, size_t *size)
  fail:
 	free(data);
 	return NULL;
+}
+
+void vpd_iohub_load(struct dt_node *hub_node)
+{
+	void *vpd;
+	size_t sz;
+	const uint32_t *p;
+	unsigned int lx_idx;
+	char *lxr;
+
+	p = dt_prop_get_def(hub_node, "ibm,vpd-lx-info", NULL);
+	if (!p)
+		return;
+
+	lx_idx = p[0];
+	lxr = (char *)&p[1];
+
+	vpd = vpd_lid_load(lxr, lx_idx, &sz);
+	if (!vpd) {
+		prerror("VPD: Failed to load VPD LID\n");
+	} else {
+		dt_add_property(hub_node, "ibm,vpd", vpd, sz);
+		free(vpd);
+	}
 }
 
 static const void *vpd_find_from_spira(struct spira_ntuple *np,

@@ -5,6 +5,7 @@
 #include <cec.h>
 #include <opal.h>
 #include <io.h>
+#include <vpd.h>
 #include <interrupts.h>
 #include <ccan/str/str.h>
 
@@ -599,6 +600,9 @@ static void p7ioc_create_hub(struct dt_node *np)
 	path = dt_get_path(np);	
 	printf("P7IOC: Found at %s ID 0x%x\n", path, id);
 	free(path);
+
+	/* Load VPD LID */
+	vpd_iohub_load(np);
 
 	ioc = zalloc(sizeof(struct p7ioc));
 	if (!ioc)

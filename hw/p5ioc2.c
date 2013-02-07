@@ -8,6 +8,7 @@
 #include <interrupts.h>
 #include <device.h>
 #include <time.h>
+#include <vpd.h>
 #include <ccan/str/str.h>
 
 
@@ -166,6 +167,9 @@ static void p5ioc2_create_hub(struct dt_node *np)
 	printf("P5IOC2: Found at %s ID 0x%x\n", path, id);
 	free(path);
 	dt_add_property_cells(np, "ibm,opal-hubid", 0, id);
+
+	/* Load VPD LID */
+	vpd_iohub_load(np);
 
 	ioc = zalloc(sizeof(struct p5ioc2));
 	if (!ioc)
