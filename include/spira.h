@@ -441,6 +441,15 @@ struct cechub_io_hub {
 	uint16_t	gard_mask;	/* vpl3 has: 0x0f79 */
 } __packed;
 
+/* Child index 0: IO Daugther Card */
+#define CECHUB_CHILD_IO_KIDS		0
+
+/*
+ * IO KID is a dauther card structure
+ */
+#define IOKID_FRU_ID_DATA	0
+#define IOKID_KW_VPD		1
+
 /*
  * Slot Location Code Array (aka SLCA)
  *

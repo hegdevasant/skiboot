@@ -1,7 +1,8 @@
 #ifndef __CONFIG_H
 #define __CONFIG_H
 
-#define HAVE_TYPEOF		1
+#define HAVE_TYPEOF			1
+#define HAVE_BUILTIN_TYPES_COMPATIBLE_P	1
 
 /* Enable lock debugging */
 #define DEBUG_LOCKS		1
