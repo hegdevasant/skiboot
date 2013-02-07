@@ -119,8 +119,11 @@ void load_and_boot_kernel(bool is_reboot)
 	uint64_t mem_top;
 
 	memprop = dt_find_property(dt_root, DT_PRIVATE "maxmem");
-	mem_top = (u64)dt_property_get_cell(memprop, 0) << 32
-		| dt_property_get_cell(memprop, 1);
+	if (memprop)
+		mem_top = (u64)dt_property_get_cell(memprop, 0) << 32
+			| dt_property_get_cell(memprop, 1);
+	else /* XXX HB hack, might want to calc it */
+		mem_top = 0x40000000;
 
 	op_display(OP_LOG, OP_MOD_INIT, 0x0006);
 
