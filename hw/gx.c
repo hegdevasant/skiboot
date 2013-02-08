@@ -7,7 +7,7 @@
  */
 static int gx_p7_configure_psi_buid(uint32_t chip, uint32_t buid)
 {
-	uint32_t gcid = CHIP2GCID(chip);
+	uint32_t gcid = xscom_chip_to_gcid(chip);
 	uint64_t mode1;
 	int rc;
 
@@ -32,7 +32,7 @@ static int gx_p7_configure_psi_buid(uint32_t chip, uint32_t buid)
 
 static int gx_p7p_configure_psi_buid(uint32_t chip, uint32_t buid)
 {
-	uint32_t gcid = CHIP2GCID(chip);
+	uint32_t gcid = xscom_chip_to_gcid(chip);
 	uint64_t mode4;
 	int rc;
 
@@ -80,7 +80,7 @@ int gx_configure_psi_buid(uint32_t chip, uint32_t buid)
 static int gx_p7_configure_tce_bar(uint32_t chip, uint32_t gx, uint64_t addr,
 				   uint64_t size)
 {
-	uint32_t gcid = CHIP2GCID(chip);
+	uint32_t gcid = xscom_chip_to_gcid(chip);
 	uint32_t areg, mreg;
 	int rc;
 

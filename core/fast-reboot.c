@@ -51,7 +51,7 @@ static void flush_caches(void)
 
 static bool do_reset_core_p7(struct cpu_thread *cpu)
 {
-	uint32_t xscom_addr;
+	uint32_t xscom_addr, gcid;
 	uint64_t ctl;
 	int rc;
 
@@ -59,11 +59,13 @@ static bool do_reset_core_p7(struct cpu_thread *cpu)
 	xscom_addr = EX0_TCTL_DIRECT_CONTROLS0;
 	xscom_addr |= ((cpu->pir >> 2) & 7) << 24;
 
+	gcid = xscom_pir_to_gcid(cpu->pir);
+
 	ctl = TCTL_DC_SRESET_REQUEST;
-	rc = xscom_write(PIR2GCID(cpu->pir), xscom_addr, ctl);
-	rc |= xscom_write(PIR2GCID(cpu->pir), xscom_addr + 0x40, ctl);
-	rc |= xscom_write(PIR2GCID(cpu->pir), xscom_addr + 0x80, ctl);
-	rc |= xscom_write(PIR2GCID(cpu->pir), xscom_addr + 0xc0, ctl);
+	rc = xscom_write(gcid, xscom_addr, ctl);
+	rc |= xscom_write(gcid, xscom_addr + 0x40, ctl);
+	rc |= xscom_write(gcid, xscom_addr + 0x80, ctl);
+	rc |= xscom_write(gcid, xscom_addr + 0xc0, ctl);
 	if (rc) {
 		prerror("RESET: Error %d resetting CPU 0x%04x\n",
 			rc, cpu->pir);
