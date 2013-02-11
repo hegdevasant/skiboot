@@ -2,6 +2,10 @@
 #include <gx.h>
 #include <xscom.h>
 
+/*
+ * Note: This file os only used on P7/P7+
+ */
+
 /* Configuration of the PSI BUID, see the explanation in
  * interrupts.h
  */

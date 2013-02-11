@@ -190,7 +190,7 @@ static int64_t p7ioc_rgc_get_xive(void *data, uint32_t isn,
 {
 	struct p7ioc *ioc = data;
 	uint32_t irq = (isn & 0xf);
-	uint32_t fbuid = IRQ_FBUID(isn);
+	uint32_t fbuid = P7_IRQ_FBUID(isn);
 	uint64_t xive;
 
 	if (fbuid != ioc->rgc_buid)
@@ -208,7 +208,7 @@ static int64_t p7ioc_rgc_set_xive(void *data, uint32_t isn,
 {
 	struct p7ioc *ioc = data;
 	uint32_t irq = (isn & 0xf);
-	uint32_t fbuid = IRQ_FBUID(isn);
+	uint32_t fbuid = P7_IRQ_FBUID(isn);
 	uint64_t xive;
 	uint64_t m_server, m_prio;
 

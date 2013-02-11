@@ -1994,7 +1994,7 @@ static int64_t p7ioc_msi_get_xive(void *data, uint32_t isn,
 				  uint16_t *server, uint8_t *prio)
 {
 	struct p7ioc_phb *p = data;
-	uint32_t irq, fbuid = IRQ_FBUID(isn);
+	uint32_t irq, fbuid = P7_IRQ_FBUID(isn);
 	uint64_t xive;
 
 	if (fbuid < p->buid_msi || fbuid >= (p->buid_msi + 0x10))
@@ -2014,7 +2014,7 @@ static int64_t p7ioc_msi_set_xive(void *data, uint32_t isn,
 				  uint16_t server, uint8_t prio)
 {
 	struct p7ioc_phb *p = data;
-	uint32_t irq, fbuid = IRQ_FBUID(isn);
+	uint32_t irq, fbuid = P7_IRQ_FBUID(isn);
 	uint64_t xive, m_server, m_prio;
 
 	if (fbuid < p->buid_msi || fbuid >= (p->buid_msi + 0x10))
@@ -2055,7 +2055,7 @@ static int64_t p7ioc_lsi_get_xive(void *data, uint32_t isn,
 {
 	struct p7ioc_phb *p = data;
 	uint32_t irq = (isn & 0x7);
-	uint32_t fbuid = IRQ_FBUID(isn);
+	uint32_t fbuid = P7_IRQ_FBUID(isn);
 	uint64_t xive;
 
 	if (fbuid != p->buid_lsi)
@@ -2074,7 +2074,7 @@ static int64_t p7ioc_lsi_set_xive(void *data, uint32_t isn,
 {
 	struct p7ioc_phb *p = data;
 	uint32_t irq = (isn & 0x7);
-	uint32_t fbuid = IRQ_FBUID(isn);
+	uint32_t fbuid = P7_IRQ_FBUID(isn);
 	uint64_t xive, m_server, m_prio;
 
 	if (fbuid != p->buid_lsi)
@@ -2650,8 +2650,8 @@ int64_t p7ioc_phb_init(struct p7ioc_phb *p)
 	 * are always 0. Our buid_msi value should also be a multiple of
 	 * 16 so it should all fit well
 	 */
-	val  = SETFIELD(PHB_BUID_LSI, 0ul, BUID_BASE(p->buid_lsi));
-	val |= SETFIELD(PHB_BUID_MSI, 0ul, BUID_BASE(p->buid_msi));
+	val  = SETFIELD(PHB_BUID_LSI, 0ul, P7_BUID_BASE(p->buid_lsi));
+	val |= SETFIELD(PHB_BUID_MSI, 0ul, P7_BUID_BASE(p->buid_msi));
 	out_be64(p->regs + PHB_BUID, val);
 
 	/* Init_10..12: IO Space */

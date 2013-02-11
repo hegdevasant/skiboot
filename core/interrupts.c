@@ -90,12 +90,15 @@ uint32_t get_psi_interrupt(uint32_t chip_id)
 {
 	uint32_t irq;
 
+	/* XXX P7/P7+ Only, change for PSI support on P8 */
+	assert(proc_gen == proc_gen_p7);
+
 	/* Get the node ID bits into position */
 	irq  = (chip_id & 0x1c) << (4 + 9 + 1 + 2 + 1);
 	/* Get the chip ID bits into position */
 	irq |= (chip_id & 0x03) << (4 + 9 + 1);
 	/* Add in the BUID */
-	irq |= PSI_IRQ_BUID << 4;
+	irq |= P7_PSI_IRQ_BUID << 4;
 
 	return irq;
 }

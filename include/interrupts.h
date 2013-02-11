@@ -5,8 +5,8 @@
 #include <ccan/list/list.h>
 
 /*
- * Note about interrupt numbers
- * ============================
+ * Note about interrupt numbers on P7/P7+
+ * ======================================
  *
  * The form of an interrupt number in the system on P7/P7+ is as follow:
  *
@@ -55,7 +55,7 @@
  * PCI interrupt numbering scheme:
  * -------------------------------
  *
- * TBD
+ * See IOCs
  *
  * NX interrupt numbering scheme (p7+):
  * ------------------------------------
@@ -106,24 +106,32 @@
  *       the comparison to NX_BUID_BASE, ie 4 interrupts means a mask
  *       value of b'111111100
  *
+ * Note about interrupt numbers on P8
+ * ==================================
+ *
+ * On P8 the interrupts numbers are just a flat space of 19-bit,
+ * there is no BUID or similar.
+ *
+ * However, various unit tend to require blocks of interrupt that
+ * are naturally power-of-two aligned
  */
-#define PSI_IRQ_BUID	0x3	/* 9-bit BUID for the PSI interrupts */
+#define P7_PSI_IRQ_BUID	0x3	/* 9-bit BUID for the PSI interrupts */
 
 /* Extract individual components of an IRQ number */
-#define IRQ_BUID(irq)	(((irq) >>  4) & 0x1ff)
-#define IRQ_GXID(irq)	(((irq) >> 13) & 0x1)
-#define IRQ_CHIP(irq)	(((irq) >> 14) & 0x3)
-#define IRQ_TBIT(irq)	(((irq) >> 16) & 0x1)
-#define IRQ_NODE(irq)	(((irq) >> 17) & 0x7)
+#define P7_IRQ_BUID(irq)	(((irq) >>  4) & 0x1ff)
+#define P7_IRQ_GXID(irq)	(((irq) >> 13) & 0x1)
+#define P7_IRQ_CHIP(irq)	(((irq) >> 14) & 0x3)
+#define P7_IRQ_TBIT(irq)	(((irq) >> 16) & 0x1)
+#define P7_IRQ_NODE(irq)	(((irq) >> 17) & 0x7)
 
 /* Extract the "full BUID" (extension + BUID) */
-#define IRQ_FBUID(irq)	(((irq) >> 4) & 0xffff)
+#define P7_IRQ_FBUID(irq)	(((irq) >> 4) & 0xffff)
 
 /* BUID Extension (GX + CHIP + T + NODE) */
-#define IRQ_BEXT(irq)	(((irq) >> 13) & 0x7f)
+#define P7_IRQ_BEXT(irq)	(((irq) >> 13) & 0x7f)
 
 /* Strip extension from BUID */
-#define BUID_BASE(buid)	((buid) & 0x1ff)
+#define P7_BUID_BASE(buid)	((buid) & 0x1ff)
 
 
 /*

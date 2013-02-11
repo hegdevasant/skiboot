@@ -5,22 +5,8 @@
 #include <p5ioc2.h>
 #include <interrupts.h>
 
-/* We keep an array of IO Hubs indexed on the BUID Extension
- *
- * NOTE: If we have to deal with pass-through GX we might want
- *       to add one more bit
- *
- * |  Node  | T| Chip|GX|
- * |--|--|--|--|--|--|--|
- *
- * The OPAL hub ID is thus the index in that array
- *
- * XXX We have no hub level locking, that might be an issue
- * with get_diag_data...
- *
- * XXX This numbering is P7/P7+ centric. P8 has no IO hubs and
- *     much more lax BUID numbering. We simply don't use that
- *     code on P8 at all and directly instanciate PHBs.
+/*
+ * Note: This file os only used on P7/P7+
  */
 #define MAX_IO_HUBS	0x80
 

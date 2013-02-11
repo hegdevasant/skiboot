@@ -75,14 +75,15 @@ static bool __chiptod_init(u32 master_cpu)
 			return false;
 		}
 		chiptod_primary = t->chip_id;
-		switch(PVR_TYPE(mfspr(SPR_PVR))) {
-		case PVR_TYPE_P7:
-		case PVR_TYPE_P7P:
+		switch(proc_gen) {
+		case proc_gen_p7:
 			chiptod_type = chiptod_p7;
 			return true;
-		case PVR_TYPE_P8:
+		case proc_gen_p8:
 			chiptod_type = chiptod_p8;
 			return true;
+		default:
+			break;
 		}	
 		prerror("CHIPTOD: Unknown fallback CPU type !\n");
 		return false;

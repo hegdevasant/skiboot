@@ -294,15 +294,18 @@ void init_boot_cpu(void)
 	case PVR_TYPE_P7P:
 		cpu_thread_count = 4;
 		cpu_max_pir = SPR_PIR_P7_MASK;
+		proc_gen = proc_gen_p7;
 		break;
 	case PVR_TYPE_P8:
 		cpu_thread_count = 8;
 		cpu_max_pir = SPR_PIR_P8_MASK;
+		proc_gen = proc_gen_p8;
 		break;
 	default:
 		prerror("CPU: Unknown PVR, assuming 1 thread\n");
 		cpu_thread_count = 1;
 		cpu_max_pir = mfspr(SPR_PIR);
+		proc_gen = proc_gen_unknown;
 	}
 
 	printf("CPU: Boot CPU PIR is 0x%04x\n", pir);

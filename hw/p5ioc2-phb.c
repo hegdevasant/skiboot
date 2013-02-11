@@ -786,7 +786,7 @@ static int64_t p5ioc2_phb_get_xive(void *data, uint32_t isn,
 				   uint16_t *server, uint8_t *prio)
 {
 	struct p5ioc2_phb *p = data;
-	uint32_t irq, xivr, fbuid = IRQ_FBUID(isn);
+	uint32_t irq, xivr, fbuid = P7_IRQ_FBUID(isn);
 
 	if (fbuid != p->buid)
 		return OPAL_PARAMETER;
@@ -804,7 +804,7 @@ static int64_t p5ioc2_phb_set_xive(void *data, uint32_t isn,
 				   uint16_t server, uint8_t prio)
 {
 	struct p5ioc2_phb *p = data;
-	uint32_t irq, xivr, fbuid = IRQ_FBUID(isn);
+	uint32_t irq, xivr, fbuid = P7_IRQ_FBUID(isn);
 
 	if (fbuid != p->buid)
 		return OPAL_PARAMETER;
@@ -884,7 +884,8 @@ static void p5ioc2_phb_hwinit(struct p5ioc2_phb *p)
 	out_be32(p->ca_regs + CA_PHBIDn(p->index), phbid);
 
 	/* Set BUID */
-	out_be32(p->regs + CAP_BUID, SETFIELD(CAP_BUID, 0, BUID_BASE(p->buid)));
+	out_be32(p->regs + CAP_BUID, SETFIELD(CAP_BUID, 0,
+					      P7_BUID_BASE(p->buid)));
 
 	/* Set IO and Memory mapping */
 	out_be32(p->regs + CAP_IOAD_H, hi32(p->io_base + IO_PCI_START));

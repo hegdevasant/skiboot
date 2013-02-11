@@ -38,6 +38,14 @@ enum ipl_state {
 };
 extern enum ipl_state ipl_state;
 
+/* Processor generation */
+enum proc_gen {
+	proc_gen_unknown,
+	proc_gen_p7,		/* P7 and P7+ */
+	proc_gen_p8,
+};
+extern enum proc_gen proc_gen;
+
 /* Boot stack top */
 extern void *boot_stack_top;
 

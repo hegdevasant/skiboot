@@ -1,5 +1,11 @@
 /*
  * Service Processor handling code
+ *
+ * XXX This mixes PSI and FSP and currently only supports
+ * P7/P7+ PSI and FSP1
+ *
+ * If we are going to support P8 PSI and FSP2, we probably want
+ * to split the PSI support from the FSP support proper first.
  */
 #include <stdarg.h>
 #include <processor.h>
@@ -995,7 +1001,7 @@ static int64_t fsp_psi_set_xive(void *data, uint32_t isn __unused,
 	/* Populate the XIVR */
 	xivr  = (uint64_t)server << 40;
 	xivr |= (uint64_t)priority << 32;
-	xivr |=	IRQ_BUID(iop->interrupt) << 16;
+	xivr |=	P7_IRQ_BUID(iop->interrupt) << 16;
 
 	out_be64(iop->gxhb_regs + PSIHB_XIVR, xivr);
 
@@ -1038,7 +1044,7 @@ void fsp_psi_irq_reset(void)
 
 			/* Mask the interrupt & clean the XIVR */
 			xivr = 0x000000ff00000000;
-			xivr |=	IRQ_BUID(iop->interrupt) << 16;
+			xivr |=	P7_IRQ_BUID(iop->interrupt) << 16;
 			out_be64(iop->gxhb_regs + PSIHB_XIVR, xivr);
 
 #if 0 /* Seems to checkstop ... */
@@ -1069,11 +1075,11 @@ static int fsp_psi_init_phb(struct fsp_iopath *fiop, bool active)
 
 	/* Configure the interrupt BUID and mask it */
 	out_be64(fiop->gxhb_regs + PSIHB_XIVR,
-		 IRQ_BUID(fiop->interrupt) << 16 |
+		 P7_IRQ_BUID(fiop->interrupt) << 16 |
 		 0xffull << 32);
 
 	/* Configure it in the GX controller as well */
-	gx_configure_psi_buid(fiop->chip_id, IRQ_BUID(fiop->interrupt));
+	gx_configure_psi_buid(fiop->chip_id, P7_IRQ_BUID(fiop->interrupt));
 
 	/* Diable interrupt emission in the control register,
 	 * it will be re-enabled later, after the mailbox one
