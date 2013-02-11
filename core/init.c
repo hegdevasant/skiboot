@@ -11,6 +11,7 @@
 #include <cec.h>
 #include <device.h>
 #include <pci.h>
+#include <lpc.h>
 #include <libfdt/libfdt.h>
 
 
@@ -203,6 +204,9 @@ void main_cpu_entry(const void *fdt, u32 master_cpu)
 
 	/* Initialize XSCOM */
 	xscom_init();
+
+	/* Initialize LPC (P8 only) so we can get to UART */
+	lpc_init();
 
 	/* Early initializations of the FSP interface */
 	fsp_init();

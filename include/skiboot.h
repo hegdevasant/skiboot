@@ -104,6 +104,7 @@ extern void init_replicated_sprs(void);
 /* Various probe routines, to replace with an initcall system */
 extern void probe_p5ioc2(void);
 extern void probe_p7ioc(void);
+extern void uart_init(void);
 
 /* Flatten device-tree */
 extern void *create_dtb(const struct dt_node *root);
