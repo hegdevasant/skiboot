@@ -2,7 +2,6 @@
 #include <vpd.h>
 #include <string.h>
 #include <fsp.h>
-#include <spira.h>
 #include <device.h>
 
 #define CHECK_SPACE(_p, _n, _e) (((_e) - (_p)) >= (_n))
@@ -188,40 +187,4 @@ void vpd_iohub_load(struct dt_node *hub_node)
 		dt_add_property(hub_node, "ibm,vpd", vpd, sz);
 		free(vpd);
 	}
-}
-
-static const void *vpd_find_from_spira(struct spira_ntuple *np,
-				       unsigned int idata,
-				       const char *record, const char *keyword,
-				       uint8_t *size)
-{
-	const void *idptr;
-	unsigned int idsz;
-
-	if (!np->addr)
-		return NULL;
-	idptr = HDIF_get_idata(np->addr, idata, &idsz);
-	if (!CHECK_SPPTR(idptr))
-		return NULL;
-
-	return vpd_find(idptr, idsz, record, keyword, size);
-}
-
-void add_dtb_model(void)
-{
-	const char *model;
-	char *str;
-	uint8_t sz;
-
-	model = vpd_find_from_spira(&spira.ntuples.system_vpd,
-				    SYSVPD_IDATA_KW_VPD,
-				    "VSYS", "TM", &sz);
-	if (!model) {
-		dt_add_property_string(dt_root, "model", "Unknown");
-		return;
-	}
-	str = zalloc(sz + 1);
-	memcpy(str, model, sz);
-	dt_add_property_string(dt_root, "model", str);
-	free(str);
 }

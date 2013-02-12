@@ -1,7 +1,7 @@
 # -*-Makefile-*-
 
 SUBDIRS += hdata
-HDATA_OBJS = spira.o paca.o pcia.o hdif.o memory.o fsp.o iohub.o
+HDATA_OBJS = spira.o paca.o pcia.o hdif.o memory.o fsp.o iohub.o vpd.o
 DEVSRC_OBJ = hdata/built-in.o
 
 $(DEVSRC_OBJ): $(HDATA_OBJS:%=hdata/%)

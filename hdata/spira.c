@@ -439,7 +439,7 @@ void parse_hdat(bool is_opal)
 	add_iplparams();
 
 	/* Get model property based on System VPD */
-	add_dtb_model();
+	sysvpd_parse();
 
 	/* Parse SPPACA and/or PCIA */
 	if (!pcia_parse())
