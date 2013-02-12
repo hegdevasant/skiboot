@@ -23,7 +23,7 @@
 #define P5IOC2_CA0_REG_OFFSET		0	   /* From BAR6, R0 */
 #define P5IOC2_CA1_REG_OFFSET		0x01000000 /* From BAR6, R1 */
 #define P5IOC2_CA0_MM_OFFSET		0	   /* From BAR0, R0 and 1 */
-#define P5IOC2_CA1_MM_OFFSET	      0x1000000000ul /* From BAR0, R1 and 2 */
+#define P5IOC2_CA1_MM_OFFSET	        0x400000000ul /* From BAR0, R1 and 2 */
 #define P5IOC2_CA_PHB_COUNT		4
 #define P5IOC2_CA0_RIO_ID		2
 #define P5IOC2_CA1_RIO_ID		3

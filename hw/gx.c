@@ -109,7 +109,7 @@ static int gx_p7_configure_tce_bar(uint32_t chip, uint32_t gx, uint64_t addr,
 				 (addr >> GX_P7_TCE_BAR_ADDR_SHIFT));
 		taddr |= GX_P7_TCE_BAR_ENABLE;
 		tmask = SETFIELD(GX_P7_TCE_MASK, 0ul,
-				 ((~(size - 1)) >> GX_P7_TCE_BAR_ADDR_SHIFT));
+				 ~((size - 1) >> GX_P7_TCE_BAR_ADDR_SHIFT));
 		rc = xscom_write(gcid, areg, 0);
 		rc |= xscom_write(gcid, mreg, tmask);
 		rc |= xscom_write(gcid, areg, taddr);

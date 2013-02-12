@@ -53,6 +53,7 @@ static const struct io_hub_ops p5ioc2_hub_ops = {
 static void p5ioc2_inits(struct p5ioc2 *ioc)
 {
 	uint64_t val;
+	unsigned int p, n;
 
 	printf("P5IOC2: Initializing hub...\n");
 
@@ -70,12 +71,23 @@ static void p5ioc2_inits(struct p5ioc2 *ioc)
 	/* setup hub and clustering interrupts BUIDs to 1 and 2 */
 	out_be64(ioc->regs + P5IOC2_SBUID, 0x0001000200000000);
 
+	/* setup old style MSI BUID (should be unused but set it up anyway) */
+	out_be32(ioc->regs + P5IOC2_BUCO, 0xf);
+
 	/* Set XIXO bit 0 needed for "enhanced" TCEs or else TCE
 	 * fetches appear as normal memory reads on GX causing
 	 * P7 to checkstop when a TCE DKill collides with them.
 	 */
 	out_be64(ioc->regs + P5IOC2_XIXO, in_be64(ioc->regs + P5IOC2_XIXO)
 		 | P5IOC2_XIXO_ENH_TCE);
+
+	/* Clear routing tables */
+	for (n = 0; n < 16; n++) {
+		for (p = 0; p < 8; p++)
+			out_be64(ioc->regs + P5IOC2_TxRTE(p,n), 0);
+	}
+	for (n = 0; n < 32; n++)
+		out_be64(ioc->regs + P5IOC2_BUIDRTE(n), 0);
 
 	/*
 	 * Setup routing. We use the same setup that pHyp appears
@@ -88,16 +100,23 @@ static void p5ioc2_inits(struct p5ioc2 *ioc)
 	 * The routing is based on what pHyp and BML do, each Calgary
 	 * get one slice of BAR6 and two slices of BAR0
 	 */
+	/* BAR 0 segments 0 & 1 -> CA0 */
 	out_be64(ioc->regs + P5IOC2_TxRTE(0,0),
 		 P5IOC2_TxRTE_VALID | P5IOC2_CA0_RIO_ID);
 	out_be64(ioc->regs + P5IOC2_TxRTE(0,1),
 		 P5IOC2_TxRTE_VALID | P5IOC2_CA0_RIO_ID);
+
+	/* BAR 0 segments 2 & 3 -> CA1 */
 	out_be64(ioc->regs + P5IOC2_TxRTE(0,2),
 		 P5IOC2_TxRTE_VALID | P5IOC2_CA1_RIO_ID);
 	out_be64(ioc->regs + P5IOC2_TxRTE(0,3),
 		 P5IOC2_TxRTE_VALID | P5IOC2_CA1_RIO_ID);
+
+	/* BAR 6 segments 0 -> CA0 */
 	out_be64(ioc->regs + P5IOC2_TxRTE(6,0),
 		 P5IOC2_TxRTE_VALID | P5IOC2_CA0_RIO_ID);
+
+	/* BAR 6 segments 1 -> CA0 */
 	out_be64(ioc->regs + P5IOC2_TxRTE(6,1),
 		 P5IOC2_TxRTE_VALID | P5IOC2_CA1_RIO_ID);
 
@@ -182,10 +201,10 @@ static void p5ioc2_create_hub(struct dt_node *np)
 	ioc->regs = (void *)dt_get_address(np, 0, NULL);
 
 	/* For debugging... */
-	printf("P5IOC2: BAR0 = 0x%016llx\n",
-	       in_be64(ioc->regs + P5IOC2_BAR(0)));
-	printf("P5IOC2: BAR6 = 0x%016llx\n",
-	       in_be64(ioc->regs + P5IOC2_BAR(6)));
+	for (i = 0; i < 8; i++)
+		printf("P5IOC2: BAR%d = 0x%016llx M=0x%16llx\n", i,
+		       in_be64(ioc->regs + P5IOC2_BAR(i)),
+		       in_be64(ioc->regs + P5IOC2_BARM(i)));
 
 	ioc->host_chip = dt_prop_get_u32(np, "ibm,chip-id");
 	ioc->gx_bus = dt_prop_get_u32(np, "ibm,gx-index");
@@ -197,6 +216,9 @@ static void p5ioc2_create_hub(struct dt_node *np)
 	 */
 	ioc->bar6 = dt_prop_get_u64(np, "ibm,gx-bar-1");
 	ioc->bar0 = dt_prop_get_u64(np, "ibm,gx-bar-2");
+
+	printf("DT BAR6 = 0x%016llx\n", ioc->bar6);
+	printf("DT BAR0 = 0x%016llx\n", ioc->bar0);
 
 	/* We setup the corresponding Calgary register bases and memory
 	 * regions. Note: those cannot be used until the routing has
