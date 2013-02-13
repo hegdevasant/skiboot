@@ -123,6 +123,7 @@
 #define CAP_BUID			0x100
 #define   CAP_BUID_MASK			PPC_BITMASK32(7,15)
 #define   CAP_BUID_LSH			PPC_BITLSHIFT32(15)
+#define CAP_MSIBASE			0x108 /* Undocumented ! */
 #define CAP_DMACSR			0x110
 #define CAP_PLSSR			0x120
 #define CAP_PCADR			0x140

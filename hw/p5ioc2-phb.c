@@ -886,6 +886,7 @@ static void p5ioc2_phb_hwinit(struct p5ioc2_phb *p)
 	/* Set BUID */
 	out_be32(p->regs + CAP_BUID, SETFIELD(CAP_BUID, 0,
 					      P7_BUID_BASE(p->buid)));
+	out_be32(p->regs + CAP_MSIBASE, P7_BUID_BASE(p->buid) << 16);
 
 	/* Set IO and Memory mapping */
 	out_be32(p->regs + CAP_IOAD_H, hi32(p->io_base + IO_PCI_START));
