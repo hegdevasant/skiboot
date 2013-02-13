@@ -4,9 +4,9 @@
 #include <io.h>
 #include <lock.h>
 
-#define ECCB_CTL	0
-#define ECCB_STAT	2
-#define ECCB_DATA	3
+#define ECCB_CTL	0 /* b0020 -> b00200 */
+#define ECCB_STAT	2 /* b0022 -> b00210 */
+#define ECCB_DATA	3 /* b0023 -> b00218 */
 
 #define ECCB_CTL_MAGIC		0xd000000000000000ul
 #define ECCB_CTL_DATASZ_MASK	PPC_BITMASK(4,7)

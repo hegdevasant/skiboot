@@ -6,7 +6,7 @@
 /* Console driver */
 struct con_ops {
 	size_t (*write)(const char *buf, size_t len);
-	size_t (*read)(const char *buf, size_t len);
+	size_t (*read)(char *buf, size_t len);
 };
 
 extern struct lock con_lock;

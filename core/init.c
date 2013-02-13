@@ -207,6 +207,7 @@ void main_cpu_entry(const void *fdt, u32 master_cpu)
 
 	/* Initialize LPC (P8 only) so we can get to UART */
 	lpc_init();
+	uart_init();
 
 	/* Early initializations of the FSP interface */
 	fsp_init();
