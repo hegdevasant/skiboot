@@ -232,11 +232,6 @@ int64_t opal_handle_interrupt(uint32_t isn, uint64_t *outstanding_event_mask)
 
 	is->ops->interrupt(is->data, isn);
 
-	/* Poll the console buffers on any interrupt since we don't
-	 * get send notifications
-	 */
-	fsp_console_poll();
-
 	/* Update output events */
  bail:
 	if (outstanding_event_mask)

@@ -149,15 +149,45 @@ static uint64_t opal_test_func(uint64_t arg)
 }
 opal_call(OPAL_TEST, opal_test_func);
 
+struct opal_poll_entry {
+	struct list_node	link;
+	void			(*poller)(void *data);
+	void			*data;
+};
+
+static struct list_head opal_pollers = LIST_HEAD_INIT(opal_pollers);
+
+void opal_add_poller(void (*poller)(void *data), void *data)
+{
+	struct opal_poll_entry *ent;
+
+	ent = zalloc(sizeof(struct opal_poll_entry));
+	assert(ent);
+	ent->poller = poller;
+	ent->data = data;
+	list_add_tail(&opal_pollers, &ent->link);
+}
+
+void opal_del_poller(void (*poller)(void *data))
+{
+	struct opal_poll_entry *ent;
+
+	list_for_each(&opal_pollers, ent, link) {
+		if (ent->poller == poller) {
+			list_del(&ent->link);
+			free(ent);
+			return;
+		}
+	}
+}
+
+
 static int64_t opal_poll_events(uint64_t *outstanding_event_mask)
 {
-	if (fsp_present()) {
-		/* Poll the FSP */
-		fsp_poll();
+	struct opal_poll_entry *poll_ent;
 
-		/* Poll the FSP console buffers */
-		fsp_console_poll();
-	}
+	list_for_each(&opal_pollers, poll_ent, link)
+		poll_ent->poller(poll_ent->data);
 
 	if (outstanding_event_mask)
 		*outstanding_event_mask = opal_pending_events;

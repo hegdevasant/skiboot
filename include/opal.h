@@ -509,5 +509,14 @@ extern uint64_t opal_get_size(void);
 extern void add_opal_nodes(void);
 extern void opal_register(uint64_t token, void *func);
 
+/* Warning: no locking at the moment, do at init time only
+ *
+ * XXX TODO: Add the big RCU-ish "opal API lock" to protect us here
+ * which will also be used for other things such as runtime updates
+ */
+extern void opal_add_poller(void (*poller)(void *data), void *data);
+extern void opal_del_poller(void (*poller)(void *data));
+
+
 #endif /* __ASSEMBLY__ */
 #endif /* __OPAL_H */

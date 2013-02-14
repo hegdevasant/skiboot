@@ -1,6 +1,7 @@
 #include <skiboot.h>
 #include <lpc.h>
 #include <console.h>
+#include <opal.h>
 
 /* UART reg defs */
 #define REG_RBR		0
@@ -70,9 +71,19 @@ static size_t uart_con_write(const char *buf, size_t len)
 static size_t uart_con_read(char *buf, size_t len)
 {
 	size_t read_cnt = 0;
+	uint8_t lsr;
 
-	while(read_cnt < len && (uart_read(REG_LSR) & LSR_DR) != 0)
+	for (;;) {
+		lsr = uart_read(REG_LSR);
+		if (read_cnt >= len || (lsr & LSR_DR) == 0)
+			break;
 		buf[read_cnt++] = uart_read(REG_RBR);
+	}
+	if (lsr & LSR_DR)
+		opal_update_pending_evt(OPAL_EVENT_CONSOLE_INPUT,
+					OPAL_EVENT_CONSOLE_INPUT);
+	else
+		opal_update_pending_evt(OPAL_EVENT_CONSOLE_INPUT, 0);
 
 	return read_cnt;
 }
@@ -81,6 +92,18 @@ static struct con_ops uart_con_driver = {
 	.read = uart_con_read,
 	.write = uart_con_write
 };
+
+static void uart_console_poll(void *data __unused)
+{
+	uint8_t lsr = uart_read(REG_LSR);
+
+	if (lsr & LSR_DR)
+		opal_update_pending_evt(OPAL_EVENT_CONSOLE_INPUT,
+					OPAL_EVENT_CONSOLE_INPUT);
+	else
+		opal_update_pending_evt(OPAL_EVENT_CONSOLE_INPUT, 0);
+}
+
 
 static void uart_init_hw(unsigned int speed, unsigned int clock)
 {
@@ -123,4 +146,7 @@ void uart_init(void)
 	uart_write(0, 'O');
 
 	set_console(&uart_con_driver);
+
+	/* Register poller */
+	opal_add_poller(uart_console_poll, NULL);
 }

@@ -987,6 +987,12 @@ static void fsp_psi_interrupt(void *data __unused, uint32_t isn __unused)
 	 * For now, we just poll the active FSP & clear the status bits
 	 */
 	__fsp_poll(true);
+
+
+	/* Poll the console buffers on any interrupt since we don't
+	 * get send notifications
+	 */
+	fsp_console_poll(NULL);
 }
 
 static int64_t fsp_psi_set_xive(void *data, uint32_t isn __unused,
@@ -1235,6 +1241,11 @@ static void fsp_create_fsp(struct dt_node *fsp_node)
 	first_fsp = fsp;
 }
 
+static void fsp_opal_poll(void *data __unused)
+{
+	__fsp_poll(false);
+}
+
 void fsp_init(void)
 {
 	struct dt_node *fsp_node;
@@ -1255,6 +1266,9 @@ void fsp_init(void)
 
 			/* Initialize a TCE table */
 			fsp_init_tce_table();
+
+			/* Register poller */
+			opal_add_poller(fsp_opal_poll, NULL);
 
 			inited = true;
 		}

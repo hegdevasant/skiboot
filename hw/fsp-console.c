@@ -490,7 +490,7 @@ static int64_t fsp_console_read(int64_t term_number, int64_t *length,
 	return OPAL_SUCCESS;
 }
 
-void fsp_console_poll(void)
+void fsp_console_poll(void *data __unused)
 {
 #ifdef OPAL_DEBUG_CONSOLE_POLL
        	static int debug;
@@ -567,6 +567,9 @@ void fsp_console_init(void)
 	op_display(OP_LOG, OP_MOD_FSPCON, 0x0001);
 	fsp_serial_add(3, 0xffff, "DVS_FW", true);
 	op_display(OP_LOG, OP_MOD_FSPCON, 0x0002);
+
+	/* Register poller */
+	opal_add_poller(fsp_console_poll, NULL);
 
 	/* Parse serial port data */
 	serials = dt_find_by_path(dt_root, "ipl-params/fsp-serial");
