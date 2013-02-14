@@ -130,20 +130,7 @@ void uart_init(void)
 	 */
 	uart_base = 0xd0000000l;
 
-	printf("UART: RBR=%x\n", uart_read(0));
-	printf("UART: IER=%x\n", uart_read(1));
-	printf("UART: FCR=%x\n", uart_read(2));
-	printf("UART: LCR=%x\n", uart_read(3));
-	printf("UART: MCR=%x\n", uart_read(4));
-	printf("UART: LSR=%x\n", uart_read(5));
-	printf("UART: MSR=%x\n", uart_read(6));
-	printf("UART: SCR=%x\n", uart_read(7));
-
 	uart_init_hw(9600, 1843200);
-
-	uart_write(0, 'F');
-	uart_write(0, 'O');
-	uart_write(0, 'O');
 
 	set_console(&uart_con_driver);
 
