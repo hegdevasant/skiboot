@@ -2659,6 +2659,9 @@ int64_t p7ioc_phb_init(struct p7ioc_phb *p)
 	if (!p7ioc_phb_wait_dlp_reset(p))
 		goto failed;
 
+	/* Init_49 - Clear port status */
+	out_be64(p->regs + UTL_PCIE_PORT_STATUS,	   0xffffffffffffffff);
+
 	/* Init_50..81: Init root complex config space */
 	if (!p7ioc_phb_init_rc_cfg(p))
 		goto failed;
