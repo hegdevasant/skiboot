@@ -17,7 +17,7 @@ const void *vpd_find_keyword(const void *rec, size_t rec_sz,
 {
 	const uint8_t *p = rec, *end = rec + rec_sz;
 
-	while(CHECK_SPACE(p, 3, end)) {
+	while (CHECK_SPACE(p, 3, end)) {
 		uint8_t k1 = *(p++);
 		uint8_t k2 = *(p++);
 		uint8_t sz = *(p++);
@@ -43,10 +43,10 @@ const void *vpd_find(const void *vpd, size_t vpd_size,
 	const uint8_t *p = vpd, *end = vpd + vpd_size;
 	bool first_start = true;
 	size_t rec_sz;
-	uint8_t namesz;
+	uint8_t namesz = 0;
 	const char *rec_name;
 
-	while(CHECK_SPACE(p, 4, end)) {
+	while (CHECK_SPACE(p, 4, end)) {
 		/* Get header byte */
 		if (*(p++) != 0x84) {
 			/* Skip initial crap in VPD LIDs */
