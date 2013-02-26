@@ -392,18 +392,9 @@ error:
 static int64_t p7ioc_freset(struct phb *phb)
 {
 	struct p7ioc_phb *p = phb_to_p7ioc_phb(phb);
-	uint64_t now = mftb();
 
-	if (p->state == P7IOC_PHB_STATE_FUNCTIONAL)
-		p7ioc_sm_freset(p);
-
-	/* Check timer */
-	if (p->delay_tgt_tb &&
-	    tb_compare(now, p->delay_tgt_tb) == TB_ABEFOREB)
-		return p->delay_tgt_tb - now;
-
-	/* Expired (or not armed), clear it */
-	p->delay_tgt_tb = 0;
+	if (p->state != P7IOC_PHB_STATE_FUNCTIONAL)
+		return OPAL_HARDWARE;
 
 	return p7ioc_sm_freset(p);
 }
