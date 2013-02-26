@@ -614,45 +614,29 @@ static int64_t p7ioc_slot_power_on(struct phb *phb)
 	return p7ioc_sm_slot_power_on(p);
 }
 
+/*
+ * The OS is expected to do fundamental reset after complete
+ * reset to make sure the PHB could be recovered from the
+ * fenced state. However, the OS needn't do that explicitly
+ * since fundamental reset will be done automatically while
+ * powering on the PHB.
+ */
 static int64_t p7ioc_complete_reset(struct phb *phb, uint8_t assert)
 {
 	struct p7ioc_phb *p = phb_to_p7ioc_phb(phb);
-	uint64_t now = mftb();
 
 	if (assert == OPAL_ASSERT_RESET) {
-		if (p->state == P7IOC_PHB_STATE_FUNCTIONAL ||
-		    p->state == P7IOC_PHB_STATE_FENCED) {
-			p7ioc_phb_reset(phb);
-			return p7ioc_sm_slot_power_off(p);
-		} else {
-			/* Check timer */
-			if (p->delay_tgt_tb &&
-			    tb_compare(now, p->delay_tgt_tb) == TB_ABEFOREB)
-				return p->delay_tgt_tb - now;
+		if (p->state != P7IOC_PHB_STATE_FUNCTIONAL &&
+		    p->state != P7IOC_PHB_STATE_FENCED)
+			return OPAL_HARDWARE;
 
-			/* Expired (or not armed), clear it */
-			p->delay_tgt_tb = 0;
-
-			return p7ioc_sm_slot_power_off(p);
-		}
+		p7ioc_phb_reset(phb);
+		return p7ioc_sm_slot_power_off(p);
 	} else {
-		if (p->state == P7IOC_PHB_STATE_FUNCTIONAL) {
-			return p7ioc_sm_slot_power_on(p);
-		} else {
-			/* Check timer */
-                        if (p->delay_tgt_tb &&
-                            tb_compare(now, p->delay_tgt_tb) == TB_ABEFOREB)
-                                return p->delay_tgt_tb - now;
+		if (p->state != P7IOC_PHB_STATE_FUNCTIONAL)
+			return OPAL_HARDWARE;
 
-                        /* Expired (or not armed), clear it */
-                        p->delay_tgt_tb = 0;
-
-			if (p->state == P7IOC_PHB_STATE_SPUP_STABILIZE_DELAY ||
-			    p->state == P7IOC_PHB_STATE_SPUP_SLOT_STATUS)
-				return p7ioc_sm_slot_power_on(p);
-			else
-				return p7ioc_sm_freset(p);
-		}
+		return p7ioc_sm_slot_power_on(p);
 	}
 
 	/* We shouldn't run to here */
