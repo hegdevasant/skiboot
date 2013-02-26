@@ -533,6 +533,25 @@ static int64_t opal_pci_reset(uint64_t phb_id, uint8_t reset_scope,
 }
 opal_call(OPAL_PCI_RESET, opal_pci_reset);
 
+static int64_t opal_pci_poll(uint64_t phb_id)
+{
+	struct phb *phb = pci_get_phb(phb_id);
+	int64_t rc;
+
+	if (!phb)
+		return OPAL_PARAMETER;
+	if (!phb->ops || !phb->ops->poll)
+		return OPAL_UNSUPPORTED;
+
+	phb->ops->lock(phb);
+	rc = phb->ops->poll(phb);
+	phb->ops->unlock(phb);
+	pci_put_phb(phb);
+
+	return rc;
+}
+opal_call(OPAL_PCI_POLL, opal_pci_poll);
+
 static int64_t opal_pci_set_phb_tce_memory(uint64_t phb_id,
 					   uint64_t tce_mem_addr,
 					   uint64_t tce_mem_size)

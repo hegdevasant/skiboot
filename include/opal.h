@@ -91,7 +91,8 @@
 #define OPAL_RESERVED2				59
 #define OPAL_PCI_NEXT_ERROR			60
 #define OPAL_PCI_EEH_FREEZE_STATUS2		61
-#define OPAL_LAST				61
+#define OPAL_PCI_POLL				62
+#define OPAL_LAST				62
 
 
 #ifndef __ASSEMBLY__
