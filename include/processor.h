@@ -30,6 +30,9 @@
 
 /* SPR register definitions */
 #define SPR_SDR1	0x019
+#define SPR_SRR0	0x01a	/* RW: Exception save/restore reg 0 */
+#define SPR_SRR1	0x01b	/* RW: Exception save/restore reg 1 */
+#define SPR_CFAR	0x01c	/* RW: Come From Address Register */
 #define SPR_TBRL	0x10c	/* RO: Timebase low */
 #define SPR_TBRU	0x10d	/* RO: Timebase high */
 #define SPR_SPRC	0x114	/* RW: Access to uArch SPRs (ex SCOMC) */
@@ -42,6 +45,8 @@
 #define SPR_PVR		0x11f	/* RO: Processor version register */
 #define SPR_HSPRG0	0x130	/* RW: Hypervisor scratch 0 */
 #define SPR_HSPRG1	0x131	/* RW: Hypervisor scratch 1 */
+#define SPR_HSRR0	0x13a	/* RW: HV Exception save/restore reg 0 */
+#define SPR_HSRR1	0x13b	/* RW: HV Exception save/restore reg 1 */
 #define SPR_TFMR	0x13d
 #define SPR_LPCR	0x13e
 #define SPR_HMER	0x150	/* Hypervisor Maintenance Exception */

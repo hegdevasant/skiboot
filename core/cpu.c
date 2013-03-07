@@ -7,6 +7,7 @@
 #include <fsp.h>
 #include <device.h>
 #include <opal.h>
+#include <stack.h>
 #include <ccan/str/str.h>
 #include <ccan/container_of/container_of.h>
 
@@ -42,7 +43,12 @@ void *cpu_stack_bottom(unsigned int pir)
 
 void *cpu_stack_top(unsigned int pir)
 {
-	return (void *)&cpu_stacks[pir] + STACK_SIZE - 0x100;
+	/* This is the top of the MC stack which is above the normal
+	 * stack, which means a SP between cpu_stack_bottom() and
+	 * cpu_stack_top() can either be a normal stack pointer or
+	 * a Machine Check stack pointer
+	 */
+	return (void *)&cpu_stacks[pir] + STACK_SIZE - STACK_TOP_GAP;
 }
 
 struct cpu_job *__cpu_queue_job(struct cpu_thread *cpu,

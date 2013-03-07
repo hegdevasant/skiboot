@@ -20,7 +20,9 @@
 //#define OPAL_DEBUG_CONSOLE_IO	1
 //#define OPAL_DEBUG_CONSOLE_POLL	1
 
-/* Stack size set to 16K  */
+/* Stack size set to 16K, some of it will be used for
+ * machine check (see stack.h)
+ */
 #define STACK_SHIFT		14
 #define STACK_SIZE		(1 << STACK_SHIFT)
 
@@ -97,11 +99,6 @@
  * The size of this array is dynamically determined at boot time
  */
 #define CPU_STACKS_BASE		(SKIBOOT_BASE + SKIBOOT_SIZE)
-
-/* This value is the above plus the offset to the top of stack
- * to be used on entry
- */
-#define CPU_STACKS_OFFSET	(CPU_STACKS_BASE + STACK_SIZE - 0x100)
 
 /* Address at which we load the kernel LID. Currently +1M */
 #define KERNEL_LOAD_BASE	0x00100000
