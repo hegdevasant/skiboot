@@ -151,7 +151,7 @@
  * Fortunately, the OPAL API for slot power & reset are not currently
  * used by Linux, so changing them isn't going to be an issue. The idea
  * here is that some of these APIs will return a positive integer when
- * neededing such a delay to proceed. The OS will then be required to
+ * needing such a delay to proceed. The OS will then be required to
  * call a new function opal_poll_phb() after that delay. That function
  * will potentially return a new delay, or OPAL_SUCCESS when the original
  * operation has completed successfully. If the operation has completed

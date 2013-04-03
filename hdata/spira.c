@@ -112,7 +112,7 @@ static void add_xscom(void)
 
 	xscom_base = pmbs->xscom_addr;
 
-	/* Some FSP give me a crap base address for XSCOM (it has spurrious
+	/* Some FSP give me a crap base address for XSCOM (it has spurious
 	 * bits set as far as I can tell). Since only 5 bits 18:22 can
 	 * be programmed in hardware, let's isolate these. This seems to
 	 * give me the right value on VPL1

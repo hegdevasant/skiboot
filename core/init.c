@@ -177,7 +177,7 @@ void main_cpu_entry(const void *fdt, u32 master_cpu)
 	/* Now locks can be used */
 	init_locks();
 
-	/* Create the OPAL call table early on, entries can be overriden
+	/* Create the OPAL call table early on, entries can be overridden
 	 * later on (FSP console code for example)
 	 */
 	opal_table_init();

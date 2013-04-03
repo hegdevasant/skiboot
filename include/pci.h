@@ -65,7 +65,7 @@ struct pci_lsi_state {
  * code, or another delay.
  *
  * Note: If an asynchronous function returns 0, it has completed
- * successfully and does not require a call to ->poll(). Similarily
+ * successfully and does not require a call to ->poll(). Similarly
  * if ->poll() is called while no operation is in progress, it will
  * simply return 0 (success)
  *

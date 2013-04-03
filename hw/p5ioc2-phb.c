@@ -380,7 +380,7 @@ static int64_t p5ioc2_sm_slot_power_on(struct p5ioc2_phb *p __unused)
 		p5ioc2_pcicfg_read16(&p->phb, 0, PCI_CFG_BRCTL, &brctl);
 		brctl &= ~PCI_CFG_BRCTL_SECONDARY_RESET;
 		p5ioc2_pcicfg_write16(&p->phb, 0, PCI_CFG_BRCTL, brctl);
-		/* Clear spurrious errors */
+		/* Clear spurious errors */
 		out_be64(p->regs + UTL_PCIE_PORT_STATUS, 0x00e0000000000000);
 		p5ioc2_pcicfg_write32(&p->phb, 0,
 				     p->aercap + PCIECAP_AER_CE_STATUS,

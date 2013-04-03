@@ -11,7 +11,7 @@
  * Error codes TBD, 0 = success
  */
 
-/* Targetted SCOM access */
+/* Targeted SCOM access */
 extern int xscom_read(uint32_t gcid, uint32_t pcb_addr, uint64_t *val);
 extern int xscom_write(uint32_t gcid, uint32_t pcb_addr, uint64_t val);
 

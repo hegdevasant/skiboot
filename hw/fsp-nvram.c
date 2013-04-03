@@ -92,7 +92,7 @@ static void nvram_wr_complete(struct fsp_msg *msg)
 	case 0x45:
 		break;
 	case 0xef:
-		/* Sync to escondary failed, let's ignore that for now,
+		/* Sync to secondary failed, let's ignore that for now,
 		 * maybe when (if) we handle redundant FSPs ...
 		 */
 		prerror("FSP: NVRAM sync to secondary failed\n");

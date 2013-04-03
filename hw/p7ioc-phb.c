@@ -341,7 +341,7 @@ static int64_t p7ioc_sm_freset(struct p7ioc_phb *p)
 		reg = in_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL);
 		if (reg & PHB_PCIE_DLP_TC_DL_LINKACT) {
 			/*
-			 * Clear spurrious errors and enable PCIE port
+			 * Clear spurious errors and enable PCIE port
 			 * interrupts
 			 */
 			out_be64(p->regs + UTL_PCIE_PORT_STATUS,
@@ -456,7 +456,7 @@ static int64_t p7ioc_sm_slot_power_off(struct p7ioc_phb *p)
 		return p7ioc_set_sm_timeout(p, secs_to_tb(2));
 	case P7IOC_PHB_STATE_SPDOWN_STABILIZE_DELAY:
 		/*
-		 * The link should be stablizied after 2 seconds.
+		 * The link should be stabilized after 2 seconds.
 		 * We still need poll registers to make sure the
 		 * power is really down every 1ms until limited
 		 * 1000 times.
@@ -724,7 +724,7 @@ static int64_t p7ioc_sm_hot_reset(struct p7ioc_phb *p)
 		reg = in_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL);
                 if (reg & PHB_PCIE_DLP_TC_DL_LINKACT) {
 			/*
-			 * Clear spurrious errors and enable PCIE port
+			 * Clear spurious errors and enable PCIE port
 			 * interrupts
 			 */
 			out_be64(p->regs + UTL_PCIE_PORT_STATUS, 0x00E0000000000000);
@@ -1064,7 +1064,7 @@ static int64_t p7ioc_eeh_next_error(struct phb *phb, uint64_t *first_frozen_pe,
 	/* Check the pending errors, which might come from IOC */
 	if (p7ioc_phb_err_pending(p)) {
 		/*
-		 * If the frozen PE is caused by malfunctional TLP, we
+		 * If the frozen PE is caused by a malfunctioning TLP, we
 		 * need reset the PHB. So convert ER to PHB-fatal error
 		 * for the case.
 		 */
@@ -1228,7 +1228,7 @@ static int64_t p7ioc_eeh_freeze_clear(struct phb *phb, uint64_t pe_number,
 
 	/* Summary. If nothing, move to clearing the PESTs which can
 	 * contain a freeze state from a previous error or simply set
-	 * explicitely by the user
+	 * explicitly by the user
 	 */
 	err = in_be64(p->regs + PHB_ETU_ERR_SUMMARY);
 	if (err == 0)
@@ -2103,7 +2103,7 @@ static void p7ioc_phb_err_interrupt(void *data, uint32_t isn)
 	/*
 	 * If we already had pending errors, which might be
 	 * moved from IOC, then we needn't check PEEV to avoid
-	 * overwritting the errors from IOC.
+	 * overwriting the errors from IOC.
 	 */
 	if (!p7ioc_phb_err_pending(p)) {
 		unlock(&p->lock);
@@ -2382,7 +2382,7 @@ static bool p7ioc_phb_init_rc_cfg(struct p7ioc_phb *p)
 	aercap = pci_find_ecap(&p->phb, 0, PCIECAP_ID_AER, NULL);
 	if (aercap < 0) {
 		/* Shouldn't happen */
-		PHBERR(p, "Failed to locate AER Ecapability in bridge\n");
+		PHBERR(p, "Failed to locate AER capability in bridge\n");
 		return false;
 	}
 	p->aercap = aercap;
@@ -2428,7 +2428,7 @@ static bool p7ioc_phb_init_rc_cfg(struct p7ioc_phb *p)
 
 static void p7ioc_phb_init_utl(struct p7ioc_phb *p)
 {
-	/* Init_82..84: Clear spurrious errors and assign errors to the
+	/* Init_82..84: Clear spurious errors and assign errors to the
 	 * right "interrupt" signal
 	 */
 	out_be64(p->regs + UTL_SYS_BUS_AGENT_STATUS,       0xffffffffffffffff);

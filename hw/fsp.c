@@ -305,7 +305,7 @@ static void fsp_poke_queue(struct fsp_cmdclass *cmdclass)
 		return;
 
 	/* From here to the point where fsp_post_msg() sets fsp->state
-	 * to !idle we must not cause any re-entrency (no debug or trace)
+	 * to !idle we must not cause any re-entrancy (no debug or trace)
 	 * in a code path that may hit fsp_post_msg() (it's ok to do so
 	 * if we are going to bail out), as we are committed to calling
 	 * fsp_post_msg() and so a re-entrancy could cause us to do a
@@ -734,7 +734,7 @@ static void __fsp_poll(bool interrupt)
 	 *
 	 * That way, if a poll clears, for example, the HPEND condition,
 	 * the interrupt remains, causing a dummy interrupt later on
-	 * thus allowing the OS to be notifed of a state change (ie it
+	 * thus allowing the OS to be notified of a state change (ie it
 	 * doesn't need every poll site to monitor every state change).
 	 *
 	 * However, this scheme is complicated by the fact that we need
@@ -1087,7 +1087,7 @@ static int fsp_psi_init_phb(struct fsp_iopath *fiop, bool active)
 	/* Configure it in the GX controller as well */
 	gx_configure_psi_buid(fiop->chip_id, P7_IRQ_BUID(fiop->interrupt));
 
-	/* Diable interrupt emission in the control register,
+	/* Disable interrupt emission in the control register,
 	 * it will be re-enabled later, after the mailbox one
 	 * will have been enabled.
 	 */
@@ -1342,7 +1342,7 @@ int fsp_fetch_data(uint8_t flags, uint16_t id, uint32_t sub_id,
 		uint32_t chunk, taddr, woffset, wlen;
 		uint8_t rc;
 
-		/* Calculate alignment squew */
+		/* Calculate alignment skew */
 		baddr = (uint64_t)buffer;
 		balign = baddr & ~0xffful;
 		boff = baddr & 0xffful;

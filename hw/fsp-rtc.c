@@ -86,7 +86,7 @@ static int64_t opal_rtc_decode_msg(struct fsp_msg *msg, uint32_t *y_m_d,
 	 * at the bottom).
 	 *
 	 * We simply ignore the microseconds/milliseconds for now
-	 * as I don't quite undestand why the OPAL API defines that
+	 * as I don't quite understand why the OPAL API defines that
 	 * it needs 6 digits for the milliseconds :-) I suspect the
 	 * doc got that wrong and it's supposed to be micro but
 	 * let's ignore it.

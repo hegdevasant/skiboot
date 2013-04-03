@@ -323,7 +323,7 @@ struct msvpd_pmover_bsr_synchro {
  * This is an array of CEC Hub FRU HDIF structures
  *
  * Each of these has some idata pointers to generic info about the
- * hub and a possible child pointer for dauther card.
+ * hub and a possible child pointer for daughter card.
  *
  * Actual ports are in the SLCA and need to be cross referenced
  *
@@ -485,7 +485,7 @@ struct cechub_io_hub {
  * and "id" is a reference to some other object.
  */
 struct slca_entry {
-	uint16_t	my_index;	/* redudant, useful */
+	uint16_t	my_index;	/* redundant, useful */
 	uint16_t	rsrc_id;	/* formerly VPD port number */
 	uint8_t		fru_id[2];	/* ASCII VPD ID */
 #define SLCA_ROOT_VPD_ID	VPD_ID('V','V')
@@ -501,7 +501,7 @@ struct slca_entry {
 	uint8_t		loc_code_len;	/* Loc code len */
 	uint8_t		loc_code[80];	/* NULL terminated (thus max 79 chr) */
 	uint16_t	first_dup_idx;	/* First redundant resource index */
-	uint8_t		nr_dups;	/* Number of redudant entries */
+	uint8_t		nr_dups;	/* Number of redundant entries */
 	uint8_t		reserved;
 	uint16_t	nr_child;	/* New version */
 	uint8_t		install_indic;	/* Installed indicator */

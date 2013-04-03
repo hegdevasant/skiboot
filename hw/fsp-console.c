@@ -677,7 +677,7 @@ void fsp_console_reset(void)
 	printf("FSP: Console reset !\n");
 
 	/* This is called on a fast-reset. To work around issues with HVSI
-	 * initial negociation, before we reboot the kernel, we flush all
+	 * initial negotiation, before we reboot the kernel, we flush all
 	 * input and send an HVSI close packet.
 	 */
 	flush_all_input();

@@ -21,7 +21,7 @@ static void io_add_common(struct dt_node *hn, const struct cechub_io_hub *hub,
 	dt_add_property_cells(hn, "ibm,gx-index", hub->gx_index);
 	dt_add_property_cells(hn, "revision", hub->ec_level);
 
-	/* Instead of exposing the GX BARs as spearate ranges as we *should*
+	/* Instead of exposing the GX BARs as separate ranges as we *should*
 	 * do in an ideal world, we just create a pass-through ranges and
 	 * we use separate properties for the BARs.
 	 *
@@ -193,28 +193,28 @@ static struct dt_node *io_add_hea(const struct cechub_io_hub *hub,
 	}
 	iokid = HDIF_child(sp_io, iokids, 0, "IO KID");
 	if (!iokid) {
-		prerror("HEA: Failed to retreive IO KID 0 !\n");
+		prerror("HEA: Failed to retrieve IO KID 0 !\n");
 		return NULL;
 	}
 
 	/* Grab VPD */
 	vpd = HDIF_get_idata(iokid, IOKID_KW_VPD, &vpd_sz);
 	if (!CHECK_SPPTR(vpd)) {
-		prerror("HEA: Failed to retreive VPD from IO KID !\n");
+		prerror("HEA: Failed to retrieve VPD from IO KID !\n");
 		return NULL;
 	}
 
 	/* Grab the MAC address */
 	mac = vpd_find(vpd, vpd_sz, "VINI", "B1", &kw_sz);
 	if (!mac || kw_sz < 8) {
-		prerror("HEA: Failed to retreive MAC Address !\n");
+		prerror("HEA: Failed to retrieve MAC Address !\n");
 		return NULL;
 	}
 
 	/* Grab the CCIN (card ID) */
 	ccin = vpd_find(vpd, vpd_sz, "VINI", "CC", &kw_sz);
 	if (!ccin || kw_sz < 4) {
-		prerror("HEA: Failed to retreive CCIN !\n");
+		prerror("HEA: Failed to retrieve CCIN !\n");
 		return NULL;
 	}
 

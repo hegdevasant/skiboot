@@ -53,7 +53,7 @@ extern void unlock(struct lock *l);
 
 /* The debug output can happen while the FSP lock, so we need some kind
  * of recursive lock support here. I don't want all locks to be recursive
- * though, thus the caller need to explicitely call lock_recusrive which
+ * though, thus the caller need to explicitly call lock_recursive which
  * returns false if the lock was already held by this cpu. If it returns
  * true, then the caller shall release it when done.
  */

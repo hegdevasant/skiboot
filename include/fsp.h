@@ -47,7 +47,7 @@
 /*
  * FSP registers
  *
- * All of the below register defintions come from the FSP0 "Black Widow" spec
+ * All of the below register definitions come from the FSP0 "Black Widow" spec
  * They are the same for FSP1 except they are presented big-endian vs
  * little-endian for FSP0 -- which used PCI
  * all regs are 4 bytes wide, and we read the larger data areas in 4 byte
@@ -114,7 +114,7 @@
  * - WFULL: set if host tried to write to the SP doorbell while
  *   the pending bit is still set
  * - REMPTY: tried to read while host pending bit not set
- * - PAR: SP RAM partity error
+ * - PAR: SP RAM parity error
  */
 #define FSP_DBERRSTAT_ILLEGAL1		(1 << 27)
 #define FSP_DBERRSTAT_WFULL1		(1 << 26)
@@ -193,7 +193,7 @@
  * PSI Host Bridge Registers
  *
  * The PSI interface is the bridge to the FPS, it has its own
- * registers. The FSP registers appeat at an offset within the
+ * registers. The FSP registers appear at an offset within the
  * aperture defined by the PSI_FSPBAR
  */
 /* Base address of the PSI MMIO space and LSB is the enable/valid bit */

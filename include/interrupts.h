@@ -22,7 +22,7 @@
  *  - BUID   : Bus identifier (*)
  *  - Level  : Interrupt number
  *
- * (*) The BUID/Level distinction is mostly historial, interrupt
+ * (*) The BUID/Level distinction is mostly historical, interrupt
  *     controllers such as the ICS in the PHBs "use" some of the
  *     low BUID bits as an extension to the interrupt number
  *

@@ -164,7 +164,7 @@ static struct pci_device *pci_scan_one(struct phb *phb, uint16_t bdfn)
  *                          everything (default state of our backend) so
  *                          we just check and clear the state of PE#0
  *
- * NOTE: We currently only habdle simple PE freeze, not PHB fencing
+ * NOTE: We currently only handle simple PE freeze, not PHB fencing
  *       (or rather our backend does)
  */
 static void pci_check_clear_freeze(struct phb *phb)
@@ -396,7 +396,7 @@ static uint8_t pci_scan(struct phb *phb, uint8_t bus, uint8_t max_bus,
 		 *
 		 * This can be tricky due to our HW constraints which differ
 		 * from bridge to bridge so we are going to let the phb
-		 * driver decide what to do. This can return us a maxium
+		 * driver decide what to do. This can return us a maximum
 		 * bus number to assign as well
 		 *
 		 * This function will:
@@ -469,7 +469,7 @@ static uint8_t pci_scan(struct phb *phb, uint8_t bus, uint8_t max_bus,
 
 /*
  * The power state would be checked. If the power has
- * been on, we will issue fandamental reset. Otherwise,
+ * been on, we will issue fundamental reset. Otherwise,
  * we will power it on before issuing fundamental reset.
  */
 static int64_t pci_reset_phb(struct phb *phb)
@@ -832,7 +832,7 @@ void pci_std_swizzle_irq_map(struct dt_node *np,
 	/* Size in bytes of a target interrupt */
 	size_t isize = lstate->int_size * sizeof(uint32_t);
 
-	/* Calculate the sixe of a map entry:
+	/* Calculate the size of a map entry:
 	 *
 	 * 3 cells : PCI Address
 	 * 1 cell  : PCI IRQ

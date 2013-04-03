@@ -259,7 +259,7 @@ static bool p7ioc_err_bit(struct p7ioc *ioc, uint64_t wof)
 	/*
 	 * The severity array has fixed values. However, it depends
 	 * on the damage settings for individual components. We're
-	 * using fix values based on the assuption that damage settings
+	 * using fixed values based on the assumption that damage settings
 	 * are fixed for now. If we change it some day, we also need
 	 * change the severity array accordingly. Anyway, it's something
 	 * to improve in future so that we can figure out the severity
