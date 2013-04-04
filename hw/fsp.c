@@ -1073,7 +1073,7 @@ static const struct irq_source_ops fsp_psi_irq_ops = {
 	.interrupt = fsp_psi_interrupt,
 };
 
-static int fsp_psi_init_phb(struct fsp_iopath *fiop, bool active)
+static int fsp_psi_init_phb(struct fsp_iopath *fiop, bool active, u64 reg_offset)
 {
 	u64 reg;
 
@@ -1152,7 +1152,7 @@ static int fsp_psi_init_phb(struct fsp_iopath *fiop, bool active)
 
 	/* Get the FSP register window */
 	reg = in_be64(fiop->gxhb_regs + PSIHB_FSPBAR);
-	fiop->fsp_regs = (void *)(reg | (1ULL << 63) | FSP1_REG_OFFSET);
+	fiop->fsp_regs = (void *)(reg | (1ULL << 63) | reg_offset);
 
 	/* Register the IRQ source */
 	register_irq_source(&fsp_psi_irq_ops, fiop, fiop->interrupt, 1);
@@ -1236,7 +1236,8 @@ static void fsp_create_fsp(struct dt_node *fsp_node)
 			fsp->active_iopath = i;
 
 		/* XXX Handle errors */
-		fsp_psi_init_phb(fiop, active);
+		fsp_psi_init_phb(fiop, active,
+				 dt_prop_get_u32(fsp_node, "reg-offset"));
 	}
 	if (fsp->active_iopath >= 0 && !active_fsp) {
 		active_fsp = fsp;
@@ -1252,14 +1253,12 @@ static void fsp_opal_poll(void *data __unused)
 	__fsp_poll(false);
 }
 
-void fsp_init(void)
+static bool fsp_init_one(char *compat)
 {
 	struct dt_node *fsp_node;
 	bool inited = false;
 
-	printf("FSP: Looking for FSP...\n");
-
-	dt_for_each_compatible(dt_root, fsp_node, "ibm,fsp1") {
+	dt_for_each_compatible(dt_root, fsp_node, compat) {
 		if (!inited) {
 			int i;
 	
@@ -1283,7 +1282,15 @@ void fsp_init(void)
 		fsp_create_fsp(fsp_node);
 	}
 
-	if (!inited)
+	return inited;
+}
+
+void fsp_init(void)
+{
+	printf("FSP: Looking for FSP...\n");
+
+	if (fsp_init_one("ibm,fsp1") == false &&
+	    !fsp_init_one("ibm,fsp2") == false)
 		printf("FSP: No FSP on this machine\n");
 }
 

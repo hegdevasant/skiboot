@@ -223,10 +223,6 @@
 /* XIVR and BUID used for PSI interrupts */
 #define PSIHB_XIVR			0x30
 
-/* Offset into the FSP MMIO space where the mailbox registers are */
-/* seen in the FSP1 spec */
-#define FSP1_REG_OFFSET			0xb0016000ULL
-
 /*
  * Message classes
  */

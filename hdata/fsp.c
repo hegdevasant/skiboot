@@ -40,9 +40,15 @@ static struct dt_node *fsp_create_node(const void *spss, int i,
 	assert(node);
 	dt_add_property_cells(node, "reg", i);
 
-	/* XXX FIXME: Deal with FSP2 */
-	dt_add_property_strings(node, "compatible", "ibm,fsp1");
-
+	if (sp_impl->hw_version == 1) {
+		dt_add_property_strings(node, "compatible", "ibm,fsp1");
+		/* Offset into the FSP MMIO space where the mailbox registers are */
+		/* seen in the FSP1 spec */
+		dt_add_property_cells(node, "reg-offset", 0xb0016000);
+	} else if (sp_impl->hw_version == 2) {
+		dt_add_property_strings(node, "compatible", "ibm,fsp2");
+		dt_add_property_cells(node, "reg-offset", 0xb0011000);
+	}
 	dt_add_property_cells(node, "hw-version", sp_impl->hw_version);
 	dt_add_property_cells(node, "sw-version", sp_impl->sw_version);
 
