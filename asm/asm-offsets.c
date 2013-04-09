@@ -19,6 +19,7 @@ int main(void)
 	OFFSET(CPUTHREAD_PIR, cpu_thread, pir);
 
 	OFFSET(STACK_TYPE,	stack_frame, type);
+	OFFSET(STACK_LOCALS,	stack_frame, locals);
 	OFFSET(STACK_GPR0,	stack_frame, gpr[0]);
 	OFFSET(STACK_GPR1,	stack_frame, gpr[1]);
 	OFFSET(STACK_GPR2,	stack_frame, gpr[2]);

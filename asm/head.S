@@ -675,9 +675,9 @@ exc_secondary_patch_rfid:
 exception_entry_common:
 	std	%r3,STACK_TYPE(%r1)
 
-	/* We save the exception return LR in the ABI gap */
+	/* We save the exception return LR in the stack-locals area */
 	mflr	%r3
-	std	%r3,16(%r1)
+	std	%r3,STACK_LOCALS(%r1)
 
 	/* Save more stuff */
 	std	%r0,STACK_GPR0(%r1)
@@ -724,6 +724,6 @@ exception_entry_common:
 	ld	%r12,STACK_GPR12(%r1)
 	ld	%r13,STACK_GPR13(%r1)
 
-	ld	%r3,16(%r1)
+	ld	%r3,STACK_LOCALS(%r1)
 	mtlr	%r3
 	blr

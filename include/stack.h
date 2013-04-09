@@ -32,11 +32,21 @@
  * depending on the entry type
  */
 struct stack_frame {
-	/* An ABI GAP where the callee might save things. 112 bytes
-	 * should be enough, 256 is nice and round. The first dword
-	 * here is the backlink which should pretty much always be 0
-	 */
-	uint64_t	gap[32];
+	/* Standard 112-byte stack frame header (the minimum size required,
+	 * using an 8-doubleword param save area). The callee (in C) may use
+	 * lrsave; we declare these here so we don't get our own save area
+	 * overwritten */
+	uint64_t	backchain;
+	uint64_t	crsave;
+	uint64_t	lrsave;
+	uint64_t	compiler_dw;
+	uint64_t	linker_dw;
+	uint64_t	tocsave;
+	uint64_t	paramsave[8];
+
+	/* Space for stack-local vars used by asm. At present we only use
+	 * one doubleword. */
+	uint64_t	locals[1];
 
 	/* Entry type */
 	uint64_t	type;
