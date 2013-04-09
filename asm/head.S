@@ -699,7 +699,8 @@ exception_entry_common:
 
 	GET_CPU()
 
-	addis	%r2,%r12,(__toc_start - __head)@ha
+	LOAD_IMM64(%r2, SKIBOOT_BASE)
+	addis	%r2,%r2,(__toc_start - __head)@ha
 	addi	%r2,%r2,(__toc_start - __head)@l
 
 	mr	%r3,%r1
