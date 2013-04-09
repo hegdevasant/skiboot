@@ -6,6 +6,7 @@
 #include <ccan/list/list.h>
 #include <lock.h>
 #include <device.h>
+#include <opal.h>
 
 /*
  * cpu_thread is our internal structure representing each
@@ -25,16 +26,17 @@ enum cpu_thread_state {
 struct cpu_job;
 
 struct cpu_thread {
-	uint32_t		pir;
-	uint32_t		server_no;
-	uint32_t		chip_id;
-	bool			is_secondary;
-	struct cpu_thread	*primary;
-	enum cpu_thread_state	state;
-	struct dt_node		*node;
+	uint32_t			pir;
+	uint32_t			server_no;
+	uint32_t			chip_id;
+	bool				is_secondary;
+	struct cpu_thread		*primary;
+	enum cpu_thread_state		state;
+	struct dt_node			*node;
+	struct opal_machine_check_event	mc_event;
 
-	struct lock		job_lock;
-	struct list_head	job_queue;
+	struct lock			job_lock;
+	struct list_head		job_queue;
 };
 
 /* This global is set to 1 to allow secondaries to callin,
