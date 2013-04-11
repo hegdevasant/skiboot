@@ -392,15 +392,15 @@ init_shared_sprs:
 	LOAD_IMM32(%r3,0x88CC6880)
 	mtspr	SPR_TSCR, %r3
 
-	/* LPCR: sane value */
-	LOAD_IMM64(%r3,0x0070000000000004)
-	mtspr	SPR_LPCR, %r3
-
 	/* XXX TODO: Add more */
 	blr
 
 .global init_replicated_sprs
 init_replicated_sprs:
+	/* LPCR: sane value */
+	LOAD_IMM64(%r3,0x0070000000000004)
+	mtspr	SPR_LPCR, %r3
+
 	/* XXX TODO: Add more */
 	blr
 
