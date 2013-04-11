@@ -69,8 +69,8 @@ bool dt_attach_root(struct dt_node *parent, struct dt_node *root)
 	assert(!root->parent);
 	dt_for_each_child(parent, node) {
 		if (!strcmp(node->name, root->name)) {
-			prerror("DT: dt_attach_node failed, duplicate %s\n",
-				root->name);
+			prerror("DT: %s failed, duplicate %s\n",
+				__func__, root->name);
 			return false;
 		}
 	}
