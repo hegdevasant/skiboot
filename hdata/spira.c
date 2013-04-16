@@ -118,12 +118,14 @@ static void add_xscom(void)
 
 	xscom_base = pmbs->xscom_addr;
 
-	/* Some FSP give me a crap base address for XSCOM (it has spurious
-	 * bits set as far as I can tell). Since only 5 bits 18:22 can
-	 * be programmed in hardware, let's isolate these. This seems to
-	 * give me the right value on VPL1
+	/* Some FSP (on P7) give me a crap base address for XSCOM (it has
+	 * spurious bits set as far as I can tell). Since only 5 bits 18:22 can
+	 * be programmed in hardware, let's isolate these. This seems to give
+	 * me the right value on VPL1
 	 */
-	xscom_base &= 0x80003e0000000000ul;
+	if (PVR_TYPE(mfspr(SPR_PVR)) == PVR_TYPE_P7)
+		xscom_base &= 0x80003e0000000000ul;
+
 	printf("XSCOM: Found base address: 0x%llx\n", xscom_base);
 
 	xscom_base = cleanup_addr(xscom_base);
