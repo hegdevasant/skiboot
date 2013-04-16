@@ -179,12 +179,22 @@ static bool chiptod_to_tb(void)
 
 	/* Move chip TOD value to timebase
 	 *
-	 * Note: BML updates TOD reg. 0x27[24:31] as follow, this is
-	 * not part of the documented procedure in the pervasive spec
+	 * The pib_master value is calculated from the CPU core ID, given in
+	 * the PIR. Because we have different core/thread arrangements in the
+	 * PIR between p7 and p8, we need to do the calculation differently.
+	 *
+	 * p7: 0b00001 || 3-bit core id
+	 * p8: 0b0001 || 4-bit core id
 	 */
-	tval = (this_cpu()->pir >> 2) & 0x7;	/* Get core ID */
-	tval |= 0x8;				/* Add b'1000 */
-	tval <<= 32;				/* Move to top half */
+	if (chiptod_type == chiptod_p8) {
+		tval = (this_cpu()->pir >> 3) & 0xf;
+		tval |= 0x10;
+	} else {
+		tval = (this_cpu()->pir >> 2) & 0x7;
+		tval |= 0x08;
+	}
+
+	tval <<= 32;
 	if (xscom_writeme(TOD_PIB_MASTER, tval) != 0) {
 		prerror("CHIPTOD: XSCOM error writing PIB MASTER\n");
 		return false;
@@ -366,10 +376,6 @@ void chiptod_init(u32 master_cpu)
 		op_display(OP_FATAL, OP_MOD_CHIPTOD, 0);
 		abort();
 	}
-
-	/* XXX We don't handle P8 yet ! */
-	if (chiptod_type == chiptod_p8)
-		return;
 
 	op_display(OP_LOG, OP_MOD_CHIPTOD, 1);
 
