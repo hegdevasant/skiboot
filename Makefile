@@ -5,7 +5,7 @@
 # Prefix of cross toolchain, if anything
 # Example: CROSS= powerpc64-unknown-linux-gnu-
 #
-CROSS=powerpc64-linux-
+CROSS ?= powerpc64-linux-
 
 #
 # Where is the source directory, must be a full path (no ~)
