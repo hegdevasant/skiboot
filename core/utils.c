@@ -22,8 +22,15 @@ void abort(void)
 	
 	fputs("Aborting!\n", stderr);
 	backtrace();
+
+	/* XXX FIXME: We should fsp_poll for a while to ensure any pending
+	 * console writes have made it out, but until we have decent PSI
+	 * link handling we must not do it forever. Polling can prevent the
+	 * FSP from bringing the PSI link up and it can get stuck in a
+	 * reboot loop.
+	 */
 	for (;;)
-		fsp_poll();
+		;
 }
 
 char tohex(uint8_t nibble)
