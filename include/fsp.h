@@ -223,6 +223,8 @@
 /* XIVR and BUID used for PSI interrupts */
 #define PSIHB_XIVR			0x30
 
+#define PSIHB_PHBSCR			0x90
+
 /*
  * Message classes
  */

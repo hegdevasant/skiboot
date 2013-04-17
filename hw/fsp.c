@@ -1073,6 +1073,31 @@ static const struct irq_source_ops fsp_psi_irq_ops = {
 	.interrupt = fsp_psi_interrupt,
 };
 
+static void psi_tce_enable(struct fsp_iopath *fiop, bool enable)
+{
+	void *addr;
+	u64 val;
+
+	switch (proc_gen) {
+	case proc_gen_p7:
+		addr = fiop->gxhb_regs + PSIHB_CR;
+		break;
+	case proc_gen_p8:
+		addr = fiop->gxhb_regs + PSIHB_PHBSCR;
+		break;
+	default:
+		prerror("%s: Unknown CPU type\n", __func__);
+		return;
+	}
+
+	val = in_be64(addr);
+	if (enable)
+		val |=  0x2000000000000000ull;
+	else
+		val &= ~0x2000000000000000ull;
+	out_be64(addr, val);
+}
+
 static int fsp_psi_init_phb(struct fsp_iopath *fiop, bool active, u64 reg_offset)
 {
 	u64 reg;
@@ -1080,9 +1105,8 @@ static int fsp_psi_init_phb(struct fsp_iopath *fiop, bool active, u64 reg_offset
 	/* Disable and configure the  TCE table,
 	 * it will be enabled below
 	 */
-	reg = in_be64(fiop->gxhb_regs + PSIHB_CR);
-	reg &= ~0x2000000000000000ull;
-	out_be64(fiop->gxhb_regs + PSIHB_CR, reg);
+	psi_tce_enable(fiop, false);
+
 	out_be64(fiop->gxhb_regs + PSIHB_TAR, PSI_TCE_TABLE_BASE | 1);
 
 	/* Configure the interrupt BUID and mask it */
@@ -1128,9 +1152,10 @@ static int fsp_psi_init_phb(struct fsp_iopath *fiop, bool active, u64 reg_offset
 	 */
 	if (active) {
 		reg = in_be64(fiop->gxhb_regs + PSIHB_CR);
-		reg |=  0x3800000000000000ull;
+		reg |=  0x1800000000000000ull;
 		reg &= ~0x00000000ffffffffull;
 		out_be64(fiop->gxhb_regs + PSIHB_CR, reg);
+		psi_tce_enable(fiop, true);
 	}
 #if 1
 	/* Dump the GXHB registers */
