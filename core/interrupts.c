@@ -226,7 +226,7 @@ static int64_t opal_get_xive(uint32_t isn, uint16_t *server, uint8_t *priority)
 }
 opal_call(OPAL_GET_XIVE, opal_get_xive);
 
-int64_t opal_handle_interrupt(uint32_t isn, uint64_t *outstanding_event_mask)
+static int64_t opal_handle_interrupt(uint32_t isn, uint64_t *outstanding_event_mask)
 {
 	struct irq_source *is = irq_find_source(isn);
 	int64_t rc = OPAL_SUCCESS;
