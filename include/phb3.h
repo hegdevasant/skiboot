@@ -59,8 +59,21 @@ struct rtt_entry {
 	uint16_t pe_num;
 };
 
-/* IVT Table : 32KB - MSI Interrupt vectors * state, 16-bytes per interrupt */
+/* IVT Table : MSI Interrupt vectors * state.
+ *
+ * We're sure that simics has 16-bytes IVE, totally 32KB.
+ * However the real HW possiblly has 128-bytes IVE, totally 256KB.
+ */
+#define IVT_TABLE_ENTRIES	0x800
+#define IVT_TABLE_IVE_16B
+
+#ifdef IVT_TABLE_IVE_16B
 #define IVT_TABLE_SIZE		0x8000
+#define IVT_TABLE_STRIDE	2		/* double-words */
+#else
+#define IVT_TABLE_SIZE		0x40000
+#define IVT_TABLE_STRIDE	16		/* double-words */
+#endif
 
 /* PELT-V Table : 8KB - Maps PE# to PE# dependencies
  *
@@ -171,6 +184,15 @@ struct phb3 {
 	uint64_t		retries;
 	int64_t			ecap;	    /* cached PCI-E cap offset */
 	int64_t			aercap;	    /* cached AER ecap offset */
+
+	uint16_t		rte_cache[RTT_TABLE_SIZE/2];
+	uint8_t			peltv_cache[PELTV_TABLE_SIZE];
+	uint64_t		lxive_cache[8];
+	uint64_t		ive_cache[IVT_TABLE_ENTRIES];
+	uint64_t		tve_cache[512];
+	uint64_t		m32d_cache[256];
+	uint64_t		m64d_cache[16];
+
 	struct phb		phb;
 };
 
