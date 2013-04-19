@@ -599,6 +599,34 @@ static int64_t phb3_map_pe_dma_window(struct phb *phb,
 	return OPAL_SUCCESS;
 }
 
+static int64_t phb3_get_msi_32(struct phb *phb __unused,
+			       uint32_t pe_num,
+			       uint32_t ive_num,
+			       uint8_t msi_range,
+			       uint32_t *msi_address,
+			       uint32_t *message_data)
+{
+	/*
+	 * Sanity check. We needn't check on mve_number (PE#)
+	 * on PHB3 since the interrupt source is purely determined
+	 * by its DMA address and data, but the check isn't
+	 * harmful.
+	 */
+	if (pe_num >= PHB3_MAX_PE_NUM ||
+	    ive_num >= IVT_TABLE_ENTRIES ||
+	    msi_range != 1 || !msi_address|| !message_data)
+		return OPAL_PARAMETER;
+
+	/*
+	 * DMA address and data will form the IVE index.
+	 * For more details, please refer to IODA2 spec.
+	 */
+	*msi_address = (0xFFFF0000 | (ive_num << 4)) & 0xFFFFFF0F;
+	*message_data = ive_num;
+
+	return OPAL_SUCCESS;
+}
+
 static int64_t phb3_set_pe(struct phb *phb,
 			   uint64_t pe_num,
                            uint64_t bdfn,
@@ -1173,6 +1201,7 @@ static const struct phb_ops phb3_ops = {
 	.phb_mmio_enable	= phb3_phb_mmio_enable,
 	.map_pe_mmio_window	= phb3_map_pe_mmio_window,
 	.map_pe_dma_window	= phb3_map_pe_dma_window,
+	.get_msi_32		= phb3_get_msi_32,
 	.set_pe			= phb3_set_pe,
 	.set_peltv		= phb3_set_peltv,
 	.link_state		= phb3_link_state,
