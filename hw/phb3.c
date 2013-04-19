@@ -416,6 +416,47 @@ static int64_t phb3_ioda_reset(struct phb *phb, bool purge)
 	return OPAL_SUCCESS;
 }
 
+static int64_t phb3_map_pe_mmio_window(struct phb *phb,
+				       uint16_t pe_num,
+				       uint16_t window_type,
+				       uint16_t window_num,
+				       uint16_t segment_num)
+{
+	struct phb3 *p = phb_to_phb3(phb);
+	uint64_t tbl, index, *cache;
+
+	if (pe_num >= PHB3_MAX_PE_NUM)
+		return OPAL_PARAMETER;
+
+	/*
+	 * PHB3 doesn't support IODT any more. On the other
+	 * hand, PHB3 support M64DT with much more flexibility.
+	 * we need figure it out later. At least, we never use
+	 * M64DT in kernel.
+	 */
+	switch(window_type) {
+	case OPAL_IO_WINDOW_TYPE:
+	case OPAL_M64_WINDOW_TYPE:
+		return OPAL_UNSUPPORTED;
+	case OPAL_M32_WINDOW_TYPE:
+		if (window_num != 0 || segment_num >= PHB3_MAX_PE_NUM)
+			return OPAL_PARAMETER;
+		tbl = IODA2_TBL_M32DT;
+		index = segment_num;
+		cache = &p->m32d_cache[index];
+		break;
+	default:
+		return OPAL_PARAMETER;
+	}
+
+	phb3_ioda_sel(p, tbl, index, false);
+	out_be64(p->regs + PHB_IODA_DATA0,
+		 SETFIELD(IODA2_M32DT_PE, 0ull, pe_num));
+	*cache = SETFIELD(IODA2_M32DT_PE, 0ull, pe_num);
+
+	return OPAL_SUCCESS;
+}
+
 static int64_t phb3_set_pe(struct phb *phb,
 			   uint64_t pe_num,
                            uint64_t bdfn,
@@ -986,6 +1027,7 @@ static const struct phb_ops phb3_ops = {
 	.choose_bus		= phb3_choose_bus,
 	.presence_detect	= phb3_presence_detect,
 	.ioda_reset		= phb3_ioda_reset,
+	.map_pe_mmio_window	= phb3_map_pe_mmio_window,
 	.set_pe			= phb3_set_pe,
 	.set_peltv		= phb3_set_peltv,
 	.link_state		= phb3_link_state,
