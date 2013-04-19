@@ -51,7 +51,6 @@
 
 /* XSCOM base address default */
 #define XSCOM_DEFAULT_BASE	0x00001A0000000000UL
-static uint64_t xscom_base = XSCOM_DEFAULT_BASE;
 
 /* Mask of bits to clear in HMER before an access */
 #define HMER_CLR_MASK	(~(SPR_HMER_XSCOM_FAIL | \
@@ -59,12 +58,14 @@ static uint64_t xscom_base = XSCOM_DEFAULT_BASE;
 			   SPR_HMER_XSCOM_STATUS_MASK))
 
 static bool xscom_p8_mode;
+static uint64_t *xscoms;
+static int max_gcid;
 
 static inline void *xscom_addr(uint32_t gcid, uint32_t pcb_addr)
 {
 	uint64_t addr;
 
-	addr  = xscom_base | ((uint64_t)gcid << PPC_BITLSHIFT(28));
+	addr  = xscoms[gcid];
 	addr |= ((uint64_t)pcb_addr << 4) & ~0xfful;
 	addr |= (pcb_addr << 3) & 0x78;
 
@@ -113,9 +114,19 @@ static uint64_t xscom_wait_done(void)
 	return hmer;
 }
 
+bool xscom_gcid_ok(uint32_t gcid)
+{
+	return gcid <= max_gcid && xscoms[gcid];
+}
+
 int xscom_read(uint32_t gcid, uint32_t pcb_addr, uint64_t *val)
 {
 	uint64_t hmer;
+
+	if (!xscom_gcid_ok(gcid)) {
+		prerror("%s: invalid XSCOM gcid 0x%x\n", __func__, gcid);
+		return -1;
+	}
 
 	for (;;) {
 		/* Clear status bits in HMER (HMER is special
@@ -143,6 +154,11 @@ int xscom_read(uint32_t gcid, uint32_t pcb_addr, uint64_t *val)
 int xscom_write(uint32_t gcid, uint32_t pcb_addr, uint64_t val)
 {
 	uint64_t hmer;
+
+	if (!xscom_gcid_ok(gcid)) {
+		prerror("%s: invalid XSCOM gcid 0x%x\n", __func__, gcid);
+		return -1;
+	}
 
 	for (;;) {
 		/* Clear status bits in HMER (HMER is special
@@ -199,25 +215,43 @@ int xscom_writeme(uint32_t pcb_addr, uint64_t val)
 
 void xscom_init(void)
 {
-	struct dt_node *xn;
 	const struct dt_property *reg;
+	struct dt_node *xn;
+	bool found;
+	int gcid;
 
-	xn = dt_find_compatible_node(dt_root, NULL, "ibm,xscom");
-	if (!xn) {
-		prerror("XSCOM: No XSCOM node in device-tree\n");
+	max_gcid = 0;
+
+	dt_for_each_compatible(dt_root, xn, "ibm,xscom") {
+		gcid = dt_prop_get_u32(xn, "ibm,chip-id");
+
+		if (gcid > max_gcid)
+			max_gcid = gcid;
+
+		found = true;
+	}
+
+	if (!found) {
+		prerror("XSCOM: No XSCOM nodes in device-tree\n");
 		return;
 	}
 
-	/* XXX We need a proper address parsing. For now, we just
-	 * "know" that we are looking at a u64
-	 */
-	reg = dt_find_property(xn, "reg");
-	assert(reg);
-	xscom_base = dt_translate_address(xn, 0, NULL);
+	xscoms = zalloc((max_gcid + 1) * sizeof(*xscoms));
 
-	/* Check for P8 variant (different GCID encoding) */
-	xscom_p8_mode = dt_node_is_compatible(xn, "ibm,power8-xscom");
+	dt_for_each_compatible(dt_root, xn, "ibm,xscom") {
+		gcid = dt_prop_get_u32(xn, "ibm,chip-id");
 
-	printf("XSCOM: %s mode at 0x%llx\n",
-	       xscom_p8_mode ? "P8" : "P7", xscom_base);
+		/* XXX We need a proper address parsing. For now, we just
+		 * "know" that we are looking at a u64
+		 */
+		reg = dt_find_property(xn, "reg");
+		assert(reg);
+		xscoms[gcid] = dt_translate_address(xn, 0, NULL);
+
+		/* Check for P8 variant (different GCID encoding) */
+		xscom_p8_mode = dt_node_is_compatible(xn, "ibm,power8-xscom");
+
+		printf("XSCOM: %s mode at 0x%llx\n",
+		       xscom_p8_mode ? "P8" : "P7", xscoms[gcid]);
+	}
 }
