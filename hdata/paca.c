@@ -14,12 +14,7 @@
 
 #define PACA_MAX_THREADS 4
 
-#define for_each_paca(p)						\
-	for (p = spira.ntuples.paca.addr;				\
-	     (void *)p < spira.ntuples.paca.addr			\
-	     + (spira.ntuples.paca.act_cnt				\
-		* spira.ntuples.paca.alloc_len);			\
-	     p = (void *)p + spira.ntuples.paca.alloc_len)
+#define for_each_paca(p) for_each_ntuple(spira.ntuples.paca, p)
 
 static unsigned int paca_index(const struct HDIF_common_hdr *paca)
 {
