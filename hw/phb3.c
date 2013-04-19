@@ -497,6 +497,39 @@ static int64_t phb3_set_pe(struct phb *phb,
 	return OPAL_SUCCESS;
 }
 
+static int64_t phb3_set_peltv(struct phb *phb,
+			      uint32_t parent_pe,
+			      uint32_t child_pe,
+			      uint8_t state)
+{
+	struct phb3 *p = phb_to_phb3(phb);
+	uint8_t *peltv;
+	uint32_t idx, mask;
+
+	/* Sanity check */
+	if (!p->tbl_peltv)
+		return OPAL_HARDWARE;
+	if (parent_pe >= PHB3_MAX_PE_NUM || child_pe >= PHB3_MAX_PE_NUM)
+		return OPAL_PARAMETER;
+
+	/* Find index for parent PE */
+	idx = parent_pe * (PHB3_MAX_PE_NUM / 8);
+	idx += (child_pe / 8);
+	mask = 0x1 << (child_pe % 8);
+
+	peltv = (uint8_t *)p->tbl_peltv;
+	peltv += idx;
+	if (state) {
+		*peltv |= mask;
+		p->peltv_cache[idx] |= mask;
+	} else {
+		*peltv &= ~mask;
+		p->peltv_cache[idx] &= ~mask;
+	}
+
+	return OPAL_SUCCESS;
+}
+
 static int64_t phb3_link_state(struct phb *phb)
 {
 	struct phb3 *p = phb_to_phb3(phb);
@@ -954,6 +987,7 @@ static const struct phb_ops phb3_ops = {
 	.presence_detect	= phb3_presence_detect,
 	.ioda_reset		= phb3_ioda_reset,
 	.set_pe			= phb3_set_pe,
+	.set_peltv		= phb3_set_peltv,
 	.link_state		= phb3_link_state,
 	.power_state		= phb3_power_state,
 	.slot_power_off		= phb3_slot_power_off,
