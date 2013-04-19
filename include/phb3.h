@@ -53,6 +53,20 @@
 #define PHB3_IRQ_NUM(irq)		(irq & 0x7FF)
 
 /*
+ * LSI interrupts
+ *
+ * The LSI interrupt block supports 8 interrupts. 4 of them are the
+ * standard PCIe INTA..INTB. The rest is for additional functions
+ * of the PHB
+ */
+#define PHB3_LSI_PCIE_INTA		0
+#define PHB3_LSI_PCIE_INTB		1
+#define PHB3_LSI_PCIE_INTC		2
+#define PHB3_LSI_PCIE_INTD		3
+#define PHB3_LSI_PCIE_INF		6
+#define PHB3_LSI_PCIE_ER		7
+
+/*
  * In-memory tables
  *
  * PHB3 requires a bunch of tables to be in memory instead of
@@ -202,6 +216,7 @@ struct phb3 {
 	uint64_t		mm_base;    /* Full MM window to PHB */
 	uint64_t		mm_size;    /* '' '' '' */
 	uint32_t		base_msi;
+	uint32_t		base_lsi;
 
 	/* SkiBoot owned in-memory tables */
 	uint64_t		tbl_rtt;

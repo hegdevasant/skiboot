@@ -762,10 +762,90 @@ static int64_t phb3_msi_set_xive(void *data,
 	return OPAL_SUCCESS;
 }
 
+static int64_t phb3_lsi_get_xive(void *data,
+				 uint32_t isn,
+				 uint16_t *server,
+				 uint8_t *prio)
+{
+	struct phb3 *p = data;
+	uint32_t chip, index, irq;
+	uint64_t lxive;
+
+	chip = P8_IRQ_TO_CHIP(isn);
+	index = P8_IRQ_TO_PHB(isn);
+	irq = PHB3_IRQ_NUM(isn);
+
+	if (chip != p->chip_id	||
+	    index != p->index	||
+	    irq < PHB3_LSI_IRQ_MIN ||
+	    irq > PHB3_LSI_IRQ_MAX)
+		return OPAL_PARAMETER;
+
+	lxive = p->lxive_cache[irq - PHB3_LSI_IRQ_MIN];
+	*server = GETFIELD(IODA2_LXIVT_SERVER, lxive);
+	*prio = GETFIELD(IODA2_LXIVT_PRIORITY, lxive);
+
+	return OPAL_SUCCESS;
+}
+
+static int64_t phb3_lsi_set_xive(void *data,
+				 uint32_t isn,
+				 uint16_t server,
+				 uint8_t prio)
+{
+	struct phb3 *p = data;
+	uint32_t chip, index, irq;
+	uint64_t lxive, m_server, m_prio;
+
+	chip = P8_IRQ_TO_CHIP(isn);
+	index = P8_IRQ_TO_PHB(isn);
+	irq = PHB3_IRQ_NUM(isn);
+
+	if (chip != p->chip_id	||
+	    index != p->index	||
+	    irq < PHB3_LSI_IRQ_MIN ||
+	    irq > PHB3_LSI_IRQ_MAX)
+		return OPAL_PARAMETER;
+
+	lxive = SETFIELD(IODA2_LXIVT_SERVER, 0ul, server);
+	lxive = SETFIELD(IODA2_LXIVT_PRIORITY, lxive, prio);
+
+	/*
+	 * We cache the arguments because we have to mangle
+	 * it in order to hijack 3 bits of priority to extend
+	 * the server number
+	 */
+	p->lxive_cache[irq - PHB3_LSI_IRQ_MIN] = lxive;
+
+	/* Now we mangle the server and priority */
+	if (prio == 0xff) {
+		m_server = 0;
+		m_prio = 0xff;
+	} else {
+		m_server = server >> 3;
+		m_prio = (prio >> 3) | ((server & 7) << 5);
+	}
+
+	/* We use HRT entry 0 always for now */
+	phb3_ioda_sel(p, IODA2_TBL_LXIVT, irq, false);
+	lxive = in_be64(p->regs + PHB_IODA_DATA0);
+	lxive = SETFIELD(IODA2_LXIVT_SERVER, lxive, m_server);
+	lxive = SETFIELD(IODA2_LXIVT_PRIORITY, lxive, m_prio);
+	out_be64(p->regs + PHB_IODA_DATA0, lxive);
+
+	return OPAL_SUCCESS;
+}
+
 /* MSIs (OS owned) */
 static const struct irq_source_ops phb3_msi_irq_ops = {
 	.get_xive = phb3_msi_get_xive,
 	.set_xive = phb3_msi_set_xive,
+};
+
+/* LSIs (OS owned) */
+static const struct irq_source_ops phb3_lsi_irq_ops = {
+	.get_xive = phb3_lsi_get_xive,
+	.set_xive = phb3_lsi_set_xive,
 };
 
 static int64_t phb3_set_pe(struct phb *phb,
@@ -1411,7 +1491,8 @@ static void phb3_setup_aib(struct phb3 *p)
 static void phb3_init_ioda2(struct phb3 *p)
 {
 	/* Init_14 - LSI Source ID */
-	/* XXX TBD */
+	out_be64(p->regs + PHB_LSI_SOURCE_ID,
+		 SETFIELD(PHB_LSI_SRC_ID, 0ul, 0xff));
 
 	/* Init_15 - IVT BAR / Length
 	 * Note: This is left uninitialized until the OS configures it,
@@ -1874,6 +1955,7 @@ static void phb3_allocate_tables(struct phb3 *p)
 static void phb3_add_properties(struct phb3 *p)
 {
 	struct dt_node *np = p->phb.dt_node;
+	uint32_t lsibase, icsp = get_ics_phandle();
 	uint64_t m32b;
 
 	/* Add various properties that HB doesn't have to
@@ -1888,7 +1970,7 @@ static void phb3_add_properties(struct phb3 *p)
 	dt_add_property_cells(np, "bus-range", 0, 0xff);
 	dt_add_property_cells(np, "clock-frequency", 0x200, 0); /* ??? */
 
-	//dt_add_property_cells(np, "interrupt-parent", icsp);
+	dt_add_property_cells(np, "interrupt-parent", icsp);
 
 	/* XXX FIXME: add slot-name */
 	//dt_property_cell("bus-width", 8); /* Figure it out from VPD ? */
@@ -1917,16 +1999,16 @@ static void phb3_add_properties(struct phb3 *p)
 	/* The interrupt maps will be generated in the RC node by the
 	 * PCI code based on the content of this structure:
 	 */
-	//lsibase = p->buid_lsi << 4;
-	//p->phb.lstate.int_size = 1;
-	//p->phb.lstate.int_val[0][0] = lsibase + PHB_LSI_PCIE_INTA;
-	//p->phb.lstate.int_val[1][0] = lsibase + PHB_LSI_PCIE_INTB;
-	//p->phb.lstate.int_val[2][0] = lsibase + PHB_LSI_PCIE_INTC;
-	//p->phb.lstate.int_val[3][0] = lsibase + PHB_LSI_PCIE_INTD;
-	//p->phb.lstate.int_parent[0] = icsp;
-	//p->phb.lstate.int_parent[1] = icsp;
-	//p->phb.lstate.int_parent[2] = icsp;
-	//p->phb.lstate.int_parent[3] = icsp;
+	lsibase = p->base_lsi;
+	p->phb.lstate.int_size = 1;
+	p->phb.lstate.int_val[0][0] = lsibase + PHB3_LSI_PCIE_INTA;
+	p->phb.lstate.int_val[1][0] = lsibase + PHB3_LSI_PCIE_INTB;
+	p->phb.lstate.int_val[2][0] = lsibase + PHB3_LSI_PCIE_INTC;
+	p->phb.lstate.int_val[3][0] = lsibase + PHB3_LSI_PCIE_INTD;
+	p->phb.lstate.int_parent[0] = icsp;
+	p->phb.lstate.int_parent[1] = icsp;
+	p->phb.lstate.int_parent[2] = icsp;
+	p->phb.lstate.int_parent[3] = icsp;
 }
 
 static void phb3_create(struct dt_node *np)
@@ -1942,6 +2024,7 @@ static void phb3_create(struct dt_node *np)
 	p->chip_id = dt_prop_get_u32(np, "ibm,chip-id");
 	p->regs = (void *)dt_get_address(np, 0, NULL);
 	p->base_msi = PHB3_MSI_IRQ_BASE(p->chip_id, p->index);
+	p->base_lsi = PHB3_LSI_IRQ_BASE(p->chip_id, p->index);
 	p->phb.dt_node = np;
 	p->phb.ops = &phb3_ops;
 	p->phb.phb_type = phb_type_pcie_v3;
@@ -1992,7 +2075,8 @@ static void phb3_create(struct dt_node *np)
 	/* Register OS interrupt sources */
 	register_irq_source(&phb3_msi_irq_ops, p, p->base_msi,
 			    PHB3_MSI_IRQ_COUNT);
-	//register_irq_source(&phb3_lsi_irq_ops, p, p->buid_lsi << 4, 4);
+	register_irq_source(&phb3_lsi_irq_ops, p, p->base_lsi,
+			    PHB3_LSI_IRQ_COUNT);
 
 	phb3_init_hw(p);
 }
@@ -2051,15 +2135,15 @@ static void hack_create_phb3(uint32_t gcid, uint32_t pno)
 	xscom_write(gcid, pe_xscom + 0x1a, val);
 	xscom_write(gcid, pe_xscom + 0x1b, 0xff00000000000000ul);
 
+	/* Configure LSI location to the top of the map */
+	xscom_write(gcid, pe_xscom + 0x1f, 0xff00000000000000ul);
+
 	xscom_read(gcid, pe_xscom + 0x1a, &val);
 	printf("PHB3[%d:%d] IRSNC  = 0x%016llx\n",
 		gcid, pno, val);
 	xscom_read(gcid, pe_xscom + 0x1b, &val);
 	printf("PHB3[%d:%d] IRSNM  = 0x%016llx\n",
 		gcid, pno, val);
-
-	/* TODO: Configure LSI location in interrupt map */
-	xscom_read(gcid, pe_xscom + 0x1f, &val);
 	printf("PHB3[%d:%d] LSI    = 0x%016llx\n",
 		gcid, pno, val);
 
