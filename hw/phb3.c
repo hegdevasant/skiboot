@@ -627,6 +627,29 @@ static int64_t phb3_get_msi_32(struct phb *phb __unused,
 	return OPAL_SUCCESS;
 }
 
+static int64_t phb3_get_msi_64(struct phb *phb __unused,
+			       uint32_t pe_num,
+			       uint32_t ive_num,
+			       uint8_t msi_range,
+			       uint64_t *msi_address,
+			       uint32_t *message_data)
+{
+	/* Sanity check */
+	if (pe_num >= PHB3_MAX_PE_NUM ||
+	    ive_num >= IVT_TABLE_ENTRIES ||
+	    msi_range != 1 || !msi_address || !message_data)
+		return OPAL_PARAMETER;
+
+	/*
+	 * DMA address and data will form the IVE index.
+	 * For more details, please refer to IODA2 spec.
+	 */
+	*msi_address = ((0x9ul << 60) | (ive_num << 4)) & 0xFFFFFFFFFFFFFF0Ful;
+	*message_data = ive_num;
+
+	return OPAL_SUCCESS;
+}
+
 static int64_t phb3_set_pe(struct phb *phb,
 			   uint64_t pe_num,
                            uint64_t bdfn,
@@ -1202,6 +1225,7 @@ static const struct phb_ops phb3_ops = {
 	.map_pe_mmio_window	= phb3_map_pe_mmio_window,
 	.map_pe_dma_window	= phb3_map_pe_dma_window,
 	.get_msi_32		= phb3_get_msi_32,
+	.get_msi_64		= phb3_get_msi_64,
 	.set_pe			= phb3_set_pe,
 	.set_peltv		= phb3_set_peltv,
 	.link_state		= phb3_link_state,
