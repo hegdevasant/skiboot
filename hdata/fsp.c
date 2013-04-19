@@ -180,8 +180,7 @@ void fsp_parse(void)
 	dt_add_property_cells(fsp_root, "#size-cells", 0);
 
 	/* Iterate FSPs in SPIRA */
-	for (i = 0; i < spira.ntuples.sp_subsys.act_cnt; i++) {
-		spss = base_spss + i * spira.ntuples.sp_subsys.alloc_len;
+	for_each_ntuple_idx(spira.ntuples.sp_subsys, spss, i) {
 
 		if (!HDIF_check(spss, SPSS_HDIF_SIG)) {
 			prerror("FSP #%d: SPSS signature mismatch !\n", i);

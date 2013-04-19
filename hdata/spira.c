@@ -164,7 +164,7 @@ static void add_chiptod_old(void)
 {
 	unsigned int i, xscom_addr, xscom_len;
 	const char *compat_str;
-	const void *p, *oldp;
+	const void *hdif;
 
 	if (!xscom_node)
 		return;
@@ -188,20 +188,16 @@ static void add_chiptod_old(void)
 	/*
 	 * Locate chiptod ID structures in SPIRA
 	 */
-	p = spira.ntuples.chip_tod.addr;
-	if (!CHECK_SPPTR(p)) {
+	if (!CHECK_SPPTR(spira.ntuples.chip_tod.addr)) {
 		prerror("CHIPTOD: Cannot locate old style SPIRA TOD info\n");
 		return;
 	}
 
-	for (i = 0; i < spira.ntuples.chip_tod.act_cnt; i++) {
+	for_each_ntuple_idx(spira.ntuples.chip_tod, hdif, i) {
 		const struct chiptod_chipid *id;
 		struct dt_node *node;
 
-		oldp = p;
-		p += spira.ntuples.chip_tod.alloc_len;
-
-		id = HDIF_get_idata(oldp, CHIPTOD_IDATA_CHIPID, NULL);
+		id = HDIF_get_idata(hdif, CHIPTOD_IDATA_CHIPID, NULL);
 		if (!CHECK_SPPTR(id)) {
 			prerror("CHIPTOD: Bad ChipID data %d\n", i);
 			continue;
@@ -233,7 +229,7 @@ static void add_chiptod_new(void)
 {
 	unsigned int i, xscom_addr, xscom_len;
 	const char *compat_str;
-	const void *p, *oldp;
+	const void *hdif;
 
 	if (!xscom_node)
 		return;
@@ -257,22 +253,18 @@ static void add_chiptod_new(void)
 	/*
 	 * Locate Proc Chip ID structures in SPIRA
 	 */
-	p = spira.ntuples.proc_chip.addr;
-	if (!CHECK_SPPTR(p)) {
+	if (!CHECK_SPPTR(spira.ntuples.proc_chip.addr)) {
 		prerror("CHIPTOD: Cannot locate new style SPIRA TOD info\n");
 		return;
 	}
 
-	for (i = 0; i < spira.ntuples.proc_chip.act_cnt; i++) {
+	for_each_ntuple_idx(spira.ntuples.proc_chip, hdif, i) {
 		const struct sppcrd_chip_info *cinfo;
 		const struct sppcrd_chip_tod *tinfo;
 		struct dt_node *node;
 		u32 ve, chip_id;
 
-		oldp = p;
-		p += spira.ntuples.chip_tod.alloc_len;
-
-		cinfo = HDIF_get_idata(oldp, SPPCRD_IDATA_CHIP_INFO, NULL);
+		cinfo = HDIF_get_idata(hdif, SPPCRD_IDATA_CHIP_INFO, NULL);
 		if (!CHECK_SPPTR(cinfo)) {
 			prerror("CHIPTOD: Bad ChipID data %d\n", i);
 			continue;
@@ -284,7 +276,7 @@ static void add_chiptod_new(void)
 		    ve == CHIP_VERIFY_UNUSABLE)
 			continue;
 
-		tinfo = HDIF_get_idata(oldp, SPPCRD_IDATA_CHIP_TOD, NULL);
+		tinfo = HDIF_get_idata(hdif, SPPCRD_IDATA_CHIP_TOD, NULL);
 		if (!CHECK_SPPTR(tinfo)) {
 			prerror("CHIPTOD: Bad TOD data %d\n", i);
 			continue;

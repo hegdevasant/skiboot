@@ -412,7 +412,8 @@ void io_parse(struct dt_node *ics)
 		prerror("CEC: Cannot locate IO Hub FRU data !\n");
 		return;
 	}
-	for (i = 0; i < spira.ntuples.cec_iohub_fru.act_cnt; i++) {
+
+	for_each_ntuple_idx(spira.ntuples.cec_iohub_fru, sp_iohubs, i) {
 		const struct cechub_hub_fru_id *fru_id_data;
 		unsigned int type;
 		static const char *typestr[] = {
@@ -426,7 +427,7 @@ void io_parse(struct dt_node *ics)
 					     &size);
 		if (!fru_id_data || size < sizeof(struct cechub_hub_fru_id)) {
 			prerror("CEC: IO-HUB FRU %d, bad ID data\n", i);
-			goto next_hub;
+			continue;
 		}
 		type = fru_id_data->card_type;
 
@@ -439,20 +440,18 @@ void io_parse(struct dt_node *ics)
 		 */
 		if (type != CECHUB_FRU_TYPE_CEC_BKPLANE) {
 			prerror("CEC:   Unsupported type\n");
-			goto next_hub;
+			continue;
 		}
 
 		/* We don't support Hubs connected to pass-through ports */
 		if (fru_id_data->flags & (CECHUB_FRU_FLAG_HEADLESS |
 					  CECHUB_FRU_FLAG_PASSTHROUGH)) {
 			prerror("CEC:   Headless or Passthrough unsupported\n");
-			goto next_hub;
+			continue;
 		}
 
 		/* Ok, we have a reasonable candidate */
 		io_parse_fru(sp_iohubs, ics);
-	next_hub:
-		sp_iohubs += spira.ntuples.cec_iohub_fru.alloc_len;
 	}
 }
 
