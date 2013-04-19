@@ -156,6 +156,10 @@ static inline void out_le64(volatile uint64_t *addr, uint64_t val)
 	out_be64(addr, bswap_64(val));
 }
 
+/* Assistant to macros used to access PCI config space */
+#define in_le8	in_8
+#define out_le8	out_8
+
 #endif /* __ASSEMBLY__ */
 
 #endif /* __IO_H */
