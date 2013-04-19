@@ -76,6 +76,18 @@ extern struct spira spira;
  */
 #define CHECK_SPPTR(_ptr)	spira_check_ptr(_ptr, __FILE__, __LINE__)
 
+#define for_each_ntuple_idx(_ntuples, _p, _idx)				\
+	for (_p = (_ntuples).addr, _idx = 0;				\
+	     _idx < (_ntuples).act_cnt;					\
+	     _p = (_ntuples).addr + (++_idx * (_ntuples).alloc_len))
+
+#define for_each_ntuple(_ntuples, _p)					\
+	for (_p = (_ntuples).addr;					\
+	     (void *)_p < (_ntuples).addr				\
+		     + ((_ntuples).act_cnt * (_ntuples).alloc_len);	\
+	     _p = (void *)_p + (_ntuples).alloc_len)
+
+
 extern bool spira_check_ptr(const void *ptr, const char *file,
 			    unsigned int line);
 
