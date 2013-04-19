@@ -30,6 +30,7 @@
 #include <cpu.h>
 #include <device.h>
 #include <ccan/str/str.h>
+#include <ccan/array_size/array_size.h>
 #include <xscom.h>
 #include <phb3.h>
 #include <phb3-regs.h>
@@ -298,6 +299,41 @@ static int64_t phb3_presence_detect(struct phb *phb)
 	return OPAL_SHPC_DEV_PRESENT;
 }
 
+/* Clear IODA cache tables */
+static void phb3_init_ioda_cache(struct phb3 *p)
+{
+	uint32_t i;
+	uint64_t *data64;
+
+	/*
+	 * RTT and PELTV. RTE should be 0xFF's to indicate
+	 * invalid PE# for the corresponding RID.
+	 */
+	memset(p->rte_cache,   0xff, sizeof(p->rte_cache));
+	memset(p->peltv_cache, 0x0,  sizeof(p->peltv_cache));
+
+	/* Disable all LSI */
+	for (i = 0; i < ARRAY_SIZE(p->lxive_cache); i++) {
+		data64 = &p->lxive_cache[i];
+		*data64 = SETFIELD(IODA2_LXIVT_PRIORITY, 0ul, 0xff);
+		*data64 = SETFIELD(IODA2_LXIVT_SERVER, *data64, 0x0);
+	}
+
+	/* Diable all MSI */
+	for (i = 0; i < ARRAY_SIZE(p->ive_cache); i++) {
+		data64 = &p->ive_cache[i];
+		*data64 = SETFIELD(IODA2_IVT_PRIORITY, 0ul, 0xff);
+		*data64 = SETFIELD(IODA2_IVT_SERVER, *data64, 0x0);
+	}
+
+	/* Clear TVT */
+	memset(p->tve_cache, 0x0, sizeof(p->tve_cache));
+	/* Clear M32 domain */
+	memset(p->m32d_cache, 0x0, sizeof(p->m32d_cache));
+	/* Clear M64 domain */
+	memset(p->m64d_cache, 0x0, sizeof(p->m64d_cache));
+}
+
 /* phb3_ioda_reset - Reset the IODA tables
  *
  * @purge: If true, the cache is cleared and the cleared values
@@ -307,20 +343,40 @@ static int64_t phb3_presence_detect(struct phb *phb)
  * This reset the IODA tables in the PHB. It is called at
  * initialization time, on PHB reset, and can be called
  * explicitly from OPAL
- *
- * XXX We don't implement an IODA cache yet...
  */
-static int64_t phb3_ioda_reset(struct phb *phb, bool purge __unused)
+static int64_t phb3_ioda_reset(struct phb *phb, bool purge)
 {
 	struct phb3 *p = phb_to_phb3(phb);
-	unsigned int i;
-	uint64_t data64;
+	uint64_t server, prio, m_server, m_prio;
+	uint64_t *pdata64, data64;
+	uint32_t i;
+
+	if (purge)
+		phb3_init_ioda_cache(p);
+
+	/* Invalidate RTE, IVE, TCE cache */
+	out_be64(p->regs + PHB_RTC_INVALIDATE, PHB_RTC_INVALIDATE_ALL);
+	out_be64(p->regs + PHB_IVC_INVALIDATE, PHB_IVC_INVALIDATE_ALL);
+	out_be64(p->regs + PHB_TCE_KILL, PHB_TCE_KILL_ALL);
 
 	/* Init_27..28 - LIXVT */
 	phb3_ioda_sel(p, IODA2_TBL_LXIVT, 0, true);
-	for (i = 0; i < 8; i++) {
-		data64 = SETFIELD(IODA2_LXIVT_SERVER, 0ul, 0);
-		data64 = SETFIELD(IODA2_LXIVT_PRIORITY, data64, 0xff);
+	for (i = 0; i < ARRAY_SIZE(p->lxive_cache); i++) {
+		data64 = p->lxive_cache[i];
+		server = GETFIELD(IODA2_LXIVT_SERVER, data64);
+		prio = GETFIELD(IODA2_LXIVT_PRIORITY, data64);
+
+		/* Now we mangle the server and priority */
+		if (prio == 0xff) {
+			m_server = 0;
+			m_prio = 0xff;
+		} else {
+			m_server = server >> 3;
+			m_prio = (prio >> 3) | ((server & 7) << 5);
+		}
+
+		data64 = SETFIELD(IODA2_LXIVT_SERVER, data64, m_server);
+		data64 = SETFIELD(IODA2_LXIVT_PRIORITY, data64, m_prio);
 		out_be64(p->regs + PHB_IODA_DATA0, data64);
 	}
 
@@ -331,18 +387,31 @@ static int64_t phb3_ioda_reset(struct phb *phb, bool purge __unused)
 
 	/* Init_31..32 - TVT */
 	phb3_ioda_sel(p, IODA2_TBL_TVT, 0, true);
-	for (i = 0; i < 512; i++)
-		out_be64(p->regs + PHB_IODA_DATA0, 0);
+	for (i = 0; i < ARRAY_SIZE(p->tve_cache); i++)
+		out_be64(p->regs + PHB_IODA_DATA0, p->tve_cache[i]);
 
 	/* Init_33..34 - M64BT */
 	phb3_ioda_sel(p, IODA2_TBL_M64BT, 0, true);
-	for (i = 0; i < 16; i++)
-		out_be64(p->regs + PHB_IODA_DATA0, 0);
+	for (i = 0; i < ARRAY_SIZE(p->m64d_cache); i++)
+		out_be64(p->regs + PHB_IODA_DATA0, p->m64d_cache[i]);
 
 	/* Init_35..36 - M32DT */
 	phb3_ioda_sel(p, IODA2_TBL_M32DT, 0, true);
-	for (i = 0; i < 256; i++)
-		out_be64(p->regs + PHB_IODA_DATA0, 0);
+	for (i = 0; i < ARRAY_SIZE(p->m32d_cache); i++)
+		out_be64(p->regs + PHB_IODA_DATA0, p->m32d_cache[i]);
+
+	/* Load RTE, PELTV */
+	if (p->tbl_rtt)
+		memcpy((void *)p->tbl_rtt, p->rte_cache, RTT_TABLE_SIZE);
+	if (p->tbl_peltv)
+		memcpy((void *)p->tbl_peltv, p->peltv_cache, PELTV_TABLE_SIZE);
+
+	/* Load IVT */
+	if (p->tbl_ivt) {
+		pdata64 = (uint64_t *)p->tbl_ivt;
+		for (i = 0; i < IVT_TABLE_ENTRIES; i++)
+			pdata64[i * IVT_TABLE_STRIDE] = p->ive_cache[i];
+	}
 
 	return OPAL_SUCCESS;
 }
@@ -1318,6 +1387,10 @@ static void phb3_allocate_tables(struct phb3 *p)
 	assert(p->tbl_pest);
 	memset((void *)p->tbl_pest, 0, PEST_TABLE_SIZE);
 
+	p->tbl_ivt = (uint64_t)memalign(IVT_TABLE_SIZE, IVT_TABLE_SIZE);
+	assert(p->tbl_ivt);
+	memset((void *)p->tbl_ivt, 0, IVT_TABLE_SIZE);
+
 	/* Doh.. that was ugly .. did I really do all these casts ?
 	 * maybe I should break a leg instead...
 	 */
@@ -1436,6 +1509,9 @@ static void phb3_create(struct dt_node *np)
 	 * get a useful OPAL ID for it
 	 */
 	pci_register_phb(&p->phb);
+
+	/* Clear IODA2 cache */
+	phb3_init_ioda_cache(p);
 
 	/* Register OS interrupt sources */
 	//register_irq_source(&phb3_msi_irq_ops, p, p->buid_msi << 4, 256);
