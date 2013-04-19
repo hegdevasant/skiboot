@@ -1361,19 +1361,6 @@ static const struct phb_ops phb3_ops = {
 	.hot_reset		= p7ioc_hot_reset,
 	.get_diag_data		= p7ioc_get_diag_data,
 	.next_error		= p7ioc_eeh_next_error,
-	.phb_mmio_enable	= p7ioc_phb_mmio_enable,
-	.set_phb_mem_window	= p7ioc_set_phb_mem_window,
-	.map_pe_mmio_window	= p7ioc_map_pe_mmio_window,
-	.set_pe			= p7ioc_set_pe,
-	.set_peltv		= p7ioc_set_peltv,
-	.map_pe_dma_window	= p7ioc_map_pe_dma_window,
-	.map_pe_dma_window_real	= p7ioc_map_pe_dma_windreal,
-	.set_mve		= p7ioc_set_mve,
-	.set_mve_enable		= p7ioc_set_mve_enable,
-	.set_xive_pe		= p7ioc_set_xive_pe,
-	.get_xive_source	= p7ioc_get_xive_source,
-	.get_msi_32		= p7ioc_get_msi_32,
-	.get_msi_64		= p7ioc_get_msi_64,
 */
 };
 
