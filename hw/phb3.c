@@ -543,6 +543,62 @@ static int64_t phb3_map_pe_mmio_window(struct phb *phb,
 	return OPAL_SUCCESS;
 }
 
+static int64_t phb3_map_pe_dma_window(struct phb *phb,
+				      uint16_t pe_num,
+				      uint16_t window_id,
+				      uint16_t tce_levels,
+				      uint64_t tce_table_addr,
+				      uint64_t tce_table_size,
+				      uint64_t tce_page_size)
+{
+	struct phb3 *p = phb_to_phb3(phb);
+	uint64_t tce_index;
+	uint64_t data64 = 0;
+
+	/*
+	 * Sanity check. It's notable the window ID is meaningless
+	 * to IODA2-compatible PHB3 because TVE index (window ID)
+	 * is determined by PE# and DMA address[59].
+	 */
+	if (pe_num >= PHB3_MAX_PE_NUM ||
+	    window_id >= 512 ||
+	    tce_levels != 1 ||
+	    tce_table_size < 0x1000)
+		return OPAL_PARAMETER;
+
+	/*
+	 * Figure out the TCE page size. The default value
+	 * would be 4KB
+	 */
+	if (tce_page_size != 0x1000 && tce_page_size != 0x10000 &&
+	    tce_page_size != 0x1000000 && tce_page_size != 0x10000000)
+		tce_page_size = 0x1000;
+
+	data64 = SETFIELD(IODA2_TVT_TABLE_ADDR, 0ul, tce_table_addr >> 12);
+	tce_index = ilog2(tce_table_size / 0x1000) + 1;
+	data64 = SETFIELD(IODA2_TVT_TCE_TABLE_SIZE, data64, tce_index);
+	switch (tce_page_size) {
+	case 0x1000:
+		data64 = SETFIELD(IODA2_TVT_IO_PSIZE, data64, 1);
+		break;
+	case 0x10000:
+		data64 = SETFIELD(IODA2_TVT_IO_PSIZE, data64, 5);
+		break;
+	case 0x1000000:
+		data64 = SETFIELD(IODA2_TVT_IO_PSIZE, data64, 13);
+		break;
+	case 0x10000000:
+		data64 = SETFIELD(IODA2_TVT_IO_PSIZE, data64, 17);
+		break;
+	}
+
+	phb3_ioda_sel(p, IODA2_TBL_TVT, window_id, false);
+	out_be64(p->regs + PHB_IODA_DATA0, data64);
+	p->tve_cache[window_id] = data64;
+
+	return OPAL_SUCCESS;
+}
+
 static int64_t phb3_set_pe(struct phb *phb,
 			   uint64_t pe_num,
                            uint64_t bdfn,
@@ -1116,6 +1172,7 @@ static const struct phb_ops phb3_ops = {
 	.set_phb_mem_window	= phb3_set_phb_mem_window,
 	.phb_mmio_enable	= phb3_phb_mmio_enable,
 	.map_pe_mmio_window	= phb3_map_pe_mmio_window,
+	.map_pe_dma_window	= phb3_map_pe_dma_window,
 	.set_pe			= phb3_set_pe,
 	.set_peltv		= phb3_set_peltv,
 	.link_state		= phb3_link_state,
