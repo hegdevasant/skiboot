@@ -916,10 +916,12 @@ static void pci_add_one_node(struct phb *phb, struct pci_device *pd,
 	pci_cfg_read32(phb, pd->bdfn, PCI_CFG_REV_ID, &rev_class);
 	pci_cfg_read8(phb, pd->bdfn, PCI_CFG_INT_PIN, &intpin);
 
-	/* Note: Special class name quirk for IBM bridge bogus class
-	 * without that, Linux will fail probing things properly.
+	/*
+	 * Quirk for IBM bridge bogus class on PCIe root complex.
+	 * Without it, the PCI DN won't be created for its downstream
+	 * devices in Linux.
 	 */
-	if (vdid == 0x03b91014)
+	if (pd->is_pcie && parent_node == phb->dt_node)
 		rev_class = (rev_class & 0xff) | 0x6040000;
 	cname = pci_class_name(rev_class >> 8);
 
