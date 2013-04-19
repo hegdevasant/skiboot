@@ -21,7 +21,6 @@
  *       and always going to 0x180
  */
 
-static struct dt_node *xscom_node;
 static int cpu_type;
 
 
@@ -92,13 +91,60 @@ static struct dt_node *add_interrupt_controller(void)
 	return ics;
 }
 
+static void add_xscom_node(uint64_t base, uint32_t id)
+{
+	struct dt_node *node;
+	uint64_t addr, size;
+
+	addr = base | ((uint64_t)id << PPC_BITLSHIFT(28));
+	size = 1ul << PPC_BITLSHIFT(28);
+
+	printf("XSCOM: Found gcid 0x%x, address: 0x%llx\n", id, addr);
+
+	node = dt_new_addr(dt_root, "xscom", addr);
+	dt_add_property_cells(node, "ibm,chip-id", id);
+	dt_add_property_cells(node, "#address-cells", 1);
+	dt_add_property_cells(node, "#size-cells", 1);
+
+	/* XXX Use boot CPU PVR to decide on XSCOM type... */
+	switch(cpu_type) {
+	case PVR_TYPE_P7:
+	case PVR_TYPE_P7P:
+		dt_add_property_strings(node, "compatible",
+					"ibm,xscom", "ibm,power7-xscom");
+		break;
+	case PVR_TYPE_P8:
+		dt_add_property_strings(node, "compatible",
+					"ibm,xscom", "ibm,power8-xscom");
+		break;
+	default:
+		dt_add_property_strings(node, "compatible", "ibm,xscom");
+	}
+	dt_add_property_cells(node, "reg", hi32(addr), lo32(addr),
+					   hi32(size), lo32(size));
+}
+
+struct dt_node *find_xscom_for_chip(uint32_t chip_id)
+{
+	struct dt_node *node;
+	uint32_t id;
+
+	dt_for_each_compatible(dt_root, node, "ibm,xscom") {
+		id = dt_prop_get_u32(node, "ibm,chip-id");
+		if (id == chip_id)
+			return node;
+	}
+
+	return NULL;
+}
+
 static void add_xscom(void)
 {
 	const void *ms_vpd = spira.ntuples.ms_vpd.addr;
 	const struct msvpd_pmover_bsr_synchro *pmbs;
-	struct dt_node *xn;
-	unsigned int size;
-	uint64_t xscom_base, xscom_size;
+	unsigned int size, i;
+	uint64_t xscom_base;
+	void *hdif;
 
 	if (!ms_vpd || !HDIF_check(ms_vpd, MSVPD_HDIF_SIG)) {
 		prerror("XSCOM: Can't find MS VPD\n");
@@ -126,64 +172,104 @@ static void add_xscom(void)
 	if (PVR_TYPE(mfspr(SPR_PVR)) == PVR_TYPE_P7)
 		xscom_base &= 0x80003e0000000000ul;
 
-	printf("XSCOM: Found base address: 0x%llx\n", xscom_base);
-
 	xscom_base = cleanup_addr(xscom_base);
 
-	xn = dt_new_addr(dt_root, "xscom", xscom_base);
-	assert(xn);
-	dt_add_property_cells(xn, "#address-cells", 2);
-	dt_add_property_cells(xn, "#size-cells", 1);
+	/* First, try the proc_chip ntuples for chip data */
+	for_each_ntuple_idx(spira.ntuples.proc_chip, hdif, i) {
+		const struct sppcrd_chip_info *cinfo;
+		u32 ve;
 
-	/* We hard wire the XSCOM size for now, it seems to be the same
-	 * everywhere so far
-	 */
-	xscom_size = 0x400000000000;
+		cinfo = HDIF_get_idata(hdif, SPPCRD_IDATA_CHIP_INFO,
+						NULL);
+		if (!CHECK_SPPTR(cinfo)) {
+			prerror("XSCOM: Bad ChipID data %d\n", i);
+			continue;
+		}
 
-	/* XXX Use boot CPU PVR to decide on XSCOM type... */
-	switch(cpu_type) {
-	case PVR_TYPE_P7:
-	case PVR_TYPE_P7P:
-		dt_add_property_strings(xn, "compatible",
-					"ibm,xscom", "ibm,power7-xscom");
-		break;
-	case PVR_TYPE_P8:
-		dt_add_property_strings(xn, "compatible",
-					"ibm,xscom", "ibm,power8-xscom");
-		break;
-	default:
-		dt_add_property_strings(xn, "compatible", "ibm,xscom");
+		ve = cinfo->verif_exist_flags & CHIP_VERIFY_MASK;
+		ve >>= CHIP_VERIFY_SHIFT;
+		if (ve == CHIP_VERIFY_NOT_INSTALLED ||
+		    ve == CHIP_VERIFY_UNUSABLE)
+			continue;
+
+		add_xscom_node(xscom_base, cinfo->xscom_id);
 	}
-	dt_add_property_cells(xn, "reg", hi32(xscom_base), lo32(xscom_base),
-			      hi32(xscom_size), lo32(xscom_size));
 
-	xscom_node = xn;
+	if (i > 0)
+		return;
+
+	/* Otherwise, check the old-style PACA, looking for unique chips */
+	for_each_ntuple_idx(spira.ntuples.paca, hdif, i) {
+		const struct sppaca_cpu_id *id;
+		int ve;
+
+		id = HDIF_get_idata(hdif, SPPACA_IDATA_CPU_ID, NULL);
+
+		if (!CHECK_SPPTR(id)) {
+			prerror("XSCOM: Bad processor data %d\n", i);
+			continue;
+		}
+
+		ve = (id->verify_exists_flags & CPU_ID_VERIFY_MASK);
+		ve >>= CPU_ID_VERIFY_SHIFT;
+		if (ve == CPU_ID_VERIFY_NOT_INSTALLED ||
+		    ve == CPU_ID_VERIFY_UNUSABLE)
+			continue;
+
+		/* do we already have an XSCOM for this chip? */
+		if (find_xscom_for_chip(id->processor_chip_id))
+			continue;
+
+		add_xscom_node(xscom_base, id->processor_chip_id);
+	}
 }
 
-static void add_chiptod_old(void)
+static void add_chiptod_node(unsigned int chip_id, int flags)
 {
-	unsigned int i, xscom_addr, xscom_len;
+	struct dt_node *node, *xscom_node;
 	const char *compat_str;
-	const void *hdif;
+	uint32_t addr, len;
 
-	if (!xscom_node)
+	if ((flags & CHIPTOD_ID_FLAGS_STATUS_MASK) !=
+			CHIPTOD_ID_FLAGS_STATUS_OK)
 		return;
+
+	xscom_node = find_xscom_for_chip(chip_id);
+	if (!xscom_node) {
+		prerror("CHIPTOD: No xscom for chiptod %d?\n", chip_id);
+		return;
+	}
+
+	addr = 0x40000;
+	len = 0x34;
 
 	switch(cpu_type) {
 	case PVR_TYPE_P7:
 	case PVR_TYPE_P7P:
 		compat_str = "ibm,power7-chiptod";
-		xscom_addr = 0x00040000;
-		xscom_len = 0x34;
 		break;
 	case PVR_TYPE_P8:
 		compat_str = "ibm,power8-chiptod";
-		xscom_addr = 0x00040000;
-		xscom_len = 0x34;
 		break;
 	default:
 		return;
 	}
+
+	node = dt_new_addr(xscom_node, "chiptod", addr);
+	dt_add_property_cells(node, "reg", addr, len);
+	dt_add_property_strings(node, "compatible", "ibm,power-chiptod",
+			       compat_str);
+
+	if (flags & CHIPTOD_ID_FLAGS_PRIMARY)
+		dt_add_property(node, "primary", NULL, 0);
+	if (flags & CHIPTOD_ID_FLAGS_SECONDARY)
+		dt_add_property(node, "secondary", NULL, 0);
+}
+
+static void add_chiptod_old(void)
+{
+	const void *hdif;
+	unsigned int i;
 
 	/*
 	 * Locate chiptod ID structures in SPIRA
@@ -195,7 +281,6 @@ static void add_chiptod_old(void)
 
 	for_each_ntuple_idx(spira.ntuples.chip_tod, hdif, i) {
 		const struct chiptod_chipid *id;
-		struct dt_node *node;
 
 		id = HDIF_get_idata(hdif, CHIPTOD_IDATA_CHIPID, NULL);
 		if (!CHECK_SPPTR(id)) {
@@ -203,52 +288,14 @@ static void add_chiptod_old(void)
 			continue;
 		}
 
-		if ((id->flags & CHIPTOD_ID_FLAGS_STATUS_MASK) !=
-		    CHIPTOD_ID_FLAGS_STATUS_OK)
-			continue;
-
-
-		node = dt_new_2addr(xscom_node, "chiptod",
-				    id->chip_id, xscom_addr);
-		dt_add_property_cells(node, "reg", id->chip_id,
-				     xscom_addr, xscom_len);
-		dt_add_property_strings(node, "compatible", "ibm,power-chiptod",
-				       compat_str);
-
-		if (id->flags & CHIPTOD_ID_FLAGS_PRIMARY)
-			dt_add_property(node, "primary", NULL, 0);
-		if (id->flags & CHIPTOD_ID_FLAGS_SECONDARY)
-			dt_add_property(node, "secondary", NULL, 0);
-
-		/* This is somewhat redundant but consistent with other nodes */
-		dt_add_property_cells(node, "ibm,chip-id", id->chip_id);
+		add_chiptod_node(id->chip_id, id->flags);
 	}
 }
 
 static void add_chiptod_new(void)
 {
-	unsigned int i, xscom_addr, xscom_len;
-	const char *compat_str;
 	const void *hdif;
-
-	if (!xscom_node)
-		return;
-
-	switch(cpu_type) {
-	case PVR_TYPE_P7:
-	case PVR_TYPE_P7P:
-		compat_str = "ibm,power7-chiptod";
-		xscom_addr = 0x00040000;
-		xscom_len = 0x34;
-		break;
-	case PVR_TYPE_P8:
-		compat_str = "ibm,power8-chiptod";
-		xscom_addr = 0x00040000;
-		xscom_len = 0x34;
-		break;
-	default:
-		return;
-	}
+	unsigned int i;
 
 	/*
 	 * Locate Proc Chip ID structures in SPIRA
@@ -261,8 +308,8 @@ static void add_chiptod_new(void)
 	for_each_ntuple_idx(spira.ntuples.proc_chip, hdif, i) {
 		const struct sppcrd_chip_info *cinfo;
 		const struct sppcrd_chip_tod *tinfo;
-		struct dt_node *node;
-		u32 ve, chip_id;
+		unsigned int size;
+		u32 ve;
 
 		cinfo = HDIF_get_idata(hdif, SPPCRD_IDATA_CHIP_INFO, NULL);
 		if (!CHECK_SPPTR(cinfo)) {
@@ -276,31 +323,16 @@ static void add_chiptod_new(void)
 		    ve == CHIP_VERIFY_UNUSABLE)
 			continue;
 
-		tinfo = HDIF_get_idata(hdif, SPPCRD_IDATA_CHIP_TOD, NULL);
+		tinfo = HDIF_get_idata(hdif, SPPCRD_IDATA_CHIP_TOD, &size);
 		if (!CHECK_SPPTR(tinfo)) {
 			prerror("CHIPTOD: Bad TOD data %d\n", i);
 			continue;
 		}
 
-		if ((tinfo->flags & CHIPTOD_ID_FLAGS_STATUS_MASK) !=
-		    CHIPTOD_ID_FLAGS_STATUS_OK)
+		if (!size)
 			continue;
 
-		chip_id = cinfo->xscom_id;
-
-		node = dt_new_2addr(xscom_node, "chiptod", chip_id, xscom_addr);
-		dt_add_property_cells(node, "reg", chip_id,
-				      xscom_addr, xscom_len);
-		dt_add_property_strings(node, "compatible", "ibm,power-chiptod",
-				       compat_str);
-
-		if (tinfo->flags & CHIPTOD_ID_FLAGS_PRIMARY)
-			dt_add_property(node, "primary", NULL, 0);
-		if (tinfo->flags & CHIPTOD_ID_FLAGS_SECONDARY)
-			dt_add_property(node, "secondary", NULL, 0);
-
-		/* This is somewhat redundant but consistent with other nodes */
-		dt_add_property_cells(node, "ibm,chip-id", chip_id);
+		add_chiptod_node(cinfo->xscom_id, tinfo->flags);
 	}
 }
 
