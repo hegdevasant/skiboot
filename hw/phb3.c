@@ -416,6 +416,51 @@ static int64_t phb3_ioda_reset(struct phb *phb, bool purge)
 	return OPAL_SUCCESS;
 }
 
+static int64_t phb3_set_phb_mem_window(struct phb *phb,
+				       uint16_t window_type,
+				       uint16_t window_num,
+				       uint64_t __unused starting_real_addr,
+				       uint64_t starting_pci_addr,
+				       uint16_t segment_size)
+{
+	struct phb3 *p = phb_to_phb3(phb);
+	uint64_t tbl, index, data64, *cache;
+
+	/*
+	 * By design, PHB3 doesn't support IODT any more.
+	 * Besides, we can't enable M32 BAR as well. So
+	 * the function is used to do M64 mapping and each
+	 * BAR is supposed to be shared by all PEs.
+	 */
+	switch (window_type) {
+	case OPAL_IO_WINDOW_TYPE:
+	case OPAL_M32_WINDOW_TYPE:
+		return OPAL_UNSUPPORTED;
+	case OPAL_M64_WINDOW_TYPE:
+		if (window_num >= 16)
+			return OPAL_PARAMETER;
+		if ((starting_pci_addr & 0xffffful) ||
+		    (segment_size & 0xffffful))
+			return OPAL_PARAMETER;
+
+		tbl = IODA2_TBL_M64BT;
+		index = window_num;
+		segment_size *= PHB3_MAX_PE_NUM;
+		cache = &p->m64d_cache[index];
+		break;
+	default:
+		return OPAL_PARAMETER;
+	}
+
+	data64 = SETFIELD(IODA2_M64BT_BASE_ADDR, 0x0ul, starting_pci_addr);
+	data64 = SETFIELD(IODA2_M64BT_ADDRMASK, data64, segment_size - 1);
+	phb3_ioda_sel(p, tbl, index, false);
+	out_be64(p->regs + PHB_IODA_DATA0, data64);
+	*cache = data64;
+
+	return OPAL_SUCCESS;
+}
+
 static int64_t phb3_map_pe_mmio_window(struct phb *phb,
 				       uint16_t pe_num,
 				       uint16_t window_type,
@@ -1027,6 +1072,7 @@ static const struct phb_ops phb3_ops = {
 	.choose_bus		= phb3_choose_bus,
 	.presence_detect	= phb3_presence_detect,
 	.ioda_reset		= phb3_ioda_reset,
+	.set_phb_mem_window	= phb3_set_phb_mem_window,
 	.map_pe_mmio_window	= phb3_map_pe_mmio_window,
 	.set_pe			= phb3_set_pe,
 	.set_peltv		= phb3_set_peltv,
