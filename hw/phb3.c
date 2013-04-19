@@ -121,146 +121,67 @@ static int64_t phb3_pcicfg_check(struct phb3 *p, uint32_t bdfn,
 	if (p->state == PHB3_STATE_BROKEN)
 		return OPAL_HARDWARE;
 
-	/* XXX When we do EEH, lookup the PE# in the RTT */
-	*pe = 0;
+	/* Fetch the PE# from cache */
+	*pe = p->rte_cache[bdfn];
 
 	return OPAL_SUCCESS;
 }
 
-static int64_t phb3_pcicfg_read8(struct phb *phb, uint32_t bdfn,
-				 uint32_t offset, uint8_t *data)
-{
-	struct phb3 *p = phb_to_phb3(phb);
-	uint64_t addr;
-	int64_t rc;
-	uint8_t pe;
-
-	/* Initialize data in case of error */
-	*data = 0xff;
-
-	rc = phb3_pcicfg_check(p, bdfn, offset, 1, &pe);
-	if (rc)
-		return rc;
-
-	addr = PHB_CA_ENABLE | ((uint64_t)bdfn << PHB_CA_FUNC_LSH);
-	addr = SETFIELD(PHB_CA_REG, addr, offset);
-	addr = SETFIELD(PHB_CA_PE, addr, pe);
-	out_be64(p->regs + PHB_CONFIG_ADDRESS, addr);
-	*data = in_8(p->regs + PHB_CONFIG_DATA + (offset & 3));
-
-	return OPAL_SUCCESS;
+#define PHB3_PCI_CFG_READ(size, type)	\
+static int64_t phb3_pcicfg_read##size(struct phb *phb, uint32_t bdfn,	\
+                                      uint32_t offset, type *data)	\
+{									\
+        struct phb3 *p = phb_to_phb3(phb);				\
+        uint64_t addr;							\
+        int64_t rc;							\
+        uint8_t pe;							\
+									\
+        /* Initialize data in case of error */				\
+        *data = (type)0xffffffff;					\
+									\
+        rc = phb3_pcicfg_check(p, bdfn, offset, sizeof(type), &pe);	\
+        if (rc)								\
+                return rc;						\
+									\
+        addr = PHB_CA_ENABLE | ((uint64_t)bdfn << PHB_CA_FUNC_LSH);	\
+        addr = SETFIELD(PHB_CA_REG, addr, offset);			\
+        addr = SETFIELD(PHB_CA_PE, addr, pe);				\
+        out_be64(p->regs + PHB_CONFIG_ADDRESS, addr);			\
+        *data = in_le##size(p->regs + PHB_CONFIG_DATA +			\
+                                (offset & (4 - sizeof(type))));		\
+									\
+        return OPAL_SUCCESS;						\
 }
 
-static int64_t phb3_pcicfg_read16(struct phb *phb, uint32_t bdfn,
-				  uint32_t offset, uint16_t *data)
-{
-	struct phb3 *p = phb_to_phb3(phb);
-	uint64_t addr;
-	int64_t rc;
-	uint8_t pe;
-
-	/* Initialize data in case of error */
-	*data = 0xffff;
-
-	rc = phb3_pcicfg_check(p, bdfn, offset, 2, &pe);
-	if (rc)
-		return rc;
-
-	addr = PHB_CA_ENABLE | ((uint64_t)bdfn << PHB_CA_FUNC_LSH);
-	addr = SETFIELD(PHB_CA_REG, addr, offset);
-	addr = SETFIELD(PHB_CA_PE, addr, pe);
-	out_be64(p->regs + PHB_CONFIG_ADDRESS, addr);
-	*data = in_le16(p->regs + PHB_CONFIG_DATA + (offset & 3));
-
-	return OPAL_SUCCESS;
+#define PHB3_PCI_CFG_WRITE(size, type)	\
+static int64_t phb3_pcicfg_write##size(struct phb *phb, uint32_t bdfn,	\
+                                       uint32_t offset, type data)	\
+{									\
+        struct phb3 *p = phb_to_phb3(phb);				\
+        uint64_t addr;							\
+        int64_t rc;							\
+        uint8_t pe;							\
+									\
+        rc = phb3_pcicfg_check(p, bdfn, offset, sizeof(type), &pe);	\
+        if (rc)								\
+                return rc;						\
+									\
+        addr = PHB_CA_ENABLE | ((uint64_t)bdfn << PHB_CA_FUNC_LSH);	\
+        addr = SETFIELD(PHB_CA_REG, addr, offset);			\
+        addr = SETFIELD(PHB_CA_PE, addr, pe);				\
+        out_be64(p->regs + PHB_CONFIG_ADDRESS, addr);			\
+        out_le##size(p->regs + PHB_CONFIG_DATA +			\
+                     (offset & (4 - sizeof(type))), data);		\
+									\
+        return OPAL_SUCCESS;						\
 }
 
-static int64_t phb3_pcicfg_read32(struct phb *phb, uint32_t bdfn,
-				  uint32_t offset, uint32_t *data)
-{
-	struct phb3 *p = phb_to_phb3(phb);
-	uint64_t addr;
-	int64_t rc;
-	uint8_t pe;
-
-	/* Initialize data in case of error */
-	*data = 0xffffffff;
-
-	rc = phb3_pcicfg_check(p, bdfn, offset, 4, &pe);
-	if (rc)
-		return rc;
-
-	addr = PHB_CA_ENABLE | ((uint64_t)bdfn << PHB_CA_FUNC_LSH);
-	addr = SETFIELD(PHB_CA_REG, addr, offset);
-	addr = SETFIELD(PHB_CA_PE, addr, pe);
-	out_be64(p->regs + PHB_CONFIG_ADDRESS, addr);
-	*data = in_le32(p->regs + PHB_CONFIG_DATA);
-
-	return OPAL_SUCCESS;
-}
-
-static int64_t phb3_pcicfg_write8(struct phb *phb, uint32_t bdfn,
-				  uint32_t offset, uint8_t data)
-{
-	struct phb3 *p = phb_to_phb3(phb);
-	uint64_t addr;
-	int64_t rc;
-	uint8_t pe;
-
-	rc = phb3_pcicfg_check(p, bdfn, offset, 1, &pe);
-	if (rc)
-		return rc;
-
-	addr = PHB_CA_ENABLE | ((uint64_t)bdfn << PHB_CA_FUNC_LSH);
-	addr = SETFIELD(PHB_CA_REG, addr, offset);
-	addr = SETFIELD(PHB_CA_PE, addr, pe);
-	out_be64(p->regs + PHB_CONFIG_ADDRESS, addr);
-	out_8(p->regs + PHB_CONFIG_DATA + (offset & 3), data);
-
-	return OPAL_SUCCESS;
-}
-
-static int64_t phb3_pcicfg_write16(struct phb *phb, uint32_t bdfn,
-				   uint32_t offset, uint16_t data)
-{
-	struct phb3 *p = phb_to_phb3(phb);
-	uint64_t addr;
-	int64_t rc;
-	uint8_t pe;
-
-	rc = phb3_pcicfg_check(p, bdfn, offset, 2, &pe);
-	if (rc)
-		return rc;
-
-	addr = PHB_CA_ENABLE | ((uint64_t)bdfn << PHB_CA_FUNC_LSH);
-	addr = SETFIELD(PHB_CA_REG, addr, offset);
-	addr = SETFIELD(PHB_CA_PE, addr, pe);
-	out_be64(p->regs + PHB_CONFIG_ADDRESS, addr);
-	out_le16(p->regs + PHB_CONFIG_DATA + (offset & 3), data);
-
-	return OPAL_SUCCESS;
-}
-
-static int64_t phb3_pcicfg_write32(struct phb *phb, uint32_t bdfn,
-				   uint32_t offset, uint32_t data)
-{
-	struct phb3 *p = phb_to_phb3(phb);
-	uint64_t addr;
-	int64_t rc;
-	uint8_t pe;
-
-	rc = phb3_pcicfg_check(p, bdfn, offset, 1, &pe);
-	if (rc)
-		return rc;
-
-	addr = PHB_CA_ENABLE | ((uint64_t)bdfn << PHB_CA_FUNC_LSH);
-	addr = SETFIELD(PHB_CA_REG, addr, offset);
-	addr = SETFIELD(PHB_CA_PE, addr, pe);
-	out_be64(p->regs + PHB_CONFIG_ADDRESS, addr);
-	out_le32(p->regs + PHB_CONFIG_DATA, data);
-
-	return OPAL_SUCCESS;
-}
+PHB3_PCI_CFG_READ(8, u8)
+PHB3_PCI_CFG_READ(16, u16)
+PHB3_PCI_CFG_READ(32, u32)
+PHB3_PCI_CFG_WRITE(8, u8)
+PHB3_PCI_CFG_WRITE(16, u16)
+PHB3_PCI_CFG_WRITE(32, u32)
 
 static uint8_t phb3_choose_bus(struct phb *phb __unused,
 			       struct pci_device *bridge __unused,
