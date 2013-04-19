@@ -1314,8 +1314,7 @@ void fsp_init(void)
 {
 	printf("FSP: Looking for FSP...\n");
 
-	if (fsp_init_one("ibm,fsp1") == false &&
-	    fsp_init_one("ibm,fsp2") == false)
+	if (!fsp_init_one("ibm,fsp1") && !fsp_init_one("ibm,fsp2"))
 		printf("FSP: No FSP on this machine\n");
 }
 
