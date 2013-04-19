@@ -97,6 +97,12 @@ struct rtt_entry {
 #define RBA_TABLE_SIZE		0x100
 
 /*
+ * Maximal supported PE# in PHB3. We probably probe it from EEH
+ * capability register later.
+ */
+#define PHB3_MAX_PE_NUM		256
+
+/*
  * State structure for a PHB
  */
 

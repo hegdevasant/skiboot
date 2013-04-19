@@ -416,6 +416,87 @@ static int64_t phb3_ioda_reset(struct phb *phb, bool purge)
 	return OPAL_SUCCESS;
 }
 
+static int64_t phb3_set_pe(struct phb *phb,
+			   uint64_t pe_num,
+                           uint64_t bdfn,
+			   uint8_t bcompare,
+			   uint8_t dcompare,
+			   uint8_t fcompare,
+			   uint8_t action)
+{
+	struct phb3 *p = phb_to_phb3(phb);
+	uint64_t mask, val, tmp, idx;
+	int32_t all = 0;
+	uint16_t *rte;
+
+	/* Sanity check */
+	if (!p->tbl_rtt)
+		return OPAL_HARDWARE;
+	if (action != OPAL_MAP_PE && action != OPAL_UNMAP_PE)
+		return OPAL_PARAMETER;
+	if (pe_num >= PHB3_MAX_PE_NUM || bdfn > 0xffff ||
+	    bcompare > OpalPciBusAll ||
+	    dcompare > OPAL_COMPARE_RID_DEVICE_NUMBER ||
+	    fcompare > OPAL_COMPARE_RID_FUNCTION_NUMBER)
+		return OPAL_PARAMETER;
+
+	/* Figure out the RID range */
+	if (bcompare == OpalPciBusAny) {
+		mask = 0x0;
+		val  = 0x0;
+		all  = 0x1;
+	} else {
+		tmp  = ((0x1 << (bcompare + 1)) - 1) << (15 - bcompare);
+		mask = tmp;
+		val  = bdfn & tmp;
+	}
+
+	if (dcompare == OPAL_IGNORE_RID_DEVICE_NUMBER)
+		all = (all << 1) | 0x1;
+	else {
+		mask |= 0xf8;
+		val  |= (bdfn & 0xf8);
+	}
+
+	if (fcompare == OPAL_IGNORE_RID_FUNCTION_NUMBER)
+		all = (all << 1) | 0x1;
+	else {
+		mask |= 0x7;
+		val  |= (bdfn & 0x7);
+	}
+
+	/* Map or unmap the RTT range */
+	if (all == 0x7) {
+		if (action == OPAL_MAP_PE) {
+			for (idx = 0; idx < RTT_TABLE_SIZE/2; idx++)
+				p->rte_cache[idx] = pe_num;
+		} else {
+			memset(p->rte_cache, 0xff, RTT_TABLE_SIZE);
+		}
+		memcpy((void *)p->tbl_rtt, p->rte_cache, RTT_TABLE_SIZE);
+		out_be64(p->regs + PHB_RTC_INVALIDATE,
+			 PHB_RTC_INVALIDATE_ALL);
+	} else {
+		rte = (uint16_t *)p->tbl_rtt;
+		for (idx = 0; idx < RTT_TABLE_SIZE/2; idx++, rte++) {
+			if ((idx & mask) != val)
+				continue;
+			p->rte_cache[idx] = (action ? pe_num : 0xffff);
+			*rte = p->rte_cache[idx];
+
+			/*
+			 * We might not need invalidate RTC one by one since
+			 * the RTT is expected to be updated in batch mode
+			 * in host kernel.
+			 */
+			out_be64(p->regs + PHB_RTC_INVALIDATE,
+				 SETFIELD(PHB_RTC_INVALIDATE_RID, 0ul, idx));
+		}
+	}
+
+	return OPAL_SUCCESS;
+}
+
 static int64_t phb3_link_state(struct phb *phb)
 {
 	struct phb3 *p = phb_to_phb3(phb);
@@ -872,6 +953,7 @@ static const struct phb_ops phb3_ops = {
 	.choose_bus		= phb3_choose_bus,
 	.presence_detect	= phb3_presence_detect,
 	.ioda_reset		= phb3_ioda_reset,
+	.set_pe			= phb3_set_pe,
 	.link_state		= phb3_link_state,
 	.power_state		= phb3_power_state,
 	.slot_power_off		= phb3_slot_power_off,
