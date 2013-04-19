@@ -8,6 +8,8 @@
 #ifndef __PHB3_H
 #define __PHB3_H
 
+#include <interrupts.h>
+
 /*
  * Memory map
  *
@@ -27,6 +29,28 @@
 #define PHB_M32_SIZE	0x100000000ul	/* Size of this area (whole 4G) */
 #define M32_PCI_START	0x080000000	/* Offset of the actual M32 window */
 #define M32_PCI_SIZE	0x080000000	/* Size of the actual M32 window */
+
+/*
+ * Interrupt map.
+ *
+ * Each PHB supports 2K interrupt sources, which is shared by
+ * LSI and MSI. With default configuration, MSI would use range
+ * [0, 0x7f7] and LSI would use [0x7f8, 0x7ff]. The interrupt
+ * source should be combined with IRSN to form final hardware
+ * IRQ.
+ */
+#define PHB3_MSI_IRQ_MIN		0x000
+#define PHB3_MSI_IRQ_COUNT		0x7F8
+#define PHB3_MSI_IRQ_MAX		(PHB3_MSI_IRQ_MIN+PHB3_MSI_IRQ_COUNT-1)
+#define PHB3_LSI_IRQ_MIN		(PHB3_MSI_IRQ_COUNT)
+#define PHB3_LSI_IRQ_COUNT		8
+#define PHB3_LSI_IRQ_MAX		(PHB3_LSI_IRQ_MIN+PHB3_LSI_IRQ_COUNT-1)
+
+#define PHB3_MSI_IRQ_BASE(chip, phb)	(P8_CHIP_IRQ_PHB_BASE(chip, phb) | \
+					 PHB3_MSI_IRQ_MIN)
+#define PHB3_LSI_IRQ_BASE(chip, phb)	(P8_CHIP_IRQ_PHB_BASE(chip, phb) | \
+					 PHB3_LSI_IRQ_MIN)
+#define PHB3_IRQ_NUM(irq)		(irq & 0x7FF)
 
 /*
  * In-memory tables
@@ -177,6 +201,7 @@ struct phb3 {
 	struct lock		lock;
 	uint64_t		mm_base;    /* Full MM window to PHB */
 	uint64_t		mm_size;    /* '' '' '' */
+	uint32_t		base_msi;
 
 	/* SkiBoot owned in-memory tables */
 	uint64_t		tbl_rtt;

@@ -682,6 +682,92 @@ static int64_t phb3_get_msi_64(struct phb *phb __unused,
 	return OPAL_SUCCESS;
 }
 
+static int64_t phb3_msi_get_xive(void *data,
+				 uint32_t isn,
+				 uint16_t *server,
+				 uint8_t *prio)
+{
+	struct phb3 *p = data;
+	uint32_t chip, index, irq;
+	uint64_t ive;
+
+	chip = P8_IRQ_TO_CHIP(isn);
+	index = P8_IRQ_TO_PHB(isn);
+	irq = PHB3_IRQ_NUM(isn);
+
+	if (chip != p->chip_id ||
+	    index != p->index ||
+	    irq > PHB3_MSI_IRQ_MAX)
+		return OPAL_PARAMETER;
+
+	/*
+	 * Each IVE has 16 bytes in cache. Note that the kernel
+	 * should strip the link bits from server field.
+	 */
+	ive = p->ive_cache[irq];
+	*server = GETFIELD(IODA2_IVT_SERVER, ive);
+	*prio = GETFIELD(IODA2_IVT_PRIORITY, ive);
+
+	return OPAL_SUCCESS;
+}
+
+static int64_t phb3_msi_set_xive(void *data,
+				 uint32_t isn,
+				 uint16_t server,
+				 uint8_t prio)
+{
+	struct phb3 *p = data;
+	uint32_t chip, index, irq;
+	uint64_t *ive, data64, m_server, m_prio;
+
+	chip = P8_IRQ_TO_CHIP(isn);
+	index = P8_IRQ_TO_PHB(isn);
+	irq = PHB3_IRQ_NUM(isn);
+
+	if (!p->tbl_rtt)
+		return OPAL_HARDWARE;
+	if (chip != p->chip_id ||
+	    index != p->index ||
+	    irq > PHB3_MSI_IRQ_MAX)
+		return OPAL_PARAMETER;
+
+	/*
+	 * We need strip the link from server. As Milton told
+	 * me, the server is assigned as follows and the left
+	 * bits unused: node/chip/core/thread/link = 2/3/4/3/2
+	 *
+	 * Note: the server has added the link bits to server.
+	 */
+	m_server = server;
+	m_prio = prio;
+
+	ive = &p->ive_cache[irq];
+	*ive = SETFIELD(IODA2_IVT_SERVER, *ive, m_server);
+	*ive = SETFIELD(IODA2_IVT_PRIORITY, *ive, m_prio);
+
+	/*
+	 * Update IVT and IVC. We need use IVC update register
+	 * to do that. Each IVE in the table has 128 bytes
+	 */
+	ive = (uint64_t *)p->tbl_ivt;
+	ive += (irq * IVT_TABLE_STRIDE);
+	data64 = PHB_IVC_UPDATE_ENABLE_SERVER | PHB_IVC_UPDATE_ENABLE_PRI;
+	data64 = SETFIELD(PHB_IVC_UPDATE_SERVER, data64, m_server);
+	data64 = SETFIELD(PHB_IVC_UPDATE_PRI, data64, m_prio);
+
+	*ive = SETFIELD(IODA2_IVT_SERVER, *ive, m_server);
+	*ive = SETFIELD(IODA2_IVT_PRIORITY, *ive, m_prio);
+	out_be64(p->regs + PHB_IVC_UPDATE, data64);
+
+	return OPAL_SUCCESS;
+}
+
+/* MSIs (OS owned) */
+static const struct irq_source_ops phb3_msi_irq_ops = {
+	.get_xive = phb3_msi_get_xive,
+	.set_xive = phb3_msi_set_xive,
+};
+
 static int64_t phb3_set_pe(struct phb *phb,
 			   uint64_t pe_num,
                            uint64_t bdfn,
@@ -1822,8 +1908,8 @@ static void phb3_add_properties(struct phb3 *p)
 	/* XXX FIXME: add opal-memwin32, 64, dmawins, etc... */
 	//dt_add_property_cells(np, "ibm,opal-msi-ports", 2048);
 	dt_add_property_cells(np, "ibm,opal-num-pes", 256);
-	//dt_add_property_cells(np, "ibm,opal-msi-ranges",
-	//		      p->buid_msi << 4, 0x100);
+	dt_add_property_cells(np, "ibm,opal-msi-ranges",
+			      p->base_msi, PHB3_MSI_IRQ_COUNT);
 	//tkill = reg[0] + PHB_TCE_KILL;
 	//dt_add_property_cells(np, "ibm,opal-tce-kill",
 	//		      hi32(tkill), lo32(tkill));
@@ -1855,6 +1941,7 @@ static void phb3_create(struct dt_node *np)
 	p->index = dt_prop_get_u32(np, "ibm,phb-index");
 	p->chip_id = dt_prop_get_u32(np, "ibm,chip-id");
 	p->regs = (void *)dt_get_address(np, 0, NULL);
+	p->base_msi = PHB3_MSI_IRQ_BASE(p->chip_id, p->index);
 	p->phb.dt_node = np;
 	p->phb.ops = &phb3_ops;
 	p->phb.phb_type = phb_type_pcie_v3;
@@ -1903,7 +1990,8 @@ static void phb3_create(struct dt_node *np)
 	phb3_init_ioda_cache(p);
 
 	/* Register OS interrupt sources */
-	//register_irq_source(&phb3_msi_irq_ops, p, p->buid_msi << 4, 256);
+	register_irq_source(&phb3_msi_irq_ops, p, p->base_msi,
+			    PHB3_MSI_IRQ_COUNT);
 	//register_irq_source(&phb3_lsi_irq_ops, p, p->buid_lsi << 4, 4);
 
 	phb3_init_hw(p);
