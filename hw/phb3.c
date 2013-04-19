@@ -599,6 +599,38 @@ static int64_t phb3_map_pe_dma_window(struct phb *phb,
 	return OPAL_SUCCESS;
 }
 
+static int64_t phb3_set_ive_pe(struct phb *phb,
+			       uint32_t pe_num,
+			       uint32_t ive_num)
+{
+	struct phb3 *p = phb_to_phb3(phb);
+	uint64_t *ive, data64;
+
+	/* OS should enable the BAR in advance */
+	if (!p->tbl_ivt)
+		return OPAL_HARDWARE;
+
+	/* Each IVE reserves 128 bytes */
+	if (pe_num >= PHB3_MAX_PE_NUM ||
+	    ive_num >= IVT_TABLE_ENTRIES)
+		return OPAL_PARAMETER;
+
+	/* Update IVE cache */
+	ive = &p->ive_cache[ive_num];
+	*ive = SETFIELD(IODA2_IVT_PE, *ive, pe_num);
+
+	/* Update in-memory IVE */
+	ive = (uint64_t *)p->tbl_ivt;
+	ive += (ive_num * IVT_TABLE_STRIDE);
+	*ive = SETFIELD(IODA2_IVT_PE, *ive, pe_num);
+
+	/* Invalidate IVC */
+	data64 = SETFIELD(PHB_IVC_INVALIDATE_SID, 0ul, ive_num);
+	out_be64(p->regs + PHB_IVC_INVALIDATE, data64);
+
+	return OPAL_SUCCESS;
+}
+
 static int64_t phb3_get_msi_32(struct phb *phb __unused,
 			       uint32_t pe_num,
 			       uint32_t ive_num,
@@ -1224,6 +1256,7 @@ static const struct phb_ops phb3_ops = {
 	.phb_mmio_enable	= phb3_phb_mmio_enable,
 	.map_pe_mmio_window	= phb3_map_pe_mmio_window,
 	.map_pe_dma_window	= phb3_map_pe_dma_window,
+	.set_xive_pe		= phb3_set_ive_pe,
 	.get_msi_32		= phb3_get_msi_32,
 	.get_msi_64		= phb3_get_msi_64,
 	.set_pe			= phb3_set_pe,
