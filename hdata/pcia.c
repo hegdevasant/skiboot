@@ -210,7 +210,7 @@ static struct dt_node *add_core_node(struct dt_node *cpus,
 	 * chip ID from the PIR or the XSCOM address (can be different
 	 * between P7 and P8)
 	 */
-	dt_add_property_cells(cpu, "ibm,chip_id", id->proc_chip_id);
+	dt_add_property_cells(cpu, "ibm,chip-id", id->proc_chip_id);
 
 	/* Add private "ibase" property used by other bits of skiboot */
 	dt_add_property_u64(cpu, DT_PRIVATE "ibase", cleanup_addr(t->ibase));
