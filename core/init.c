@@ -196,9 +196,9 @@ void main_cpu_entry(const void *fdt, u32 master_cpu)
 	 * is set to -1, we record that and pass it to parse_hdat
 	 */
 	if (fdt == (void *)-1ul)
-		parse_hdat(true);
+		parse_hdat(true, master_cpu);
 	else if (fdt == NULL)
-		parse_hdat(false);
+		parse_hdat(false, master_cpu);
 	else
 		dt_expand(fdt);
 

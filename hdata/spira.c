@@ -292,7 +292,7 @@ static void add_chiptod_old(void)
 	}
 }
 
-static void add_chiptod_new(void)
+static void add_chiptod_new(uint32_t master_cpu)
 {
 	const void *hdif;
 	unsigned int i;
@@ -309,7 +309,7 @@ static void add_chiptod_new(void)
 		const struct sppcrd_chip_info *cinfo;
 		const struct sppcrd_chip_tod *tinfo;
 		unsigned int size;
-		u32 ve;
+		u32 ve, flags;
 
 		cinfo = HDIF_get_idata(hdif, SPPCRD_IDATA_CHIP_INFO, NULL);
 		if (!CHECK_SPPTR(cinfo)) {
@@ -329,10 +329,27 @@ static void add_chiptod_new(void)
 			continue;
 		}
 
-		if (!size)
-			continue;
+		flags = tinfo->flags;
 
-		add_chiptod_node(cinfo->xscom_id, tinfo->flags);
+		/* The FSP may strip the chiptod info from HDAT; if we find
+		 * a zero-ed out entry, assume that the chiptod is
+		 * present, but we don't have any primary/secondary info. In
+		 * this case, pick the primary based on the CPU that was
+		 * assigned master.
+		 */
+		if (!size) {
+			struct cpu_thread *t = find_cpu_by_pir(master_cpu);
+			if (!t) {
+				prerror("CHIPTOD: NOT FOUND!\n");
+				continue;
+			}
+
+			flags = CHIPTOD_ID_FLAGS_STATUS_OK;
+			if (t->chip_id == cinfo->xscom_id)
+				flags |= CHIPTOD_ID_FLAGS_PRIMARY;
+		}
+
+		add_chiptod_node(cinfo->xscom_id, flags);
 	}
 }
 
@@ -441,7 +458,7 @@ static void add_iplparams(void)
 	add_iplparams_serials(ipl_parms, iplp_node);
 }
 
-void parse_hdat(bool is_opal)
+void parse_hdat(bool is_opal, uint32_t master_cpu)
 {
 	struct dt_node *ics;
 
@@ -491,7 +508,7 @@ void parse_hdat(bool is_opal)
 
 	/* Add ChipTOD's */
 	add_chiptod_old();
-	add_chiptod_new();
+	add_chiptod_new(master_cpu);
 
 	/* Add IO HUBs and/or PHBs */
 	io_parse(ics);
