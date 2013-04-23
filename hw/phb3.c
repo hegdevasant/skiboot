@@ -1864,7 +1864,9 @@ static void phb3_add_properties(struct phb3 *p)
 {
 	struct dt_node *np = p->phb.dt_node;
 	uint32_t lsibase, icsp = get_ics_phandle();
-	uint64_t m32b;
+	uint64_t m32b, reg, tkill;
+
+	reg = cleanup_addr((uint64_t)p->regs);
 
 	/* Add various properties that HB doesn't have to
 	 * add, some of them simply because they result from
@@ -1900,9 +1902,9 @@ static void phb3_add_properties(struct phb3 *p)
 	dt_add_property_cells(np, "ibm,opal-num-pes", 256);
 	dt_add_property_cells(np, "ibm,opal-msi-ranges",
 			      p->base_msi, PHB3_MSI_IRQ_COUNT);
-	//tkill = reg[0] + PHB_TCE_KILL;
-	//dt_add_property_cells(np, "ibm,opal-tce-kill",
-	//		      hi32(tkill), lo32(tkill));
+	tkill = reg + PHB_TCE_KILL;
+	dt_add_property_cells(np, "ibm,opal-tce-kill",
+			      hi32(tkill), lo32(tkill));
 
 	/* The interrupt maps will be generated in the RC node by the
 	 * PCI code based on the content of this structure:
