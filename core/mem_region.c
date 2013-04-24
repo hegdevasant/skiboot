@@ -7,6 +7,7 @@
 #include <skiboot.h>
 #include <mem_region.h>
 #include <mem_region-malloc.h>
+#include <libfdt_env.h>
 #include <lock.h>
 #include <device.h>
 #include <cpu.h>
@@ -689,4 +690,61 @@ void mem_region_release_unused(void)
 		}
 	}
 	unlock(&mem_region_lock);
+}
+
+static bool region_is_reserved(struct mem_region *region)
+{
+	return region->type != REGION_OS;
+}
+
+void mem_region_add_dt_reserved(void)
+{
+	int names_len, ranges_len, len;
+	struct mem_region *region;
+	void *names, *ranges;
+	uint64_t *range;
+	char *name;
+
+	names_len = 0;
+	ranges_len = 0;
+
+	lock(&mem_region_lock);
+
+	/* First pass: calculate length of property data */
+	list_for_each(&regions, region, list) {
+		if (!region_is_reserved(region))
+			continue;
+		names_len += strlen(region->name) + 1;
+		ranges_len += 2 * sizeof(uint64_t);
+	}
+
+	/* Allocate property data with mem_alloc; malloc() acquires
+	 * mem_region_lock */
+	names = mem_alloc(&skiboot_heap, names_len,
+			__alignof__(*names), __location__);
+	ranges = mem_alloc(&skiboot_heap, ranges_len,
+			__alignof__(*ranges), __location__);
+
+	name = names;
+	range = ranges;
+
+	/* Second pass: populate property data */
+	list_for_each(&regions, region, list) {
+		if (!region_is_reserved(region))
+			continue;
+		len = strlen(region->name) + 1;
+		memcpy(name, region->name, len);
+		name += len;
+
+		range[0] = cpu_to_fdt64(region->start);
+		range[1] = cpu_to_fdt64(region->len);
+		range += 2;
+	}
+	unlock(&mem_region_lock);
+
+	dt_add_property(dt_root, "reserved-names", names, names_len);
+	dt_add_property(dt_root, "reserved-ranges", ranges, ranges_len);
+
+	free(names);
+	free(ranges);
 }

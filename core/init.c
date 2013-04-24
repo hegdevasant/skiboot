@@ -278,8 +278,11 @@ void main_cpu_entry(const void *fdt, u32 master_cpu)
 	 */
 	add_opal_nodes();
 
-	/* Now release parts of memory nodes we haven't used ourselves. */
+	/* Now release parts of memory nodes we haven't used ourselves... */
 	mem_region_release_unused();
+
+	/* ... and add remaining reservations to the DT */
+	mem_region_add_dt_reserved();
 
 	load_and_boot_kernel(false);
 }

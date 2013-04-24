@@ -48,4 +48,7 @@ void mem_region_release_unused(void);
 extern struct mem_region skiboot_heap;
 
 void mem_region_init(void);
+
+void mem_region_add_dt_reserved(void);
+
 #endif /* __MEMORY_REGION */

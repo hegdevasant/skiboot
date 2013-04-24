@@ -81,14 +81,6 @@ static void add_opal_firmware_node(struct dt_node *opal)
 	dt_add_property_string(firmware, "git-id", gitid);
 }
 
-static void add_opal_reserved_region(uint64_t base, uint64_t size)
-{
-	dt_add_property_cells(dt_root, "reserved-ranges",
-				hi32(base), lo32(base),
-				hi32(size), lo32(size));
-	dt_add_property_strings(dt_root, "reserved-names", "ibm,opal");
-}
-
 void add_opal_nodes(void)
 {
 	uint64_t base, entry, size;
@@ -115,7 +107,6 @@ void add_opal_nodes(void)
 	dt_add_property_u64(opal, "opal-base-address", base);
 	dt_add_property_u64(opal, "opal-entry-address", entry);
 	dt_add_property_u64(opal, "opal-runtime-size", size);
-	add_opal_reserved_region(base, size);
 	add_opal_interrupts(opal);
 	add_opal_nvram_node(opal);
 	add_opal_oppanel_node(opal);
