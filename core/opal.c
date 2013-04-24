@@ -81,15 +81,12 @@ static void add_opal_firmware_node(struct dt_node *opal)
 	dt_add_property_string(firmware, "git-id", gitid);
 }
 
-uint64_t opal_get_base(void)
+static void add_opal_reserved_region(uint64_t base, uint64_t size)
 {
-	return SKIBOOT_BASE;
-}
-
-uint64_t opal_get_size(void)
-{
-	return (CPU_STACKS_BASE +
-		(cpu_max_pir + 1) * STACK_SIZE) - SKIBOOT_BASE;
+	dt_add_property_cells(dt_root, "reserved-ranges",
+				hi32(base), lo32(base),
+				hi32(size), lo32(size));
+	dt_add_property_strings(dt_root, "reserved-names", "ibm,opal");
 }
 
 void add_opal_nodes(void)
@@ -106,9 +103,10 @@ void add_opal_nodes(void)
 	 * extracted
 	 */
 
-	base = opal_get_base();
-	size = opal_get_size();
 	entry = (uint64_t)&opal_entry;
+	base = SKIBOOT_BASE;
+	size = (CPU_STACKS_BASE +
+		(cpu_max_pir + 1) * STACK_SIZE) - SKIBOOT_BASE;
 
 	opal = dt_new(dt_root, "ibm,opal");
 	dt_add_property_cells(opal, "#address-cells", 0);
@@ -117,6 +115,7 @@ void add_opal_nodes(void)
 	dt_add_property_u64(opal, "opal-base-address", base);
 	dt_add_property_u64(opal, "opal-entry-address", entry);
 	dt_add_property_u64(opal, "opal-runtime-size", size);
+	add_opal_reserved_region(base, size);
 	add_opal_interrupts(opal);
 	add_opal_nvram_node(opal);
 	add_opal_oppanel_node(opal);
