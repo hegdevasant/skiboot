@@ -1403,28 +1403,18 @@ static void phb3_init_ioda2(struct phb3 *p)
 		 SETFIELD(PHB_LSI_SRC_ID, 0ul, 0xff));
 
 	/* Init_15 - IVT BAR / Length
-	 * Note: This is left uninitialized until the OS configures it,
-	 * we will not enable MSIs until this has been configured
+	 * Init_16 - RBA BAR
+	 * 	   - RTT BAR
+	 * Init_17 - PELT-V BAR
 	 */
-	out_be64(p->regs + PHB_IVT_BAR, 0);
-
-	/* Init_16 - RBA BAR
-	 * Note: This is left uninitialized until the OS configures it,
-	 * we will not enable MSIs until this has been configured
-	 */
-	out_be64(p->regs + PHB_RBA_BAR, 0);
-
-	/* Init_16 - RTT BAR
-	 * XXX: Handle using the OS value when available, for now always
-	 * use our internal one
-	 */
-	out_be64(p->regs + PHB_RTT_BAR, p->tbl_rtt | PHB_RTT_BAR_ENABLE);
-	
-	/* Init_17 - PELT-V BAR
-	 * XXX: Handle using the OS value when available, for now always
-	 * use our internal one
-	 */
-	out_be64(p->regs + PHB_PELTV_BAR, p->tbl_peltv | PHB_PELTV_BAR_ENABLE);
+	out_be64(p->regs + PHB_RTT_BAR,
+		 p->tbl_rtt | PHB_RTT_BAR_ENABLE);
+	out_be64(p->regs + PHB_PELTV_BAR,
+		 p->tbl_peltv | PHB_PELTV_BAR_ENABLE);
+	out_be64(p->regs + PHB_IVT_BAR,
+		 p->tbl_ivt | 0x800 | PHB_IVT_BAR_ENABLE);
+	out_be64(p->regs + PHB_RBA_BAR,
+		 p->tbl_rba | PHB_RBA_BAR_ENABLE);
 
 	/* Init_18..21 - Setup M32 */
 	out_be64(p->regs + PHB_M32_BASE_ADDR, p->mm_base + M32_PCI_START);
@@ -1432,7 +1422,8 @@ static void phb3_init_ioda2(struct phb3 *p)
 	out_be64(p->regs + PHB_M32_START_ADDR, M32_PCI_START);
 
 	/* Init_22 - Setup PEST BAR */
-	out_be64(p->regs + PHB_PEST_BAR, p->tbl_pest | PHB_PEST_BAR_ENABLE);
+	out_be64(p->regs + PHB_PEST_BAR,
+		 p->tbl_pest | PHB_PEST_BAR_ENABLE);
 
 	/* Init_23 - PCIE Outbound upper address */
 	out_be64(p->regs + PHB_M64_UPPER_BITS, 0);
@@ -1445,7 +1436,8 @@ static void phb3_init_ioda2(struct phb3 *p)
 	 * by the OS. First clear the TCE cache, then configure the PHB
 	 */
 	out_be64(p->regs + PHB_PHB3_CONFIG, PHB_PHB3C_64B_TCE_EN);
-	out_be64(p->regs + PHB_PHB3_CONFIG, PHB_PHB3C_M32_EN);
+	out_be64(p->regs + PHB_PHB3_CONFIG,
+		 PHB_PHB3C_M32_EN | PHB_PHB3C_32BIT_MSI_EN | PHB_PHB3C_64BIT_MSI_EN);
 
 	/* Init_26 - At least 512ns delay according to spec */
 	time_wait_ms(1);
@@ -1855,9 +1847,9 @@ static void phb3_allocate_tables(struct phb3 *p)
 	assert(p->tbl_ivt);
 	memset((void *)p->tbl_ivt, 0, IVT_TABLE_SIZE);
 
-	/* Doh.. that was ugly .. did I really do all these casts ?
-	 * maybe I should break a leg instead...
-	 */
+	p->tbl_rba = (uint64_t)memalign(RBA_TABLE_SIZE, RBA_TABLE_SIZE);
+	assert(p->tbl_rba);
+	memset((void *)p->tbl_rba, 0, RBA_TABLE_SIZE);
 }
 
 static void phb3_add_properties(struct phb3 *p)
@@ -1919,6 +1911,20 @@ static void phb3_add_properties(struct phb3 *p)
 	p->phb.lstate.int_parent[1] = icsp;
 	p->phb.lstate.int_parent[2] = icsp;
 	p->phb.lstate.int_parent[3] = icsp;
+
+	/* Indicators for variable tables */
+	dt_add_property_cells(np, "ibm,opal-rtt-table",
+		hi32(p->tbl_rtt), lo32(p->tbl_rtt), RTT_TABLE_SIZE);
+	dt_add_property_cells(np, "ibm,opal-peltv-table",
+		hi32(p->tbl_peltv), lo32(p->tbl_peltv), PELTV_TABLE_SIZE);
+	dt_add_property_cells(np, "ibm,opal-pest-table",
+		hi32(p->tbl_pest), lo32(p->tbl_pest), PEST_TABLE_SIZE);
+	dt_add_property_cells(np, "ibm,opal-ivt-table",
+		hi32(p->tbl_ivt), lo32(p->tbl_ivt), IVT_TABLE_SIZE);
+	dt_add_property_cells(np, "ibm,opal-ive-stride",
+		IVT_TABLE_STRIDE);
+	dt_add_property_cells(np, "ibm,opal-rba-table",
+		hi32(p->tbl_rba), lo32(p->tbl_rba), RBA_TABLE_SIZE);
 }
 
 static void phb3_create(struct dt_node *np)

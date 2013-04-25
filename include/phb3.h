@@ -223,6 +223,7 @@ struct phb3 {
 	uint64_t		tbl_peltv;
 	uint64_t		tbl_pest;
 	uint64_t		tbl_ivt;
+	uint64_t		tbl_rba;
 
 	bool			skip_perst; /* Skip first perst */
 	bool			has_link;
