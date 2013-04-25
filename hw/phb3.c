@@ -520,6 +520,55 @@ static int64_t phb3_map_pe_dma_window(struct phb *phb,
 	return OPAL_SUCCESS;
 }
 
+static int64_t phb3_pci_msi_eoi(struct phb *phb,
+				uint32_t hwirq)
+{
+	struct phb3 *p = phb_to_phb3(phb);
+	uint32_t ive_num = PHB3_IRQ_NUM(hwirq);
+	uint64_t ive, ivc, ffi;
+	uint8_t *p_byte, *q_byte;
+
+	/* OS might not configure IVT yet */
+	if (!p->tbl_ivt)
+		return OPAL_HARDWARE;
+
+	/* Each IVE has 16-bytes or 128-bytes */
+	ive = p->tbl_ivt + (ive_num * IVT_TABLE_STRIDE * 8);
+	p_byte = (uint8_t *)(ive + 4);
+	q_byte = (uint8_t *)(ive + 5);
+	ivc = SETFIELD(PHB_IVC_UPDATE_SID, 0, ive_num);
+	ffi = SETFIELD(PHB_FFI_REQUEST_ISN, 0, ive_num);
+
+	/*
+	 * Clear P bit. As Milton suggested, we needn't
+	 * clear it for multiple times in one shoot
+	 */
+	if (*p_byte & 0x1) {
+		*p_byte = 0;
+		out_be64(p->regs + PHB_IVC_UPDATE,
+			 ivc | PHB_IVC_UPDATE_ENABLE_P);
+	}
+
+	/*
+	 * Handle Q bit. If the Q bit doesn't show up,
+	 * we would have CI load to make that.
+	 */
+	if (!(*q_byte & 0x1))
+		in_be64(p->regs + PHB_IVC_UPDATE);
+	if (*q_byte & 0x1) {
+		/* Lock FFI and send interrupt */
+                while (in_be64(p->regs + PHB_FFI_LOCK));
+		/* Clear Q bit */
+		*q_byte = 0;
+		out_be64(p->regs + PHB_IVC_UPDATE,
+			 ivc | PHB_IVC_UPDATE_ENABLE_Q);
+		/* Resend interrupt */
+		out_be64(p->regs + PHB_FFI_REQUEST, ffi);
+	}
+
+	return OPAL_SUCCESS;
+}
+
 static int64_t phb3_set_ive_pe(struct phb *phb,
 			       uint32_t pe_num,
 			       uint32_t ive_num)
@@ -1343,6 +1392,7 @@ static const struct phb_ops phb3_ops = {
 	.phb_mmio_enable	= phb3_phb_mmio_enable,
 	.map_pe_mmio_window	= phb3_map_pe_mmio_window,
 	.map_pe_dma_window	= phb3_map_pe_dma_window,
+	.pci_msi_eoi		= phb3_pci_msi_eoi,
 	.set_xive_pe		= phb3_set_ive_pe,
 	.get_msi_32		= phb3_get_msi_32,
 	.get_msi_64		= phb3_get_msi_64,

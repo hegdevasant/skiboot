@@ -94,6 +94,10 @@
 
 * PCI:
  
-     Lots of planned changes to the reset * SHPC functions, still to
-     be written.
+  - Lots of changes to the reset * SHPC functions, still to
+    be written.
+
+  - New EEH interfaces
+
+  - IODA2 changes: no more set_table_memory, new EOI for MSI, ...
 

@@ -337,6 +337,25 @@ static int64_t opal_pci_set_xive_reissue(uint64_t phb_id __unused,
 }
 opal_call(OPAL_PCI_SET_XIVE_REISSUE, opal_pci_set_xive_reissue);
 
+static int64_t opal_pci_msi_eoi(uint64_t phb_id,
+				uint32_t hwirq)
+{
+	struct phb *phb = pci_get_phb(phb_id);
+	int64_t rc;
+
+	if (!phb)
+		return OPAL_PARAMETER;
+	if (!phb->ops->pci_msi_eoi)
+		return OPAL_UNSUPPORTED;
+	phb->ops->lock(phb);
+	rc = phb->ops->pci_msi_eoi(phb, hwirq);
+	phb->ops->unlock(phb);
+	pci_put_phb(phb);
+
+	return rc;
+}
+opal_call(OPAL_PCI_MSI_EOI, opal_pci_msi_eoi);
+
 static int64_t opal_pci_set_xive_pe(uint64_t phb_id, uint32_t pe_number,
 				    uint32_t xive_num)
 {

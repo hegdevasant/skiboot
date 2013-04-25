@@ -200,6 +200,11 @@ struct phb_ops {
 				      uint64_t tce_mem_size);
 
 	/*
+	 * IODA2 PCI interfaces
+	 */
+	int64_t (*pci_msi_eoi)(struct phb *phb, uint32_t hwirq);
+
+	/*
 	 * Slot control
 	 */
 

@@ -87,8 +87,8 @@
 #define OPAL_PCI_NEXT_ERROR			60
 #define OPAL_PCI_EEH_FREEZE_STATUS2		61
 #define OPAL_PCI_POLL				62
-#define OPAL_LAST				62
-
+#define OPAL_PCI_MSI_EOI			63
+#define OPAL_LAST				63
 
 #ifndef __ASSEMBLY__
 
