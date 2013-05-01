@@ -34,6 +34,8 @@ struct fsp_serbuf_hdr {
 struct fsp_serial {
 	bool			available;
 	bool			open;
+	bool			has_part0;
+	bool			has_part1;
 	bool			log_port;
 	bool			out_poke;
 	char			loc_code[LOC_CODE_SIZE];
@@ -158,14 +160,35 @@ static void fsp_open_vserial(struct fsp_msg *msg)
 	if (sess_id >= MAX_SERIAL || !fsp_serials[sess_id].available) {
 		fsp_queue_msg(fsp_mkmsg(FSP_RSP_OPEN_VSERIAL | 0x2f, 0),
 			      fsp_freemsg);
+		printf("  NOT AVAILABLE !\n");
 		return;
 	}
 
 	fs = &fsp_serials[sess_id];
-	fs->open = true;
+
+	/* Hack ! On blades, the console opened via the mm has partition 1
+	 * while the debug DVS generally has partition 0 (though you can
+	 * use what you want really).
+	 * We don't want a DVS open/close to crap on the blademm console
+	 * thus if it's a raw console, gets an open with partID 1, we
+	 * set a flag that ignores the close of partid 0
+	 */
+	if (fs->rsrc_id == 0xffff) {
+		if (part_id == 0)
+			fs->has_part0 = true;
+		if (part_id == 1)
+			fs->has_part1 = true;
+	}
 
 	tce_in = PSI_DMA_SER0_BASE + PSI_DMA_SER0_SIZE * sess_id;
 	tce_out = tce_in + SER0_BUFFER_SIZE/2;
+
+	if (fs->open) {
+		printf("  already open, skipping init !\n");
+		goto already_open;
+	}
+
+	fs->open = true;
 
 	/* If we still have a msg, wait for it to go away */
 	while (fs->poke_msg)
@@ -189,6 +212,7 @@ static void fsp_open_vserial(struct fsp_msg *msg)
 	fs->in_buf->reserved     = fs->out_buf->reserved     = 0;
 	fs->in_buf->next_out     = fs->out_buf->next_out     = 0;
 
+ already_open:
 	fsp_queue_msg(fsp_mkmsg(FSP_RSP_OPEN_VSERIAL, 6,
 				msg->data.words[0],
 				msg->data.words[1] & 0xffff,
@@ -221,12 +245,25 @@ static void fsp_close_vserial(struct fsp_msg *msg)
 	printf("  authority = 0x%02x\n", authority);
 
 	if (sess_id >= MAX_SERIAL || !fsp_serials[sess_id].available) {
-		fsp_queue_msg(fsp_mkmsg(FSP_RSP_CLOSE_VSERIAL | 0x2f, 0),
+		fsp_queue_msg(fsp_mkmsg(FSP_RSP_CLOSE_VSERIAL /*| 0x2f*/, 0),
 			      fsp_freemsg);
+		printf("  NOT AVAILABLE !\n");
 		return;
 	}
 
 	fs = &fsp_serials[sess_id];
+
+	/* See "HACK" comment in open */
+	if (fs->rsrc_id == 0xffff) {
+		if (part_id == 0)
+			fs->has_part0 = false;
+		if (part_id == 1)
+			fs->has_part1 = false;
+		if (fs->has_part0 || fs->has_part1) {
+			printf("  skipping close !\n");
+			goto skip_close;
+		}
+	}
 
 #ifdef DVS_CONSOLE
 	if (fs->log_port) {
@@ -243,7 +280,7 @@ static void fsp_close_vserial(struct fsp_msg *msg)
 		fs->poke_msg = NULL;
 	}
 	unlock(&con_lock);
-
+ skip_close:
 	fsp_queue_msg(fsp_mkmsg(FSP_RSP_CLOSE_VSERIAL, 0), fsp_freemsg);
 
 }
@@ -316,31 +353,6 @@ static struct fsp_client fsp_con_client_vt = {
 	.message = fsp_con_msg_vt,
 };
 
-void fsp_console_preinit(void)
-{
-	int i;
-	void *base;
-
-	if (!fsp_present())
-		return;
-
-	/* Initialize out data structure pointers & TCE maps */
-	base = (void *)SER0_BUFFER_BASE;
-	for (i = 0; i < MAX_SERIAL; i++) {
-		struct fsp_serial *ser = &fsp_serials[i];
-
-		ser->in_buf = base;
-		ser->out_buf = base + SER0_BUFFER_SIZE/2;
-		base += SER0_BUFFER_SIZE;
-	}
-	fsp_tce_map(PSI_DMA_SER0_BASE, (void*)SER0_BUFFER_BASE,
-		    4 * PSI_DMA_SER0_SIZE);
-	
-	/* Register for class E0 and E1 */
-	fsp_register_client(&fsp_con_client_hmc, FSP_MCLASS_HMC_INTFMSG);
-	fsp_register_client(&fsp_con_client_vt, FSP_MCLASS_HMC_VT);
-}
-
 static void fsp_serial_add(int index, u16 rsrc_id, const char *loc_code,
 			   bool log_port)
 {
@@ -369,6 +381,42 @@ static void fsp_serial_add(int index, u16 rsrc_id, const char *loc_code,
 		while(!got_assoc_resp)
 			fsp_poll();
 	}
+}
+
+void fsp_console_preinit(void)
+{
+	int i;
+	void *base;
+
+	if (!fsp_present())
+		return;
+
+	/* Initialize out data structure pointers & TCE maps */
+	base = (void *)SER0_BUFFER_BASE;
+	for (i = 0; i < MAX_SERIAL; i++) {
+		struct fsp_serial *ser = &fsp_serials[i];
+
+		ser->in_buf = base;
+		ser->out_buf = base + SER0_BUFFER_SIZE/2;
+		base += SER0_BUFFER_SIZE;
+	}
+	fsp_tce_map(PSI_DMA_SER0_BASE, (void*)SER0_BUFFER_BASE,
+		    4 * PSI_DMA_SER0_SIZE);
+
+	/* Register for class E0 and E1 */
+	fsp_register_client(&fsp_con_client_hmc, FSP_MCLASS_HMC_INTFMSG);
+	fsp_register_client(&fsp_con_client_vt, FSP_MCLASS_HMC_VT);
+
+	/* Add DVS ports. We currently have session 0 and 3, 0 is for
+	 * OS use. 3 is our debug port. We need to add those before
+	 * we complete the OPL or we'll potentially miss the
+	 * console setup on Firebird blades.
+	 */
+	fsp_serial_add(0, 0xffff, "DVS_OS", false);
+	op_display(OP_LOG, OP_MOD_FSPCON, 0x0001);
+	fsp_serial_add(3, 0xffff, "DVS_FW", true);
+	op_display(OP_LOG, OP_MOD_FSPCON, 0x0002);
+
 }
 
 static int64_t fsp_console_write(int64_t term_number, int64_t *length,
@@ -566,14 +614,6 @@ void fsp_console_init(void)
 
 	op_display(OP_LOG, OP_MOD_FSPCON, 0x0000);
 
-	/* Add DVS ports. We currently have session 0 and 3, 0 is for
-	 * OS use. 3 is our debug port
-	 */
-	fsp_serial_add(0, 0xffff, "DVS_OS", false);
-	op_display(OP_LOG, OP_MOD_FSPCON, 0x0001);
-	fsp_serial_add(3, 0xffff, "DVS_FW", true);
-	op_display(OP_LOG, OP_MOD_FSPCON, 0x0002);
-
 	/* Register poller */
 	opal_add_poller(fsp_console_poll, NULL);
 
@@ -741,14 +781,18 @@ void fsp_console_select_stdout(void)
 	 * leave the command line alone and let the kernel pick whatever
 	 * it wants
 	 */
-	if (fsp_serials[0].open)
+	if (fsp_serials[0].open) {
 		dt_add_property_string(dt_chosen, "linux,stdout-path",
 				       "/ibm,opal/consoles/serial@0");
-	else if (fsp_serials[1].open)
+		printf("FSPCON: default console 0\n");
+	} else if (fsp_serials[1].open) {
 		dt_add_property_string(dt_chosen, "linux,stdout-path",
 				       "/ibm,opal/consoles/serial@1");
-	else if (fsp_serials[2].open)
+		printf("FSPCON: default console 1\n");
+	} else if (fsp_serials[2].open) {
 		dt_add_property_string(dt_chosen, "linux,stdout-path",
 				       "/ibm,opal/consoles/serial@2");
+		printf("FSPCON: default console 2\n");
+	}
 }
 
