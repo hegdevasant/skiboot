@@ -193,6 +193,9 @@ enum p7ioc_phb_state {
 	/* Set if the PHB is fenced due to an error */
 	P7IOC_PHB_STATE_FENCED,
 
+	/* PHB turned off by FSP (no clocks) */
+	P7IOC_PHB_STATE_OFF,
+
 	/* Slot Power up state machine */
 	P7IOC_PHB_STATE_SPUP_STABILIZE_DELAY,		/* Step 3 Delay 2s		*/
 	P7IOC_PHB_STATE_SPUP_SLOT_STATUS,		/* Step 4 waiting for status	*/
@@ -274,7 +277,6 @@ struct p7ioc_err {
 struct p7ioc;
 
 struct p7ioc_phb {
-	bool				active;	/* Is this PHB functional ? */
 	uint8_t				index;	/* 0..5 index inside p7ioc */
 	void				*regs_asb;
 	void				*regs;	/* AIB regs */
@@ -358,8 +360,9 @@ struct p7ioc {
 	bool				err_pending;
 	struct p7ioc_err		err;
 
-	/* PHB array */
+	/* PHB array & presence detect */
 	struct p7ioc_phb		phbs[P7IOC_NUM_PHBS];
+	uint8_t				phb_pdt;
 	   
 	struct io_hub			hub;
 };
@@ -379,9 +382,14 @@ static inline void p7ioc_set_err_pending(struct p7ioc *ioc, bool val)
 	ioc->err_pending = val;
 }
 
+static inline bool p7ioc_phb_enabled(struct p7ioc *ioc, unsigned int phb)
+{
+	return !!(ioc->phb_pdt & (0x80 >> phb));
+}
+
 extern int64_t p7ioc_inits(struct p7ioc *ioc);
 
-extern void p7ioc_phb_setup(struct p7ioc *ioc, uint8_t index, bool active);
+extern void p7ioc_phb_setup(struct p7ioc *ioc, uint8_t index);
 extern int64_t p7ioc_phb_init(struct p7ioc_phb *p);
 
 extern bool p7ioc_check_LEM(struct p7ioc *ioc, uint16_t *pci_error_type,

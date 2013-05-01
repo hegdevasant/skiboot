@@ -2222,14 +2222,13 @@ static void p7ioc_pcie_add_node(struct p7ioc_phb *p)
  * established. If this wants to access PHB registers, it must
  * use the ASB hard coded variant (slower)
  */
-void p7ioc_phb_setup(struct p7ioc *ioc, uint8_t index, bool active)
+void p7ioc_phb_setup(struct p7ioc *ioc, uint8_t index)
 {
 	struct p7ioc_phb *p = &ioc->phbs[index];
 	unsigned int buid_base = ioc->buid_base + PHBn_BUID_BASE(index);
 
 	p->index = index;
 	p->ioc = ioc;
-	p->active = active;
 	p->phb.ops = &p7ioc_phb_ops;
 	p->phb.phb_type = phb_type_pcie_v2;
 	p->regs_asb = ioc->regs + PHBn_ASB_BASE(index);
@@ -2241,6 +2240,7 @@ void p7ioc_phb_setup(struct p7ioc *ioc, uint8_t index, bool active)
 	p->m64_base = ioc->mmio2_win_start + PHBn_M64_BASE(index);
 	p->state = P7IOC_PHB_STATE_UNINITIALIZED;
 	p->phb.scan_map = 0x1; /* Only device 0 to scan */
+
 
 	/* Create device node for PHB */
 	p7ioc_pcie_add_node(p);

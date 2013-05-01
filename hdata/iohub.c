@@ -45,6 +45,14 @@ static void io_add_common(struct dt_node *hn, const struct cechub_io_hub *hub,
 			      lx_idx,
 			      ((uint32_t *)lxr)[0],
 			      ((uint32_t *)lxr)[1]);
+
+	/* Add presence detect if valid */
+	if (hub->flags & CECHUB_HUB_FLAG_FAB_BR0_PDT)
+		dt_add_property_cells(hn, "ibm,br0-presence-detect",
+				      hub->fab_br0_pdt);
+	if (hub->flags & CECHUB_HUB_FLAG_FAB_BR1_PDT)
+		dt_add_property_cells(hn, "ibm,br1-presence-detect",
+				      hub->fab_br1_pdt);
 }
 
 static struct dt_node *io_add_p5ioc2(const struct cechub_io_hub *hub)
@@ -284,12 +292,13 @@ static struct dt_node *io_add_hea(const struct cechub_io_hub *hub,
 	return np;
 }
 
-static void io_parse_fru(const void *sp_iohubs, struct dt_node *ics)
+static void io_parse_fru(const void *sp_iohubs, struct dt_node *ics,
+			 int *lx_idx)
 {
 	unsigned int i, kwvpd_sz;	
 	const void *kwvpd;
-	int count, lx_idx;
 	struct dt_node *hn;
+	int count;
 
 	count = HDIF_get_iarray_size(sp_iohubs, CECHUB_FRU_IO_HUBS);
 	if (count < 1) {
@@ -299,20 +308,9 @@ static void io_parse_fru(const void *sp_iohubs, struct dt_node *ics)
 
 	printf("CEC:   %d chips in FRU\n", count);
 
-	/*
-	 * Note about LXRn numbering ...
-	 *
-	 * I can't quite make sense of what that is supposed to be, so
-	 * for now, what we do is look for the first one we can find
-	 * and increment it for each chip. Works for the machines I
-	 * have here but they only have 1 chip so ...
-	 */
-
-	/* Start with LX ID 0 */
-	lx_idx = 0;
 	kwvpd = HDIF_get_idata(sp_iohubs, CECHUB_ASCII_KEYWORD_VPD, &kwvpd_sz);
 	if (!kwvpd)
-		lx_idx = -1;
+		*lx_idx = -1;
 
 	/* Iterate IO hub array */
 	for (i = 0; i < count; i++) {
@@ -356,48 +354,48 @@ static void io_parse_fru(const void *sp_iohubs, struct dt_node *ics)
 		lxr = NULL;
 		if (kwvpd) {
 			/* Find next LXRn*/
-			while(lx_idx < 10) {
+			while(*lx_idx < 10) {
 				char recname[5];
 
 				strcpy(recname, "LXR0");
-				recname[3] += lx_idx;
+				recname[3] += *lx_idx;
 				lxr = vpd_find(kwvpd, kwvpd_sz, recname,
 					       "LX", NULL);
 				if (lxr)
 					break;
-				lx_idx++;
+				(*lx_idx)++;
 			}
 			/* Not found, try VINI */
 			if (!lxr) {
 				lxr = vpd_find(kwvpd, kwvpd_sz, "VINI",
 					       "LX",  NULL);
 				if (lxr)
-					lx_idx = VPD_LOAD_LXRN_VINI;
+					*lx_idx = VPD_LOAD_LXRN_VINI;
 			}
 		}
-		printf("CEC:     LXRn=%d LXR=%016lx\n", lx_idx,
+		printf("CEC:     LXRn=%d LXR=%016lx\n", *lx_idx,
 		       lxr ? *(unsigned long *)lxr : 0);
 
 		switch(hub->iohub_id) {
 		case CECHUB_HUB_P7IOC:
 			printf("CEC:     P7IOC !\n");
 			hn = io_add_p7ioc(hub);
-			io_add_common(hn, hub, ics, lx_idx, lxr);
+			io_add_common(hn, hub, ics, *lx_idx, lxr);
 			break;
 		case CECHUB_HUB_P5IOC2:
 			printf("CEC:     P5IOC2 !\n");
 			hn = io_add_p5ioc2(hub);
-			io_add_common(hn, hub, ics, lx_idx, lxr);
+			io_add_common(hn, hub, ics, *lx_idx, lxr);
 			io_add_hea(hub, sp_iohubs);
 			break;
 		default:
 			printf("CEC:     Hub ID 0x%04x unsupported !\n",
 			       hub->iohub_id);
 		}
-		if (lx_idx >= 0 && lx_idx < 9)
-			lx_idx++;
+		if ((*lx_idx) >= 0 && (*lx_idx) < 9)
+			(*lx_idx)++;
 		else
-			lx_idx = -1;
+			(*lx_idx) = -1;
 	}
 }
 
@@ -405,6 +403,7 @@ void io_parse(struct dt_node *ics)
 {
 	const void *sp_iohubs;
 	unsigned int i, size;
+	int lx_idx;
 
 	/* Look for IO Hubs */
 	sp_iohubs = spira.ntuples.cec_iohub_fru.addr;
@@ -412,6 +411,17 @@ void io_parse(struct dt_node *ics)
 		prerror("CEC: Cannot locate IO Hub FRU data !\n");
 		return;
 	}
+
+	/*
+	 * Note about LXRn numbering ...
+	 *
+	 * I can't completely make sense of what that is supposed to be, so
+	 * for now, what we do is look for the first one we can find and
+	 * increment it for each chip. Works for the machines I have here
+	 */
+
+	/* Start with LX ID 0 */
+	lx_idx = 0;
 
 	for_each_ntuple_idx(spira.ntuples.cec_iohub_fru, sp_iohubs, i) {
 		const struct cechub_hub_fru_id *fru_id_data;
@@ -451,7 +461,7 @@ void io_parse(struct dt_node *ics)
 		}
 
 		/* Ok, we have a reasonable candidate */
-		io_parse_fru(sp_iohubs, ics);
+		io_parse_fru(sp_iohubs, ics, &lx_idx);
 	}
 }
 

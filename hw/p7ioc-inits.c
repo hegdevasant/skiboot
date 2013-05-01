@@ -238,6 +238,9 @@ static void p7ioc_init_MISC_HSS(struct p7ioc *ioc)
         for (i = 0; i < P7IOC_NUM_PHBS; i++) {
                 regbase = P7IOC_HSS_BASE + i * P7IOC_HSS_STRIDE;
 
+		if (!p7ioc_phb_enabled(ioc, i))
+			continue;
+
                 /* Init_1: HSSn CTL2 */
                 REGW(regbase + P7IOC_HSSn_CTL2_OFFSET, 0xFFFF6DB6DB000000);
                 /* Init_2: HSSn CTL3 */
@@ -401,9 +404,12 @@ static void p7ioc_init_RGC(struct p7ioc *ioc)
 	 * dbl check just in case (it seems to be what BML does but
 	 * I'm good at mis-reading Milton's Perl).
 	 */
-	for (i = 0; i < P7IOC_NUM_PHBS; i++)
+	for (i = 0; i < P7IOC_NUM_PHBS; i++) {
+		if (!p7ioc_phb_enabled(ioc, i))
+			continue;
 		REGW(0x3e1080 + (i << 3),
 		     ioc->mmio1_win_start + PHBn_AIB_BASE(i));
+	}
 }
 
 static void p7ioc_init_ci_routing(struct p7ioc *ioc)
@@ -411,6 +417,7 @@ static void p7ioc_init_ci_routing(struct p7ioc *ioc)
 	unsigned int i, j = 0;
 	uint64_t rmatch[47];
 	uint64_t rmask[47];
+	uint64_t pmask;
 
 	/* Init_130: clear all matches (except 47 which routes to the RGC) */
 	for (i = 0; i < 47; i++) {
@@ -460,8 +467,12 @@ static void p7ioc_init_ci_routing(struct p7ioc *ioc)
 		j++;						\
 	} while (0)
 
+	pmask = 0;
 	for (i = 0; i < P7IOC_NUM_PHBS; i++) {
 		unsigned int buid_base = ioc->buid_base + PHBn_BUID_BASE(i);
+
+		if (!p7ioc_phb_enabled(ioc, i))
+			continue;
 
 		/* LSI BUIDs, match all 9 bits (1 BUID per PHB) */
 		CI_ADD_RULE(P7IOC_CI_PHB_PORT(i), BUID,
@@ -490,17 +501,13 @@ static void p7ioc_init_ci_routing(struct p7ioc *ioc)
 		CI_ADD_RULE(P7IOC_CI_PHB_PORT(i), ADDR,
 			    ioc->mmio2_win_start + PHBn_M64_BASE(i),
 			    ~(PHB_M64_SIZE - 1));
+
+		/* For use with invalidate bcasts */
+		pmask |= P7IOC_CI_PHB_PORT(i);
 	}
 
-	/* Invalidates broadcast to all PHBs
-	 *
-	 * XXX NOTE: Assume all PHBs are enabled. The doc says we
-	 * need to consider disabled PHBs here !!!
-	 */
-	CI_ADD_RULE(P7IOC_CI_PHB_PORT(0) | P7IOC_CI_PHB_PORT(1) |
-		    P7IOC_CI_PHB_PORT(2) | P7IOC_CI_PHB_PORT(3) |
-		    P7IOC_CI_PHB_PORT(4) | P7IOC_CI_PHB_PORT(5),
-		    TYPE, 0x80, 0xf0);
+	/* Invalidates broadcast to all PHBs */
+	CI_ADD_RULE(pmask, TYPE, 0x80, 0xf0);
 
 	/* Interrupt responses go to RGC */
 	CI_ADD_RULE(P7IOC_CI_RGC_PORT, TYPE, 0x60, 0xf0);
@@ -848,8 +855,10 @@ static void p7ioc_init_PHBs(struct p7ioc *ioc)
 	/* We use the same reset sequence that we use for
 	 * fast reboot for consistency
 	 */
-	for (i = 0; i < P7IOC_NUM_PHBS; i++)
-		p7ioc_phb_reset(&ioc->phbs[i].phb);
+	for (i = 0; i < P7IOC_NUM_PHBS; i++) {
+		if (p7ioc_phb_enabled(ioc, i))
+			p7ioc_phb_reset(&ioc->phbs[i].phb);
+	}
 }
 
 static void p7ioc_init_MISC(struct p7ioc *ioc)
@@ -1066,6 +1075,8 @@ void p7ioc_reset(struct io_hub *hub)
 	printf("P7IOC: Clearing IODA...\n");
 
 	/* First clear all IODA tables and wait a bit */
-	for (i = 0; i < 6; i++)
-		p7ioc_phb_reset(&ioc->phbs[i].phb);
+	for (i = 0; i < 6; i++) {
+		if (p7ioc_phb_enabled(ioc, i))
+			p7ioc_phb_reset(&ioc->phbs[i].phb);
+	}
 }

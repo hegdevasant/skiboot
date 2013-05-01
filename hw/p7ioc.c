@@ -460,17 +460,19 @@ err:
 			(ioc->err.err_src - P7IOC_ERR_SRC_CI_P2);
 		p = &ioc->phbs[index];
 
-		p->err.err_src   = ioc->err.err_src;
-		p->err.err_class = ioc->err.err_class;
-		p->err.err_bit   = ioc->err.err_bit;
-		p7ioc_phb_set_err_pending(p, true);
+		if (p7ioc_phb_enabled(ioc, index)) {
+			p->err.err_src   = ioc->err.err_src;
+			p->err.err_class = ioc->err.err_class;
+			p->err.err_bit   = ioc->err.err_bit;
+			p7ioc_phb_set_err_pending(p, true);
 
-		ioc->err.err_src   = P7IOC_ERR_SRC_NONE;
-		ioc->err.err_class = P7IOC_ERR_CLASS_NONE;
-		ioc->err.err_bit   = 0;
-		p7ioc_set_err_pending(ioc, false);
+			ioc->err.err_src   = P7IOC_ERR_SRC_NONE;
+			ioc->err.err_class = P7IOC_ERR_CLASS_NONE;
+			ioc->err.err_bit   = 0;
+			p7ioc_set_err_pending(ioc, false);
 
-		return false;
+			return false;
+		}
 	}
 
 	/*
@@ -599,6 +601,7 @@ static void p7ioc_create_hub(struct dt_node *np)
 	struct p7ioc *ioc;
 	unsigned int i, id;
 	u64 bar1, bar2;
+	u32 pdt;
 	char *path;
 
 	/* Use the BUID extension as ID and add it to device-tree */
@@ -651,12 +654,21 @@ static void p7ioc_create_hub(struct dt_node *np)
 	 */
 	register_irq_source(&p7ioc_rgc_irq_ops, ioc, ioc->rgc_buid << 4, 1);
 
-	/* Setup PHB structures (no HW access yet).
-	 *
-	 * XXX FIXME: We assume all PHBs are active.
-	 */
-	for (i = 0; i < P7IOC_NUM_PHBS; i++)
-		p7ioc_phb_setup(ioc, i, true);
+	/* Check for presence detect from HDAT, we use only BR1 on P7IOC */
+	pdt = dt_prop_get_u32_def(np, "ibm,br1-presence-detect", 0xffffffff);
+	if (pdt != 0xffffffff)
+		printf("P7IOC: Presence detect from HDAT : 0x%02x\n", pdt);
+	else {
+	}
+	ioc->phb_pdt = pdt & 0xff;
+
+	/* Setup PHB structures (no HW access yet) */
+	for (i = 0; i < P7IOC_NUM_PHBS; i++) {
+		if (p7ioc_phb_enabled(ioc, i))
+			p7ioc_phb_setup(ioc, i);
+		else
+			ioc->phbs[i].state = P7IOC_PHB_STATE_OFF;
+	}
 	
 	/* Now, we do the bulk of the inits */
 	p7ioc_inits(ioc);
