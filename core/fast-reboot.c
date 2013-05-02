@@ -200,6 +200,41 @@ static void cleanup_cpu_state(void)
 	reset_cpu_icp();
 }
 
+#ifdef FAST_REBOOT_CLEARS_MEMORY
+static void fast_mem_clear(uint64_t start, uint64_t end)
+{
+	printf("MEMORY: Clearing %llx..%llx\n", start, end);
+
+	while(start < end) {
+		asm volatile("dcbz 0,%0" : : "r" (start) : "memory");
+		start += 128;
+	}
+}
+
+static void memory_reset(void)
+{
+	struct address_range *i;
+	uint64_t skistart = SKIBOOT_BASE;
+	uint64_t skiend = SKIBOOT_BASE + SKIBOOT_SIZE;
+
+	printf("MEMORY: Clearing ...\n");
+
+	list_for_each(&address_ranges, i, list) {
+		uint64_t start = cleanup_addr(i->arange->start);
+		uint64_t end = cleanup_addr(i->arange->end);
+
+		if (start >= skiend || end <= skistart)
+			fast_mem_clear(start, end);
+		else {
+			if (start < skistart)
+				fast_mem_clear(start, skistart);
+			if (end > skiend)
+				fast_mem_clear(skiend, end);
+		}
+	}
+}
+#endif /* FAST_REBOOT_CLEARS_MEMORY */
+
 /* Entry from asm after a fast reset */
 void fast_reboot(void)
 {
