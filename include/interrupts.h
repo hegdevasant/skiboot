@@ -111,16 +111,8 @@
  * Note: The NX_BUID_MASK should have bits set to 1 that are relevant for
  *       the comparison to NX_BUID_BASE, ie 4 interrupts means a mask
  *       value of b'111111100
- *
- * Note about interrupt numbers on P8
- * ==================================
- *
- * On P8 the interrupts numbers are just a flat space of 19-bit,
- * there is no BUID or similar.
- *
- * However, various unit tend to require blocks of interrupt that
- * are naturally power-of-two aligned
  */
+
 #define P7_PSI_IRQ_BUID	0x3	/* 9-bit BUID for the PSI interrupts */
 
 /* Extract individual components of an IRQ number */
@@ -139,6 +131,68 @@
 /* Strip extension from BUID */
 #define P7_BUID_BASE(buid)	((buid) & 0x1ff)
 
+
+/* Note about interrupt numbers on P8
+ * ==================================
+ *
+ * On P8 the interrupts numbers are just a flat space of 19-bit,
+ * there is no BUID or similar.
+ *
+ * However, various unit tend to require blocks of interrupt that
+ * are naturally power-of-two aligned
+ *
+ * Our P8 Interrupt map consits thus of dividing the chip space
+ * into 4 "blocks" of 2048 interrupts. Block 0 is for random chip
+ * interrupt sources (NX, PSI, OCC, ...) and keeps sources 0..15
+ * clear to avoid conflits with IPIs etc.... Block 1..3 are assigned
+ * to PHB 0..2 respectively.
+ *
+ * That gives us an interrupt number made of:
+ *  18                13 12  11  10                         0
+ *  |                  | |    | |                           |
+ * +--------------------+------+-----------------------------+
+ * |        Chip#       | PHB# |             IVE#            |
+ * +--------------------+------+-----------------------------+
+ *
+ * We can thus support a max of 2^6 = 64 chips
+ *
+ * Each PHB supports 2K interrupt sources, which is shared by
+ * LSI and MSI. With default configuration, MSI would use range
+ * [0, 0x7f7] and LSI would use [0x7f8, 0x7ff]. The interrupt
+ * source should be combined with IRSN to form final hardware
+ * IRQ.
+ *
+ */
+
+#define P8_CHIP_IRQ_BASE(chip)			((chip) << 13)
+#define P8_CHIP_IRQ_BLOCK_BASE(chip, block)	(P8_CHIP_IRQ_BASE(chip) \
+						 | ((block) << 11))
+#define P8_IRQ_BLOCK_MISC	0
+#define P8_IRQ_BLOCK_PHB0	1
+#define P8_IRQ_BLOCK_PHB1	2
+#define P8_IRQ_BLOCK_PHB2	3
+
+#define P8_CHIP_IRQ_PHB_BASE(chip, phb)		(P8_CHIP_IRQ_BLOCK_BASE(chip,\
+						  (phb) + P8_IRQ_BLOCK_PHB0))
+
+#define P8_IRQ_TO_CHIP(irq)			(((irq) >> 13) & 0x3f)
+#define P8_IRQ_TO_BLOCK(irq)			(((irq) >> 11) & 0x03)
+#define P8_IRQ_TO_PHB(irq)			(P8_IRQ_TO_BLOCK(irq) - \
+						 P8_IRQ_BLOCK_PHB0)
+
+/* Assignment of the "MISC" block:
+ * -------------------------------
+ *
+ * PSI interface has 6 interrupt sources:
+ *
+ * FSP, OCC, FSI, LPC, Local error, Host error
+ *
+ * and thus needs a block of 8
+ */
+#define P8_IRQ_MISC_PSI_BASE		0x10	/* 0x10..0x17 */
+
+/* TBD: NX, AS, ...
+ */
 
 /*
  * IRQ sources register themselves here. If an "interrupts" callback
