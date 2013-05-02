@@ -116,6 +116,23 @@ uint32_t get_psi_interrupt(uint32_t chip_id)
 	return irq;
 }
 
+
+struct dt_node *add_ics_node(void)
+{
+	struct dt_node *ics = dt_new_addr(dt_root, "interrupt-controller", 0);
+
+	dt_add_property_cells(ics, "reg", 0, 0, 0, 0);
+	dt_add_property_strings(ics, "compatible", "IBM,ppc-xics",
+				"IBM,opal-xics");
+	dt_add_property_cells(ics, "#address-cells", 0);
+	dt_add_property_cells(ics, "#interrupt-cells", 1);
+	dt_add_property_string(ics, "device_type",
+			       "PowerPC-Interrupt-Source-Controller");
+	dt_add_property(ics, "interrupt-controller", NULL, 0);
+
+	return ics;
+}
+
 uint32_t get_ics_phandle(void)
 {
 	struct dt_node *i;

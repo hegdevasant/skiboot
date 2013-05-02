@@ -9,6 +9,7 @@
 #include <cpu.h>
 #include <memory.h>
 #include <vpd.h>
+#include <interrupts.h>
 #include <ccan/str/str.h>
 
 #include "hdata.h"
@@ -75,20 +76,6 @@ bool spira_check_ptr(const void *ptr, const char *file, unsigned int line)
 
 	prerror("SPIRA: Bad pointer %p at %s line %d\n", ptr, file, line);
 	return false;
-}
-
-static struct dt_node *add_interrupt_controller(void)
-{
-	struct dt_node *ics = dt_new_addr(dt_root, "interrupt-controller", 0);
-	dt_add_property_cells(ics, "reg", 0, 0, 0, 0);
-	dt_add_property_strings(ics, "compatible", "IBM,ppc-xics", "IBM,opal-xics");
-	dt_add_property_cells(ics, "#address-cells", 0);
-	dt_add_property_cells(ics, "#interrupt-cells", 1);
-	dt_add_property_string(ics, "device_type",
-			       "PowerPC-Interrupt-Source-Controller");
-	dt_add_property(ics, "interrupt-controller", NULL, 0);
-
-	return ics;
 }
 
 static void add_xscom_node(uint64_t base, uint32_t id)
@@ -498,7 +485,7 @@ void parse_hdat(bool is_opal, uint32_t master_cpu)
 	memory_parse();
 
 	/* Add XICS nodes */
-	ics = add_interrupt_controller();
+	ics = add_ics_node();
 
 	/* Add XSCOM node */
 	add_xscom();

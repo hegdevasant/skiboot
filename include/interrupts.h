@@ -213,8 +213,7 @@ extern void unregister_irq_source(uint32_t start, uint32_t count);
 
 extern uint32_t get_psi_interrupt(uint32_t chip_id);
 
-extern void add_icp_nodes(void);
-extern void add_ics_node(void);
+extern struct dt_node *add_ics_node(void);
 extern void add_opal_interrupts(struct dt_node *opal);
 extern uint32_t get_ics_phandle(void);
 

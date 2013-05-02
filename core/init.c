@@ -18,6 +18,7 @@
 #include <device.h>
 #include <pci.h>
 #include <lpc.h>
+#include <interrupts.h>
 #include <libfdt/libfdt.h>
 
 
@@ -199,8 +200,14 @@ void main_cpu_entry(const void *fdt, u32 master_cpu)
 		parse_hdat(true, master_cpu);
 	else if (fdt == NULL)
 		parse_hdat(false, master_cpu);
-	else
+	else {
 		dt_expand(fdt);
+
+		/* The HB device-tree doesn't contain the OPAL generic
+		 * interrupt-controller, add it now
+		 */
+		add_ics_node();
+	}
 
 	/* Put various bits & pieces in device-tree */
 	dt_init_misc();
