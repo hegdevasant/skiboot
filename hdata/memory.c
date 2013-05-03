@@ -4,13 +4,12 @@
  * confidentiality governed by the Parties’ Mutual Nondisclosure Agreement
  * number V032404DR, executed by the parties on November 6, 2007, and
  * Supplement V032404DR-3 dated August 16, 2012 (the “NDA”). */
-#include <spira.h>
+#include "spira.h"
 #include <memory.h>
 #include <cpu.h>
 #include <device_tree.h>
 #include <device.h>
 #include <ccan/str/str.h>
-#include <hdif.h>
 #include <libfdt/libfdt.h>
 
 struct HDIF_ram_area_id {

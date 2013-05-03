@@ -7,7 +7,7 @@
 #ifndef __SPIRA_H
 #define __SPIRA_H
 
-#include <hdif.h>
+#include "hdif.h"
 
 /*
  * The SPIRA structure

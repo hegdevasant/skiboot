@@ -5,7 +5,7 @@
  * number V032404DR, executed by the parties on November 6, 2007, and
  * Supplement V032404DR-3 dated August 16, 2012 (the “NDA”). */
 #include <device.h>
-#include <spira.h>
+#include "spira.h"
 #include <cpu.h>
 #include <memory.h>
 #include <vpd.h>

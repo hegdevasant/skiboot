@@ -7,7 +7,7 @@
 #include <skiboot.h>
 #include <vpd.h>
 #include <string.h>
-#include <spira.h>
+#include "spira.h"
 #include <device.h>
 
 void sysvpd_parse(void)
