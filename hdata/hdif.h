@@ -71,7 +71,8 @@ static inline bool HDIF_check(const void *hdif, const char id[])
  * @di    : Index of the idata pointer
  * @size  : Return the data size (or NULL if ignored)
  */
-extern const void *HDIF_get_idata(const void *hdif, unsigned int di,
+extern const void *HDIF_get_idata(const struct HDIF_common_hdr *hdif,
+				  unsigned int di,
 				  unsigned int *size);
 
 /* HDIF_get_iarray - Get a pointer to an elemnt of an internal data array
@@ -81,7 +82,8 @@ extern const void *HDIF_get_idata(const void *hdif, unsigned int di,
  * @ai    : Index in the resulting array
  * @size  : Return the entry actual size (or NULL if ignored)
  */
-extern const void *HDIF_get_iarray_item(const void *hdif, unsigned int di,
+extern const void *HDIF_get_iarray_item(const struct HDIF_common_hdr *hdif,
+					unsigned int di,
 					unsigned int ai, unsigned int *size);
 
 /* HDIF_get_iarray_size - Get the number of elements of an internal data array
@@ -91,7 +93,8 @@ extern const void *HDIF_get_iarray_item(const void *hdif, unsigned int di,
  *
  * A negative result means an error
  */
-extern int HDIF_get_iarray_size(const void *hdif, unsigned int di);
+extern int HDIF_get_iarray_size(const struct HDIF_common_hdr *hdif,
+				unsigned int di);
 
 /* HDIF_child_arr - Get a child array from this HDIF.
  *

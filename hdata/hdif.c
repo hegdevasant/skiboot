@@ -6,7 +6,7 @@
  * Supplement V032404DR-3 dated August 16, 2012 (the “NDA”). */
 #include "hdif.h"
 
-const void *HDIF_get_idata(const void *hdif, unsigned int di,
+const void *HDIF_get_idata(const struct HDIF_common_hdr *hdif, unsigned int di,
 			   unsigned int *size)
 {
 	const struct HDIF_common_hdr *hdr = hdif;
@@ -22,16 +22,18 @@ const void *HDIF_get_idata(const void *hdif, unsigned int di,
 		return NULL;
 	}
 
-	iptr = hdif + (hdr->idptr_off) + di * sizeof(struct HDIF_idata_ptr);
+	iptr = (void *)hdif + (hdr->idptr_off)
+		+ di * sizeof(struct HDIF_idata_ptr);
 
 	if (size)
 		*size = iptr->size;
 
-	return hdif + iptr->offset;
+	return (void *)hdif + iptr->offset;
 }
 
-const void *HDIF_get_iarray_item(const void *hdif, unsigned int di,
-				 unsigned int ai, unsigned int *size)
+const void *HDIF_get_iarray_item(const struct HDIF_common_hdr *hdif,
+				 unsigned int di, unsigned int ai,
+				 unsigned int *size)
 {
 	const struct HDIF_array_hdr *ahdr;
 	unsigned int asize;
@@ -59,7 +61,7 @@ const void *HDIF_get_iarray_item(const void *hdif, unsigned int di,
 	return arr + ahdr->offset + ai * ahdr->esize;
 }
 
-int HDIF_get_iarray_size(const void *hdif, unsigned int di)
+int HDIF_get_iarray_size(const struct HDIF_common_hdr *hdif, unsigned int di)
 {
 	const struct HDIF_array_hdr *ahdr;
 	unsigned int asize;
