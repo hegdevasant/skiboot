@@ -15,5 +15,7 @@ extern void fsp_parse(void);
 extern void io_parse(struct dt_node *ics);
 extern void sysvpd_parse(void);
 
+extern struct dt_node *find_xscom_for_chip(uint32_t chip_id);
+
 #endif /* __HDATA_H */
 

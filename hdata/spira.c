@@ -487,7 +487,7 @@ void parse_hdat(bool is_opal, uint32_t master_cpu)
 	/* Add XICS nodes */
 	ics = add_ics_node();
 
-	/* Add XSCOM node */
+	/* Add XSCOM node (must be before chiptod & IO ) */
 	add_xscom();
 
 	/* Add FSP */

@@ -419,13 +419,13 @@ struct cechub_io_hub {
 #define CECHUB_HUB_FLAG_STATE_FAILURES	0x40
 #define CECHUB_HUB_FLAG_STATE_NOT_INST	0x80
 #define CECHUB_HUB_FLAG_STATE_UNUSABLE	0xc0
-#define CECHUB_HUB_FLAG_MASTER_HUB	0x20
-#define CECHUB_HUB_FLAG_GARD_MASK_VALID	0x08
-#define CECHUB_HUB_FLAG_SWITCH_MASK_PDT	0x04
-#define CECHUB_HUB_FLAG_FAB_BR0_PDT	0x02
-#define CECHUB_HUB_FLAG_FAB_BR1_PDT	0x01
-	uint8_t		nr_ports;
-	uint8_t		fab_br0_pdt;	/* p5ioc2 PCI-X */
+#define CECHUB_HUB_FLAG_MASTER_HUB	0x20 /* HDAT < v9.x only */
+#define CECHUB_HUB_FLAG_GARD_MASK_VALID	0x08 /* HDAT < v9.x only */
+#define CECHUB_HUB_FLAG_SWITCH_MASK_PDT	0x04 /* HDAT < v9.x only */
+#define CECHUB_HUB_FLAG_FAB_BR0_PDT	0x02 /* HDAT < v9.x only */
+#define CECHUB_HUB_FLAG_FAB_BR1_PDT	0x01 /* HDAT < v9.x only */
+	uint8_t		nr_ports;	     /* HDAT < v9.x only */
+	uint8_t		fab_br0_pdt;	/* p5ioc2 PCI-X or P8 PHB3's */
 #define CECHUB_HUB_FAB_BR0_PDT_PHB0	0x80
 #define CECHUB_HUB_FAB_BR0_PDT_PHB1	0x40
 #define CECHUB_HUB_FAB_BR0_PDT_PHB2	0x20
@@ -440,14 +440,27 @@ struct cechub_io_hub {
 	uint16_t	iohub_id;	/* the type of hub */
 #define CECHUB_HUB_P5IOC2	0x1061	/* from VPL1 */
 #define CECHUB_HUB_P7IOC	0x60e7	/* from VPL3 */
+#define CECHUB_HUB_MURANO	0x20ef	/* Murano from spec */
+#define CECHUB_HUB_MURANO_SEGU	0x0001	/* Murano+Seguso from spec */
+#define CECHUB_HUB_VENICE_WYATT	0x0010	/* Venice+Wyatt from spec */
 	uint32_t	ec_level;
-	uint32_t	aff_dom2;	/* relates to aff_dom2 of PACA */
-	uint32_t	aff_dom3;	/* relates to aff_dom3 of PACA */
-	uint64_t	reserved;
+	uint32_t	aff_dom2;	/* HDAT < v9.x only */
+	uint32_t	aff_dom3;	/* HDAT < v9.x only */
+	uint32_t	phb0_lane_eq;	/* HDAT v9.x (P8) only */
+	uint32_t	phb1_lane_eq;	/* HDAT v9.x (P8) only */
 	uint32_t	proc_chip_id;	/* cpu the hub is connected to */
-	uint32_t	gx_index;	/* GX bus index on cpu */
-	uint32_t	buid_ext;	/* BUID Extension (unused on juno ?) */
-	uint32_t	xscom_chip_id;	/* TORRENT ONLY */
+	union {
+		uint32_t	gx_index;	/* GX bus index on cpu */
+		uint32_t	phb2_lane_eq;   /* HDAT v9.x (P8) only */
+	};
+	union {
+		uint32_t	buid_ext;	/* BUID Extension */
+		uint32_t	phb3_lane_eq;   /* HDAT v9.x (P8) only */
+	};
+	union {
+		uint32_t	xscom_chip_id;	/* TORRENT ONLY */
+		uint32_t	hw_topology;	/* HDAT v9.x (P8) only */
+	};
 	uint32_t	mrid;		/* no idea, got 0x00040000 on vpl3 */
 	uint32_t	mem_map_vers;	/* Memory map version (1 on vpl3) */
 	uint64_t	gx_ctrl_bar0;	/* vpl3 has: 0x00003ebffe000000 */

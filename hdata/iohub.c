@@ -16,8 +16,10 @@
 #include <p7ioc.h>
 #include <vpd.h>
 
+#include "hdata.h"
+
 static void io_add_common(struct dt_node *hn, const struct cechub_io_hub *hub,
-			  struct dt_node *ics, int lx_idx, const void *lxr)
+			  struct dt_node *ics)
 {
 	dt_add_property_cells(hn, "#address-cells", 2);
 	dt_add_property_cells(hn, "#size-cells", 2);
@@ -39,12 +41,6 @@ static void io_add_common(struct dt_node *hn, const struct cechub_io_hub *hub,
 			      hi32(hub->gx_ctrl_bar1), lo32(hub->gx_ctrl_bar1));
 	dt_add_property_cells(hn, "ibm,gx-bar-2",
 			      hi32(hub->gx_ctrl_bar2), lo32(hub->gx_ctrl_bar2));
-
-	/* Add the LX info */
-	dt_add_property_cells(hn, "ibm,vpd-lx-info",
-			      lx_idx,
-			      ((uint32_t *)lxr)[0],
-			      ((uint32_t *)lxr)[1]);
 
 	/* Add presence detect if valid */
 	if (hub->flags & CECHUB_HUB_FLAG_FAB_BR0_PDT)
@@ -90,6 +86,81 @@ static struct dt_node *io_add_p7ioc(const struct cechub_io_hub *hub)
 	dt_add_property_strings(hn, "compatible", "ibm,p7ioc", "ibm,ioda-hub");
 
 	return hn;
+}
+
+static struct dt_node *io_add_phb3(const struct cechub_io_hub *hub,
+				   unsigned int index, struct dt_node *xcom,
+				   unsigned int pe_xscom,
+				   unsigned int pci_xscom,
+				   unsigned int spci_xscom)
+{
+	struct dt_node *pbcq;
+	uint32_t reg[6];
+
+	/* Create PBCQ node under xscom */
+	pbcq = dt_new_addr(xcom, "pbcq", pe_xscom);
+
+	/* "reg" property contains in order the PE, PCI and SPCI XSCOM
+	 * addresses
+	 */
+	reg[0] = pe_xscom;
+	reg[1] = 0x20;
+	reg[2] = pci_xscom;
+	reg[3] = 0x05;
+	reg[4] = spci_xscom;
+	reg[5] = 0x15;
+	dt_add_property(pbcq, "reg", reg, sizeof(reg));
+
+	/* A couple more things ... */
+	dt_add_property_strings(pbcq, "compatible", "ibm,p8-pbcq");
+	dt_add_property_cells(pbcq, "ibm,phb-index", index);
+
+	switch(index) {
+	case 0:
+		dt_add_property_cells(pbcq, "ibm,lane_eq", hub->phb0_lane_eq);
+		break;
+	case 1:
+		dt_add_property_cells(pbcq, "ibm,lane_eq", hub->phb1_lane_eq);
+		break;
+	case 2:
+		dt_add_property_cells(pbcq, "ibm,lane_eq", hub->phb2_lane_eq);
+		break;
+	case 4:
+		dt_add_property_cells(pbcq, "ibm,lane_eq", hub->phb3_lane_eq);
+		break;
+	default: ;
+	}
+
+	/* Currently we only create a PBCQ node, the actual PHB nodes
+	 * will be added by sapphire later on.
+	 */
+	return pbcq;
+}
+
+static struct dt_node *io_add_murano(const struct cechub_io_hub *hub)
+{
+	struct dt_node *xscom;
+	unsigned int i;
+
+	xscom = find_xscom_for_chip(hub->proc_chip_id);
+	if (!xscom) {
+		prerror("MURANO: Can't find XSCOM for chip %d\n",
+			hub->proc_chip_id);
+		return NULL;
+	}
+
+	/* Create PHBs, max 3 */
+	for (i = 0; i < 3; i++) {
+		if (hub->fab_br0_pdt & (0x80 >> i))
+			/* XSCOM addresses for murano DD1.0 */
+			io_add_phb3(hub, i, xscom,
+				    0x02012000 + (i * 0x400),
+				    0x09012000 + (i * 0x400),
+				    0x09013c00 + (i * 0x40));
+	}
+
+	/* HACK: We return the XSCOM device for the VPD info */
+	return dt_root;
 }
 
 static struct dt_node *io_add_hea(const struct cechub_io_hub *hub,
@@ -380,17 +451,31 @@ static void io_parse_fru(const void *sp_iohubs, struct dt_node *ics,
 		case CECHUB_HUB_P7IOC:
 			printf("CEC:     P7IOC !\n");
 			hn = io_add_p7ioc(hub);
-			io_add_common(hn, hub, ics, *lx_idx, lxr);
+			io_add_common(hn, hub, ics);
 			break;
 		case CECHUB_HUB_P5IOC2:
 			printf("CEC:     P5IOC2 !\n");
 			hn = io_add_p5ioc2(hub);
-			io_add_common(hn, hub, ics, *lx_idx, lxr);
+			io_add_common(hn, hub, ics);
 			io_add_hea(hub, sp_iohubs);
+			break;
+		case CECHUB_HUB_MURANO:
+		case CECHUB_HUB_MURANO_SEGU:
+			printf("CEC:     Murano !\n");
+			hn = io_add_murano(hub);
 			break;
 		default:
 			printf("CEC:     Hub ID 0x%04x unsupported !\n",
 			       hub->iohub_id);
+			hn = NULL;
+		}
+		/* Add the LX info */
+		if (hn) {
+			dt_add_property_cells(hn, "ibm,vpd-lx-info",
+					      *lx_idx,
+					      ((uint32_t *)lxr)[0],
+					      ((uint32_t *)lxr)[1]);
+
 		}
 		if ((*lx_idx) >= 0 && (*lx_idx) < 9)
 			(*lx_idx)++;
