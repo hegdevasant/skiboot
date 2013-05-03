@@ -51,7 +51,16 @@ static bool __chiptod_init(u32 master_cpu)
 	struct dt_node *np;
 
 	dt_for_each_compatible(dt_root, np, "ibm,power-chiptod") {
-		uint32_t chip = dt_prop_get_u32(np, "ibm,chip-id");
+		uint32_t chip;
+
+		/* Old DT has chip-id in chiptod node, newer only in the
+		 * parent xscom bridge
+		 */
+		if (dt_has_node_property(np, "ibm,chip-id", NULL))
+			chip = dt_prop_get_u32(np, "ibm,chip-id");
+		else
+			chip = dt_prop_get_u32(np->parent, "ibm,chip-id");
+
 
 		if (dt_has_node_property(np, "primary", NULL)) {
 		    chiptod_primary = chip;
