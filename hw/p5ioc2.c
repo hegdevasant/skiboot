@@ -212,7 +212,8 @@ static void p5ioc2_create_hub(struct dt_node *np)
 		       in_be64(ioc->regs + P5IOC2_BAR(i)),
 		       in_be64(ioc->regs + P5IOC2_BARM(i)));
 
-	ioc->host_chip = dt_prop_get_u32(np, "ibm,chip-id");
+	ioc->host_chip = dt_get_chip_id(np);
+
 	ioc->gx_bus = dt_prop_get_u32(np, "ibm,gx-index");
 
 	/* Rather than reading the BARs in P5IOC2, we "know" that
