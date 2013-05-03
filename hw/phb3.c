@@ -2046,14 +2046,25 @@ static void phb3_create(struct dt_node *np)
 	phb3_init_hw(p);
 }
 
-static void hack_create_phb3(uint32_t gcid, uint32_t pno)
+static void phb3_probe_pbcq(struct dt_node *pbcq)
 {
-	uint32_t spci_xscom = 0x09013c00 + (pno * 0x40);
-	uint32_t pci_xscom = 0x09012000 + (pno * 0x400);
-	uint32_t pe_xscom = 0x02012000 + (pno * 0x400);
+	uint32_t spci_xscom, pci_xscom, pe_xscom, gcid, pno;
 	uint64_t val, phb_bar, mmio_bar, mmio_bmask, mmio_sz;
 	uint64_t reg[2];
 	struct dt_node *np;
+	char *path;
+
+	gcid = dt_prop_get_u32(pbcq->parent, "ibm,chip-id");
+	pno = dt_prop_get_u32(pbcq, "ibm,phb-index");
+	path = dt_get_path(pbcq);
+	printf("Chip %d Found PBCQ%d at %s\n", gcid, pno, path);
+	free(path);
+
+	pe_xscom = dt_get_address(pbcq, 0, NULL);
+	pci_xscom = dt_get_address(pbcq, 1, NULL);
+	spci_xscom = dt_get_address(pbcq, 2, NULL);
+	printf("PHB3[%d:%d]: X[PE]=0x%08x X[PCI]=0x%08x X[SPCI]=0x%08x\n",
+	       gcid, pno, pe_xscom, pci_xscom, spci_xscom);
 
 	/* Check if CAPP mode */
 	if (xscom_read(gcid, spci_xscom + 0x03, &val)) {
@@ -2075,8 +2086,13 @@ static void hack_create_phb3(uint32_t gcid, uint32_t pno)
 
 	/* Dbl check PHB BAR */
 	xscom_read(gcid, pci_xscom + 0x0b, &val);
-	printf("PHB3[%d:%d] PCIBAR = 0x%016llx\n",
-		gcid, pno, (val >> 14));
+	val >>= 14;
+	printf("PHB3[%d:%d] PCIBAR = 0x%016llx\n", gcid, pno, val);
+	if (phb_bar != val) {
+		prerror("PHB3[%d:%d] PCIBAR invalid, fixing up...\n",
+			gcid, pno);
+		xscom_write(gcid, pci_xscom + 0x0b, phb_bar << 14);
+	}
 
 	/* Check MMIO BAR */
 	xscom_read(gcid, pe_xscom + 0x40, &mmio_bar);
@@ -2112,6 +2128,7 @@ static void hack_create_phb3(uint32_t gcid, uint32_t pno)
 	printf("PHB3[%d:%d] LSI    = 0x%016llx\n",
 		gcid, pno, val);
 
+	/* Create PHB node */
 	reg[0] = phb_bar;
 	reg[1] = 0x1000;
 
@@ -2135,24 +2152,15 @@ static void hack_create_phb3(uint32_t gcid, uint32_t pno)
 	dt_add_property_cells(np, "ibm,chip-id", gcid);
 }
 
-static void hack_create_phb3_nodes(uint32_t gcid)
-{
-	if (proc_gen != proc_gen_p8)
-		return;
-	hack_create_phb3(gcid, 0);
-	hack_create_phb3(gcid, 1);
-	hack_create_phb3(gcid, 2);
-
-}
-
 void probe_phb3(void)
 {
 	struct dt_node *np;
 
-	/* XXX HACK: HB Doesn't create the nodes yet ! */
-	hack_create_phb3_nodes(xscom_pir_to_gcid(this_cpu()->pir));
+	/* Look for PBCQ XSCOM nodes */
+	dt_for_each_compatible(dt_root, np, "ibm,p8-pbcq")
+		phb3_probe_pbcq(np);
 
+	/* Look for newly created PHB nodes */
 	dt_for_each_compatible(dt_root, np, "ibm,p8-pciex")
 		phb3_create(np);
 }
-
