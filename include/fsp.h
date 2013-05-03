@@ -213,16 +213,49 @@
 
 /* TCE address register */
 #define PSIHB_TAR			0x18
+#define  PSIHB_TAR_8K_ENTRIES		0
+#define  PSIHB_TAR_16K_ENTRIES		1
+#define  PSIHB_TAR_256K_ENTRIES		2 /* P8 only */
+#define  PSIHB_TAR_512K_ENTRIES		4 /* P8 only */
 
-/* PSI Host Bridge Control Register*/
+/* PSI Host Bridge Control Register
+ *
+ * note: TCE_ENABLE moved to the new PSIHB_PHBSCR on P8 but is
+ * the same bit position
+ */
 #define PSIHB_CR			0x20
+#define   PSIHB_CR_FSP_CMD_ENABLE	PPC_BIT(0)
+#define   PSIHB_CR_FSP_MMIO_ENABLE	PPC_BIT(1)
+#define   PSIHB_CR_TCE_ENABLE		PPC_BIT(2)	/* P7 only */
+#define   PSIHB_CR_FSP_IRQ_ENABLE	PPC_BIT(3)
+#define   PSIHB_CR_FSP_ERR_RSP_ENABLE	PPC_BIT(4)
+#define   PSIHB_CR_PSI_LINK_ENABLE	PPC_BIT(5)
+#define   PSIHB_CR_FSP_RESET		PPC_BIT(6)
+#define   PSIHB_CR_PSIHB_RESET		PPC_BIT(7)
 
 /* PSI Status / Error Mask Register */
 #define PSIHB_SEMR			0x28
 
-/* XIVR and BUID used for PSI interrupts */
+/* XIVR and BUID used for PSI interrupts on P7 */
 #define PSIHB_XIVR			0x30
 
+/* XIVR and BUID used for PSI interrupts on P8 */
+#define PSIHB_XIVR_FSP			0x30
+#define PSIHB_XIVR_OCC			0x60
+#define PSIHB_XIVR_FSI			0x68
+#define PSIHB_XIVR_LPC			0x70
+#define PSIHB_XIVR_LOCAL_ERR		0x78
+#define PSIHB_XIVR_HOST_ERR		0x80
+#define PSIHB_IRQ_SRC_COMP		0x88
+
+#define PSIHB_IRQ_STATUS		0x58
+#define   PSIHB_IRQ_STAT_OCC		PPC_BIT(27)
+#define   PSIHB_IRQ_STAT_FSI		PPC_BIT(28)
+#define   PSIHB_IRQ_STAT_LPC		PPC_BIT(29)
+#define   PSIHB_IRQ_STAT_LOCAL_ERR	PPC_BIT(30)
+#define   PSIHB_IRQ_STAT_HOST_ERR	PPC_BIT(31)
+
+/* Secure version of CR for P8 (TCE enable bit) */
 #define PSIHB_PHBSCR			0x90
 
 /*

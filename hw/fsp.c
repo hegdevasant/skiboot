@@ -208,15 +208,20 @@ static bool fsp_check_err(struct fsp *fsp)
 {
 	u32 hstate;
 	bool ret_abort = false;
+	static bool link_down_msg = false;
 
 	/* Check for an error state */
 	hstate = fsp_rreg(fsp, FSP_HDES_REG);
 	if (hstate == 0xffffffff) {
-		prerror("FSP #%d: Link seems to be down\n", fsp->index);
+		if (!link_down_msg) {
+			link_down_msg = true;
+			prerror("FSP #%d: Link seems to be down\n", fsp->index);
+		}
 		/* XXX Start recovery */
 		fsp->state = fsp_mbx_error;
 		return true;
 	}
+	link_down_msg = false;
 
 	/* Clear errors */
 	fsp_wreg(fsp, FSP_HDES_REG, FSP_DBERRSTAT_CLR1);
@@ -900,7 +905,7 @@ static void fsp_psi_enable_interrupt(struct fsp *fsp)
 
 	/* Enable FSP interrupts in the GXHB */
 	out_be64(iop->gxhb_regs + PSIHB_CR,
-		 in_be64(iop->gxhb_regs + PSIHB_CR) | 0x1000000000000000ull);
+		 in_be64(iop->gxhb_regs + PSIHB_CR) | PSIHB_CR_FSP_IRQ_ENABLE);
 }
 
 static int fsp_init_mbox(struct fsp *fsp)
@@ -1001,8 +1006,8 @@ static void fsp_psi_interrupt(void *data __unused, uint32_t isn __unused)
 	fsp_console_poll(NULL);
 }
 
-static int64_t fsp_psi_set_xive(void *data, uint32_t isn __unused,
-				uint16_t server, uint8_t priority)
+static int64_t fsp_psi_p7_set_xive(void *data, uint32_t isn __unused,
+				   uint16_t server, uint8_t priority)
 {
 	struct fsp_iopath *iop = data;
 	uint64_t xivr;
@@ -1020,7 +1025,7 @@ static int64_t fsp_psi_set_xive(void *data, uint32_t isn __unused,
 	return OPAL_SUCCESS;
 }
 
-static int64_t fsp_psi_get_xive(void *data, uint32_t isn __unused,
+static int64_t fsp_psi_p7_get_xive(void *data, uint32_t isn __unused,
 				uint16_t *server, uint8_t *priority)
 {
 	struct fsp_iopath *iop = data;
@@ -1038,6 +1043,83 @@ static int64_t fsp_psi_get_xive(void *data, uint32_t isn __unused,
 	return OPAL_SUCCESS;
 }
 
+static int64_t fsp_psi_p8_set_xive(void *data, uint32_t isn,
+				   uint16_t server, uint8_t priority)
+{
+	struct fsp_iopath *iop = data;
+	uint64_t xivr_p, xivr;
+
+	switch(isn & 7) {
+	case 0:
+		xivr_p = PSIHB_XIVR_FSP;
+		break;
+	case 1:
+		xivr_p = PSIHB_XIVR_OCC;
+		break;
+	case 2:
+		xivr_p = PSIHB_XIVR_FSI;
+		break;
+	case 3:
+		xivr_p = PSIHB_XIVR_LPC;
+		break;
+	case 4:
+		xivr_p = PSIHB_XIVR_LOCAL_ERR;
+		break;
+	case 5:
+		xivr_p = PSIHB_XIVR_HOST_ERR;
+		break;
+	default:
+		return OPAL_PARAMETER;
+	}
+
+	/* Populate the XIVR */
+	xivr  = (uint64_t)server << 40;
+	xivr |= (uint64_t)priority << 32;
+	xivr |= (uint64_t)(isn & 7) << 29;
+
+	out_be64(iop->gxhb_regs + xivr_p, xivr);
+
+	return OPAL_SUCCESS;
+}
+
+static int64_t fsp_psi_p8_get_xive(void *data, uint32_t isn __unused,
+				   uint16_t *server, uint8_t *priority)
+{
+	struct fsp_iopath *iop = data;
+	uint64_t xivr_p, xivr;
+
+	switch(isn & 7) {
+	case 0:
+		xivr_p = PSIHB_XIVR_FSP;
+		break;
+	case 1:
+		xivr_p = PSIHB_XIVR_OCC;
+		break;
+	case 2:
+		xivr_p = PSIHB_XIVR_FSI;
+		break;
+	case 3:
+		xivr_p = PSIHB_XIVR_LPC;
+		break;
+	case 4:
+		xivr_p = PSIHB_XIVR_LOCAL_ERR;
+		break;
+	case 5:
+		xivr_p = PSIHB_XIVR_HOST_ERR;
+		break;
+	default:
+		return OPAL_PARAMETER;
+	}
+
+	/* Read & decode the XIVR */
+	xivr = in_be64(iop->gxhb_regs + xivr_p);
+
+	*server = (xivr >> 40) & 0xffff;
+	*priority = (xivr >> 32) & 0xff;
+
+	return OPAL_SUCCESS;
+}
+
 /* Called on a fast reset, make sure we aren't stuck with
  * an accepted and never EOId PSI interrupt
  */
@@ -1049,6 +1131,8 @@ void fsp_psi_irq_reset(void)
 	uint64_t xivr;
 
 	printf("FSP: Hot reset !\n");
+
+	assert(proc_gen == proc_gen_p7);
 
 	for (fsp = first_fsp; fsp; fsp = fsp->link) {
 		for (i = 0; i < fsp->iopath_count; i++) {
@@ -1067,9 +1151,15 @@ void fsp_psi_irq_reset(void)
 	}
 }
 
-static const struct irq_source_ops fsp_psi_irq_ops = {
-	.get_xive = fsp_psi_get_xive,
-	.set_xive = fsp_psi_set_xive,
+static const struct irq_source_ops fsp_psi_p7_irq_ops = {
+	.get_xive = fsp_psi_p7_get_xive,
+	.set_xive = fsp_psi_p7_set_xive,
+	.interrupt = fsp_psi_interrupt,
+};
+
+static const struct irq_source_ops fsp_psi_p8_irq_ops = {
+	.get_xive = fsp_psi_p8_get_xive,
+	.set_xive = fsp_psi_p8_set_xive,
 	.interrupt = fsp_psi_interrupt,
 };
 
@@ -1092,13 +1182,14 @@ static void psi_tce_enable(struct fsp_iopath *fiop, bool enable)
 
 	val = in_be64(addr);
 	if (enable)
-		val |=  0x2000000000000000ull;
+		val |=  PSIHB_CR_TCE_ENABLE;
 	else
-		val &= ~0x2000000000000000ull;
+		val &= ~PSIHB_CR_TCE_ENABLE;
 	out_be64(addr, val);
 }
 
-static int fsp_psi_init_phb(struct fsp_iopath *fiop, bool active, u64 reg_offset)
+static int fsp_psi_init_phb(struct fsp_iopath *fiop, bool active,
+			    u64 reg_offset)
 {
 	u64 reg;
 
@@ -1107,33 +1198,71 @@ static int fsp_psi_init_phb(struct fsp_iopath *fiop, bool active, u64 reg_offset
 	 */
 	psi_tce_enable(fiop, false);
 
-	out_be64(fiop->gxhb_regs + PSIHB_TAR, PSI_TCE_TABLE_BASE | 1);
-
-	/* Configure the interrupt BUID and mask it */
-	out_be64(fiop->gxhb_regs + PSIHB_XIVR,
-		 P7_IRQ_BUID(fiop->interrupt) << 16 |
-		 0xffull << 32);
-
-	/* Configure it in the GX controller as well */
-	gx_configure_psi_buid(fiop->chip_id, P7_IRQ_BUID(fiop->interrupt));
+	out_be64(fiop->gxhb_regs + PSIHB_TAR, PSI_TCE_TABLE_BASE |
+		 PSIHB_TAR_16K_ENTRIES);
 
 	/* Disable interrupt emission in the control register,
 	 * it will be re-enabled later, after the mailbox one
 	 * will have been enabled.
 	 */
 	reg = in_be64(fiop->gxhb_regs + PSIHB_CR);
-	reg &= ~0x1000000000000000ull;
+	reg &= ~PSIHB_CR_FSP_IRQ_ENABLE;
 	out_be64(fiop->gxhb_regs + PSIHB_CR, reg);
 
+	/* Configure the interrupt BUID and mask it */
+	switch (proc_gen) {
+	case proc_gen_p7:
+		/* On P7, we get a single interrupt */
+		out_be64(fiop->gxhb_regs + PSIHB_XIVR,
+			 P7_IRQ_BUID(fiop->interrupt) << 16 |
+			 0xffull << 32);
+
+		/* Configure it in the GX controller as well */
+		gx_configure_psi_buid(fiop->chip_id,
+				      P7_IRQ_BUID(fiop->interrupt));
+
+		/* Register the IRQ source */
+		register_irq_source(&fsp_psi_p7_irq_ops,
+				    fiop, fiop->interrupt, 1);
+		break;
+	case proc_gen_p8:
+		/* On P8 we get a block of 8, set up the base/mask
+		 * and mask all the sources for now
+		 */
+		out_be64(fiop->gxhb_regs + PSIHB_IRQ_SRC_COMP,
+			 (((u64)fiop->interrupt) << 45) |
+			 (0xffff0ul) << 13);
+		out_be64(fiop->gxhb_regs + PSIHB_XIVR_FSP,
+			 (0xffull << 32) | (0 << 29));
+		out_be64(fiop->gxhb_regs + PSIHB_XIVR_OCC,
+			 (0xffull << 32) | (1 << 29));
+		out_be64(fiop->gxhb_regs + PSIHB_XIVR_FSI,
+			 (0xffull << 32) | (2 << 29));
+		out_be64(fiop->gxhb_regs + PSIHB_XIVR_LPC,
+			 (0xffull << 32) | (3 << 29));
+		out_be64(fiop->gxhb_regs + PSIHB_XIVR_LOCAL_ERR,
+			 (0xffull << 32) | (4 << 29));
+		out_be64(fiop->gxhb_regs + PSIHB_XIVR_HOST_ERR,
+			 (0xffull << 32) | (5 << 29));
+
+		/* Register the IRQ sources.
+		 *
+		 * XXX: We only handle the main FSP interrupt for now
+		 */
+		register_irq_source(&fsp_psi_p8_irq_ops,
+				    fiop, fiop->interrupt, 1);
+		break;
+	default:
+		/* Unknown: just no interrupts */
+		prerror("FSP: Unknown interrupt type\n");
+	}
+       
 	/* Enable interrupts in the mask register. We enable everything
 	 * except for bit "FSP command error detected" which the doc
 	 * (P7 BookIV) says should be masked for normal ops. It also
 	 * seems to be masked under OPAL.
-	 *
-	 * The value below was basically snapshotted from pHyp using
-	 * ecmd getscom :-)
 	 */
-	reg = 0x0010010000000000ull;
+	reg = 0x0000010000100000ull;
 	out_be64(fiop->gxhb_regs + PSIHB_SEMR, reg);
 
 	/* Enable various other configuration register bits based
@@ -1152,7 +1281,9 @@ static int fsp_psi_init_phb(struct fsp_iopath *fiop, bool active, u64 reg_offset
 	 */
 	if (active) {
 		reg = in_be64(fiop->gxhb_regs + PSIHB_CR);
-		reg |=  0x1800000000000000ull;
+		reg |= PSIHB_CR_FSP_CMD_ENABLE;
+		reg |= PSIHB_CR_FSP_MMIO_ENABLE;
+		reg |= PSIHB_CR_FSP_ERR_RSP_ENABLE;
 		reg &= ~0x00000000ffffffffull;
 		out_be64(fiop->gxhb_regs + PSIHB_CR, reg);
 		psi_tce_enable(fiop, true);
@@ -1178,9 +1309,6 @@ static int fsp_psi_init_phb(struct fsp_iopath *fiop, bool active, u64 reg_offset
 	/* Get the FSP register window */
 	reg = in_be64(fiop->gxhb_regs + PSIHB_FSPBAR);
 	fiop->fsp_regs = (void *)(reg | (1ULL << 63) | reg_offset);
-
-	/* Register the IRQ source */
-	register_irq_source(&fsp_psi_irq_ops, fiop, fiop->interrupt, 1);
 
 	return 0;
 }
