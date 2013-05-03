@@ -1,0 +1,182 @@
+/* (C) Copyright IBM Corp., 2013 and provided pursuant to the Technology
+ * Licensing Agreement between Google Inc. and International Business
+ * Machines Corporation, IBM License Reference Number AA130103030256 and
+ * confidentiality governed by the Parties’ Mutual Nondisclosure Agreement
+ * number V032404DR, executed by the parties on November 6, 2007, and
+ * Supplement V032404DR-3 dated August 16, 2012 (the “NDA”).
+*/
+#ifndef __PHB3_H
+#define __PHB3_H
+
+/*
+ * Memory map
+ *
+ * In addition to the 4K MMIO registers window, the PBCQ will
+ * forward down one or two large MMIO regions for use by the
+ * PHB. We currently only deal with one (which is what the
+ * current HB sets up for us, it leaves MMIO1 disabled).
+ *
+ * Inside this region, we map:
+ *
+ * 4G for 32-bit MMIO space. Only part of that region will actually
+ * be enabled (the rest is for 32-bit DMA) but we reserve the whole
+ * area anyway which makes alignment issues easier to deal with
+ */
+
+#define PHB_M32_OFFSET	        0x0ul	/* Offset of PHB 32-bit 4G area */
+#define PHB_M32_SIZE	0x100000000ul	/* Size of this area (whole 4G) */
+#define M32_PCI_START	0x080000000	/* Offset of the actual M32 window */
+#define M32_PCI_SIZE	0x080000000	/* Size of the actual M32 window */
+
+/*
+ * In-memory tables
+ *
+ * PHB3 requires a bunch of tables to be in memory instead of
+ * arrays inside the chip (unlike previous versions of the
+ * design).
+ *
+ * Some of them (IVT, etc...) will be provided by the OS via an
+ * OPAL call, not only not all of them, we also need to make sure
+ * some like PELT-V exist before we do our internal slot probing
+ * or bad thing would happen on error (the whole PHB would go into
+ * Fatal error state).
+ *
+ * So we maintain a set of tables internally for those mandatory
+ * ones within our core memory. They are fairly small. They can
+ * still be replaced by OS provided ones via OPAL APIs (and reset
+ * to the internal ones) so the OS can provide node local allocation
+ * for better performances.
+ *
+ * All those tables have to be naturally aligned
+ */
+
+/* RTT Table : 128KB - Maps RID to PE# 
+ *
+ * Entries are 2 bytes indexed by PCIe RID
+ */
+#define RTT_TABLE_SIZE		0x20000
+struct rtt_entry {
+	uint16_t pe_num;
+};
+
+/* IVT Table : 32KB - MSI Interrupt vectors * state, 16-bytes per interrupt */
+#define IVT_TABLE_SIZE		0x8000
+
+/* PELT-V Table : 8KB - Maps PE# to PE# dependencies
+ *
+ * 256 entries of 256 bits (32 bytes) each
+ */
+#define PELTV_TABLE_SIZE	0x2000
+
+/* PEST Table : 4KB - PE state table
+ *
+ * 256 entries of 16 bytes each containing state bits for each PE
+ *
+ * AFAIK: This acts as a backup for an on-chip cache and shall be
+ * accessed via the indirect IODA table access registers only
+ */
+#define PEST_TABLE_SIZE		0x1000
+
+/* RBA Table : 256 bytes - Reject Bit Array
+ *
+ * 2048 interrupts, 1 bit each, indiates the reject state of interrupts
+ */
+#define RBA_TABLE_SIZE		0x100
+
+/*
+ * State structure for a PHB
+ */
+
+/*
+ * (Comment copied from p7ioc.h, please update both when relevant)
+ *
+ * The PHB State structure is essentially used during PHB reset
+ * or recovery operations to indicate that the PHB cannot currently
+ * be used for normal operations.
+ *
+ * Some states involve waiting for the timebase to reach a certain
+ * value. In which case the field "delay_tgt_tb" is set and the
+ * state machine will be run from the "state_poll" callback.
+ *
+ * At IPL time, we call this repeatedly during the various sequences
+ * however under OS control, this will require a change in API.
+ *
+ * Fortunately, the OPAL API for slot power & reset are not currently
+ * used by Linux, so changing them isn't going to be an issue. The idea
+ * here is that some of these APIs will return a positive integer when
+ * neededing such a delay to proceed. The OS will then be required to
+ * call a new function opal_poll_phb() after that delay. That function
+ * will potentially return a new delay, or OPAL_SUCCESS when the original
+ * operation has completed successfully. If the operation has completed
+ * with an error, then opal_poll_phb() will return that error.
+ *
+ * Note: Should we consider also returning optionally some indication
+ * of what operation is in progress for OS debug/diag purposes ?
+ *
+ * Any attempt at starting a new "asynchronous" operation while one is
+ * already in progress will result in an error.
+ *
+ * Internally, this is represented by the state being P7IOC_PHB_STATE_FUNCTIONAL
+ * when no operation is in progress, which it reaches at the end of the
+ * boot time initializations. Any attempt at performing a slot operation
+ * on a PHB in that state will change the state to the corresponding
+ * operation state machine. Any attempt while not in that state will
+ * return an error.
+ *
+ * Some operations allow for a certain amount of retries, this is
+ * provided for by the "retries" structure member for use by the state
+ * machine as it sees fit.
+ */
+enum phb3_state {
+	/* First init state */
+	PHB3_STATE_UNINITIALIZED,
+
+	/* During PHB HW inits */
+	PHB3_STATE_INITIALIZING,
+
+	/* Set if the PHB is for some reason unusable */
+	PHB3_STATE_BROKEN,
+
+	/* Normal PHB functional state */
+	PHB3_STATE_FUNCTIONAL,
+
+	/* Fundamental reset */
+	PHB3_STATE_FRESET_ASSERT_DELAY,
+	PHB3_FRESET_DEASSERT_DELAY,
+
+	/* Link state machine */
+	PHB3_STATE_WAIT_LINK,
+};
+
+struct phb3 {
+	unsigned int		index;	    /* 0..2 index inside P8 */
+	unsigned int		chip_id;    /* Chip ID (== GCID on P8) */
+	void			*regs;
+	uint64_t		pe_xscom;   /* XSCOM bases */
+	uint64_t		pci_xscom;
+	uint64_t		spci_xscom;
+	struct lock		lock;
+	uint64_t		mm_base;    /* Full MM window to PHB */
+	uint64_t		mm_size;    /* '' '' '' */
+
+	/* SkiBoot owned in-memory tables */
+	uint64_t		tbl_rtt;
+	uint64_t		tbl_peltv;
+	uint64_t		tbl_pest;
+
+	bool			skip_perst; /* Skip first perst */
+	bool			has_link;
+	enum phb3_state		state;
+	uint64_t		delay_tgt_tb;
+	uint64_t		retries;
+	int64_t			ecap;	    /* cached PCI-E cap offset */
+	int64_t			aercap;	    /* cached AER ecap offset */
+	struct phb		phb;
+};
+
+static inline struct phb3 *phb_to_phb3(struct phb *phb)
+{
+	return container_of(phb, struct phb3, phb);
+}
+
+#endif /* __PHB3_H */

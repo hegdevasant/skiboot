@@ -259,6 +259,9 @@ void main_cpu_entry(const void *fdt, u32 master_cpu)
 	probe_p5ioc2();
 	probe_p7ioc();
 
+	/* Probe PHB3 on P8 */
+	probe_phb3();
+
 	/* Initialize PCI */
 	pci_init_slots();
 

@@ -61,6 +61,11 @@
 /* We keep a gap of 4M for skiboot text & bss for now, then
  * we have our heap which goes up to base + 16M (so 12M for
  * now, though we can certainly reduce that a lot)
+ *
+ * One of the biggest consumer of memory here is going to
+ * be the various PHB3 tables. We should probably improve
+ * our memalign implementation to avoid wasting so much
+ * memory.
  */
 #define HEAP_BASE		(SKIBOOT_BASE + 0x00400000)
 #define HEAP_SIZE		0x00c00000

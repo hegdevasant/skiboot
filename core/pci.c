@@ -531,7 +531,8 @@ static void pci_init_slot(struct phb *phb)
 
 	/*
 	 * Power on the PHB, the PHB should be reset in
-	 * fundamental way while powering on.
+	 * fundamental way while powering on. The reset
+	 * state machine is going to wait for the link
 	 */
 	rc = pci_reset_phb(phb);
 	if (rc)
