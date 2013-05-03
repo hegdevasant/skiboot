@@ -23,7 +23,7 @@
 
 static unsigned int pcia_index(const void *pcia)
 {
-	return (pcia - spira.ntuples.pcia.addr)
+	return (pcia - (void *)get_hdif(&spira.ntuples.pcia, "SPPCIA"))
 		/ spira.ntuples.pcia.alloc_len;
 }
 
@@ -241,14 +241,9 @@ bool pcia_parse(void)
 	bool got_pcia = false;
 
 	/* Check PCIA exists... if not, maybe we are getting a PACA ? */
-	pcia = spira.ntuples.pcia.addr;
+	pcia = get_hdif(&spira.ntuples.pcia, "SPPCIA");
 	if (!pcia)
 		return false;
-
-	if (!HDIF_check(pcia, "SPPCIA")) {
-		prerror("Invalid PCIA signature !\n");
-		return false;
-	}
 
 	printf("Got PCIA !\n");
 

@@ -17,12 +17,13 @@ void sysvpd_parse(void)
 	uint8_t sz;
 	const void *sysvpd;
 	unsigned int sysvpd_sz;
+	struct HDIF_common_hdr *sysvpd_hdr;
 
-	if (!spira.ntuples.system_vpd.addr)
+	sysvpd_hdr = get_hdif(&spira.ntuples.system_vpd, SYSVPD_HDIF_SIG);
+	if (!sysvpd_hdr)
 		goto no_sysvpd;
 
-	sysvpd = HDIF_get_idata(spira.ntuples.system_vpd.addr,
-				SYSVPD_IDATA_KW_VPD, &sysvpd_sz);
+	sysvpd = HDIF_get_idata(sysvpd_hdr, SYSVPD_IDATA_KW_VPD, &sysvpd_sz);
 	if (!CHECK_SPPTR(sysvpd))
 		goto no_sysvpd;
 

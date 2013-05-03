@@ -188,9 +188,9 @@ bool __memory_parse(struct dt_node *root)
 	const struct msvpd_total_config_ms *tcms;
 	unsigned int size;
 
-	ms_vpd = spira.ntuples.ms_vpd.addr;
-	if (!ms_vpd || !HDIF_check(ms_vpd, MSVPD_HDIF_SIG)) {
-		prerror("MS VPD: invalid id field at %p\n", ms_vpd);
+	ms_vpd = get_hdif(&spira.ntuples.ms_vpd, MSVPD_HDIF_SIG);
+	if (!ms_vpd) {
+		prerror("MS VPD: invalid\n");
 		op_display(OP_FATAL, OP_MOD_MEM, 0x0000);
 		return false;
 	}

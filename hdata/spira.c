@@ -78,6 +78,21 @@ bool spira_check_ptr(const void *ptr, const char *file, unsigned int line)
 	return false;
 }
 
+struct HDIF_common_hdr *__get_hdif(struct spira_ntuple *n, const char id[],
+				   const char *file, int line)
+{
+	struct HDIF_common_hdr *h = n->addr;
+	if (!spira_check_ptr(h, file, line))
+		return NULL;
+
+	if (!HDIF_check(h, id)) {
+		prerror("SPIRA: bad tuple %p: expected %s at %s line %d\n",
+			h, id, file, line);
+		return NULL;
+	}
+	return h;
+}
+
 static struct dt_node *add_interrupt_controller(void)
 {
 	struct dt_node *ics = dt_new_addr(dt_root, "interrupt-controller", 0);
@@ -94,13 +109,14 @@ static struct dt_node *add_interrupt_controller(void)
 
 static void add_xscom(void)
 {
-	const void *ms_vpd = spira.ntuples.ms_vpd.addr;
+	const void *ms_vpd;
 	const struct msvpd_pmover_bsr_synchro *pmbs;
 	struct dt_node *xn;
 	unsigned int size;
 	uint64_t xscom_base, xscom_size;
 
-	if (!ms_vpd || !HDIF_check(ms_vpd, MSVPD_HDIF_SIG)) {
+	ms_vpd = get_hdif(&spira.ntuples.ms_vpd, MSVPD_HDIF_SIG);
+	if (!ms_vpd) {
 		prerror("XSCOM: Can't find MS VPD\n");
 		return;
 	}
@@ -188,12 +204,12 @@ static void add_chiptod_old(void)
 	/*
 	 * Locate chiptod ID structures in SPIRA
 	 */
-	if (!CHECK_SPPTR(spira.ntuples.chip_tod.addr)) {
+	if (!get_hdif(&spira.ntuples.chip_tod, "TOD   ")) {
 		prerror("CHIPTOD: Cannot locate old style SPIRA TOD info\n");
 		return;
 	}
 
-	for_each_ntuple_idx(spira.ntuples.chip_tod, hdif, i) {
+	for_each_ntuple_idx(&spira.ntuples.chip_tod, hdif, i, "TOD   ") {
 		const struct chiptod_chipid *id;
 		struct dt_node *node;
 
@@ -253,12 +269,12 @@ static void add_chiptod_new(void)
 	/*
 	 * Locate Proc Chip ID structures in SPIRA
 	 */
-	if (!CHECK_SPPTR(spira.ntuples.proc_chip.addr)) {
+	if (!get_hdif(&spira.ntuples.proc_chip, SPPCRD_HDIF_SIG)) {
 		prerror("CHIPTOD: Cannot locate new style SPIRA TOD info\n");
 		return;
 	}
 
-	for_each_ntuple_idx(spira.ntuples.proc_chip, hdif, i) {
+	for_each_ntuple_idx(&spira.ntuples.proc_chip, hdif, i, SPPCRD_HDIF_SIG) {
 		const struct sppcrd_chip_info *cinfo;
 		const struct sppcrd_chip_tod *tinfo;
 		struct dt_node *node;
@@ -389,13 +405,9 @@ static void add_iplparams(void)
 	struct dt_node *iplp_node;
 	const void *ipl_parms;
 
-	ipl_parms = spira.ntuples.ipl_parms.addr;
-	if (!CHECK_SPPTR(ipl_parms)) {
+	ipl_parms = get_hdif(&spira.ntuples.ipl_parms, "IPLPMS");
+	if (!ipl_parms) {
 		prerror("IPLPARAMS: Cannot find IPL Parms in SPIRA\n");
-		return;
-	}
-	if (!HDIF_check(ipl_parms, "IPLPMS")) {
-		prerror("IPLPARAMS: IPL Parms has wrong header type\n");
 		return;
 	}
 

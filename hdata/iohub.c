@@ -407,13 +407,12 @@ void io_parse(struct dt_node *ics)
 	unsigned int i, size;
 
 	/* Look for IO Hubs */
-	sp_iohubs = spira.ntuples.cec_iohub_fru.addr;
-	if (!sp_iohubs) {
+	if (!get_hdif(&spira.ntuples.cec_iohub_fru, "IO HUB")) {
 		prerror("CEC: Cannot locate IO Hub FRU data !\n");
 		return;
 	}
 
-	for_each_ntuple_idx(spira.ntuples.cec_iohub_fru, sp_iohubs, i) {
+	for_each_ntuple_idx(&spira.ntuples.cec_iohub_fru, sp_iohubs, i, "IO HUB") {
 		const struct cechub_hub_fru_id *fru_id_data;
 		unsigned int type;
 		static const char *typestr[] = {

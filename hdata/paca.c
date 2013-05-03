@@ -14,12 +14,12 @@
 
 #define PACA_MAX_THREADS 4
 
-#define for_each_paca(p) for_each_ntuple(spira.ntuples.paca, p)
+#define for_each_paca(p) for_each_ntuple(&spira.ntuples.paca, p, "PROCIN")
 
 static unsigned int paca_index(const struct HDIF_common_hdr *paca)
 {
-	return ((void *)paca - spira.ntuples.paca.addr)
-		/ spira.ntuples.paca.alloc_len;
+	void *start = get_hdif(&spira.ntuples.paca, "PROCIN");
+	return ((void *)paca - start) / spira.ntuples.paca.alloc_len;
 }
 
 static const char *cpu_state(u32 flags)
@@ -234,8 +234,8 @@ static bool __paca_parse(void)
 	const struct HDIF_common_hdr *paca;
 	struct dt_node *cpus;
 
-	paca = spira.ntuples.paca.addr;
-	if (!HDIF_check(paca, "SPPACA")) {
+	paca = get_hdif(&spira.ntuples.paca, "SPPACA");
+	if (!paca) {
 		prerror("Invalid PACA (PCIA = %p)\n", spira.ntuples.pcia.addr);
 		return false;
 	}

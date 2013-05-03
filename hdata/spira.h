@@ -76,16 +76,22 @@ extern struct spira spira;
  */
 #define CHECK_SPPTR(_ptr)	spira_check_ptr(_ptr, __FILE__, __LINE__)
 
-#define for_each_ntuple_idx(_ntuples, _p, _idx)				\
-	for (_p = (_ntuples).addr, _idx = 0;				\
-	     _idx < (_ntuples).act_cnt;					\
-	     _p = (_ntuples).addr + (++_idx * (_ntuples).alloc_len))
+#define get_hdif(ntuple, id) __get_hdif((ntuple), (id), __FILE__, __LINE__)
 
-#define for_each_ntuple(_ntuples, _p)					\
-	for (_p = (_ntuples).addr;					\
-	     (void *)_p < (_ntuples).addr				\
-		     + ((_ntuples).act_cnt * (_ntuples).alloc_len);	\
-	     _p = (void *)_p + (_ntuples).alloc_len)
+extern struct HDIF_common_hdr *__get_hdif(struct spira_ntuple *n,
+					  const char id[],
+					  const char *file, int line);
+
+#define for_each_ntuple_idx(_ntuples, _p, _idx, _id)			\
+	for (_p = get_hdif((_ntuples), _id ""), _idx = 0;		\
+	     _p && _idx < (_ntuples)->act_cnt;				\
+	     _p = (void *)_p + (_ntuples)->alloc_len, _idx++)
+
+#define for_each_ntuple(_ntuples, _p, _id)				\
+	for (_p = get_hdif((_ntuples), _id "");				\
+	     _p && (void *)_p < (_ntuples)->addr			\
+		     + ((_ntuples)->act_cnt * (_ntuples)->alloc_len);	\
+	     _p = (void *)_p + (_ntuples)->alloc_len)
 
 
 extern bool spira_check_ptr(const void *ptr, const char *file,
