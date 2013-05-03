@@ -1422,9 +1422,7 @@ static void phb3_setup_aib(struct phb3 *p)
 	 * via XSCOM
 	 */
 	/* Init_2 - AIB TX Channel Mapping Register */
-	/* use default value
-	out_be64(p->regs + PHB_AIB_TX_CHAN_MAPPING, 0x011230000000000);
-	*/
+	out_be64(p->regs + PHB_AIB_TX_CHAN_MAPPING,     0x0211230000000000);
 
 	/* Init_3 - AIB RX command credit register */
 	out_be64(p->regs + PHB_AIB_RX_CMD_CRED,		0x0020000100010001);
@@ -1436,14 +1434,10 @@ static void phb3_setup_aib(struct phb3 *p)
 	out_be64(p->regs + PHB_AIB_RX_CRED_INIT_TIMER,	0x0f00000000000000);
 
 	/* Init_6 - AIB Tag Enable register */
-	/* use default value
 	out_be64(p->regs + PHB_AIB_TAG_ENABLE,		0xffffffff00000000);
-	*/
 
 	/* Init_7 - TCE Tag Enable register */
-	/* use default value
 	out_be64(p->regs + PHB_TCE_TAG_ENABLE,		0xffffffff00000000);
-	*/
 }
 
 static void phb3_init_ioda2(struct phb3 *p)
@@ -1481,13 +1475,13 @@ static void phb3_init_ioda2(struct phb3 *p)
 	/* Init_24 - Interrupt represent timers */
 	out_be64(p->regs + PHB_INTREP_TIMER, 0);
 
-	/* Init_25 - PHB3 Configuration Register */
-	/* We keep MSI disabled until the IVT and RBA have been configured
-	 * by the OS. First clear the TCE cache, then configure the PHB
+	/* Init_25 - PHB3 Configuration Register. Clear TCE cache then
+	 *           configure the PHB
 	 */
 	out_be64(p->regs + PHB_PHB3_CONFIG, PHB_PHB3C_64B_TCE_EN);
 	out_be64(p->regs + PHB_PHB3_CONFIG,
-		 PHB_PHB3C_M32_EN | PHB_PHB3C_32BIT_MSI_EN | PHB_PHB3C_64BIT_MSI_EN);
+		 PHB_PHB3C_M32_EN | PHB_PHB3C_32BIT_MSI_EN |
+		 PHB_PHB3C_64BIT_MSI_EN);
 
 	/* Init_26 - At least 512ns delay according to spec */
 	time_wait_ms(1);
@@ -1674,29 +1668,24 @@ static void phb3_init_utl(struct phb3 *p)
 	 * right "interrupt" signal
 	 */
 	out_be64(p->regs + UTL_SYS_BUS_AGENT_STATUS,       0xffffffffffffffff);
-	out_be64(p->regs + UTL_SYS_BUS_AGENT_ERR_SEVERITY, 0x0000000000000000);
+	out_be64(p->regs + UTL_SYS_BUS_AGENT_ERR_SEVERITY, 0x5000000000000000);
 	out_be64(p->regs + UTL_SYS_BUS_AGENT_IRQ_EN,       0xfcc0000000000000);
-	/* XXX BML uses:
-	out_be64(p->regs + UTL_SYS_BUS_AGENT_IRQ_EN,       0xac80000000000000);
-	*/
 
 	/* Init_80..81: Setup tag allocations */
-	/* using default values
 	out_be64(p->regs + UTL_PCIE_TAGS_ALLOC,            0x0800000000000000);
 	out_be64(p->regs + UTL_GBIF_READ_TAGS_ALLOC,       0x2000000000000000);
-	*/
 
 	/* Init_82: PCI Express port control */
-	out_be64(p->regs + UTL_PCIE_PORT_CONTROL,          0x8580007000000000);
+	out_be64(p->regs + UTL_PCIE_PORT_CONTROL,          0x8588006000000000);
 
 	/* Init_83..85: Clean & setup port errors */
 	out_be64(p->regs + UTL_PCIE_PORT_STATUS,           0xffdfffffffffffff);
-	out_be64(p->regs + UTL_PCIE_PORT_ERROR_SEV,        0x0038000000000000);
+	out_be64(p->regs + UTL_PCIE_PORT_ERROR_SEV,        0x5289500000000000);
 
 	if (p->has_link)
-		out_be64(p->regs + UTL_PCIE_PORT_IRQ_EN,   0xffdb800000000000);
+		out_be64(p->regs + UTL_PCIE_PORT_IRQ_EN,   0xffdbf80000000000);
 	else
-		out_be64(p->regs + UTL_PCIE_PORT_IRQ_EN,   0xffc3800000000000);
+		out_be64(p->regs + UTL_PCIE_PORT_IRQ_EN,   0xffc3f80000000000);
 
 	/* Init_86 : Cleanup RC errors */
 	out_be64(p->regs + UTL_RC_STATUS,                  0xffffffffffffffff);
@@ -1711,7 +1700,7 @@ static void phb3_init_errors(struct phb3 *p)
 	out_be64(p->regs + PHB_ERR_STATUS,		   0xffffffffffffffff);
 	out_be64(p->regs + PHB_ERR1_STATUS,		   0x0000000000000000);
 	out_be64(p->regs + PHB_ERR_LEM_ENABLE,		   0xffffffffffffffff);
-	out_be64(p->regs + PHB_ERR_FREEZE_ENABLE,	   0x0000000080800000);
+	out_be64(p->regs + PHB_ERR_FREEZE_ENABLE,	   0x0000000000800000);
 	out_be64(p->regs + PHB_ERR_AIB_FENCE_ENABLE,	   0xffffffdd0c00ffc0);
 	out_be64(p->regs + PHB_ERR_LOG_0,		   0x0000000000000000);
 	out_be64(p->regs + PHB_ERR_LOG_1,		   0x0000000000000000);
@@ -1812,8 +1801,11 @@ static void phb3_init_hw(struct phb3 *p)
 	phb3_init_utl(p);
 
 	/* Init_87: PHB Control register. Various PHB settings */
-	out_be64(p->regs + PHB_CONTROL, 	       	   0xf3a8014b00000000);
-
+#ifdef IVT_TABLE_IVE_16B
+	out_be64(p->regs + PHB_CONTROL, 	       	   0xf3a80f4b00000000);
+#else
+	out_be64(p->regs + PHB_CONTROL, 	       	   0xf3a80fcb00000000);
+#endif
 	/* Init_88..128  : Setup error registers */
 	phb3_init_errors(p);
 
@@ -1823,6 +1815,10 @@ static void phb3_init_hw(struct phb3 *p)
 		PHBERR(p, "Errors detected during PHB init: 0x%16llx\n", val);
 		goto failed;
 	}
+
+	/* NOTE: At this point the spec waits for the link to come up. We
+	 * don't bother as we are doing a PERST soon.
+	 */
 
 	/* XXX I don't know why the spec does this now and not earlier, so
 	 * to be sure to get it right we might want to move it to the freset
@@ -1848,18 +1844,21 @@ static void phb3_init_hw(struct phb3 *p)
 
 	/* Init_136 - Re-enable error interrupts */
 
-	/* Note: Might need to check if some of these need masking
-	 *       while there is no link
-	 */
-	out_be64(p->regs + PHB_ERR_IRQ_ENABLE,	   0x00000032f0f80000);
-	out_be64(p->regs + PHB_OUT_ERR_IRQ_ENABLE, 0x600443fc03a000f0);
-	out_be64(p->regs + PHB_INA_ERR_IRQ_ENABLE, 0xc000a3ff89260026);
-	out_be64(p->regs + PHB_INB_ERR_IRQ_ENABLE, 0x0000400000800000);
-	out_be64(p->regs + PHB_LEM_ERROR_MASK,	   0x42092f367f7028ae);
+	/* TBD: Should we mask any of these for PERST ? */
+	out_be64(p->regs + PHB_ERR_IRQ_ENABLE,	   0x0000002280b80000);
+	out_be64(p->regs + PHB_OUT_ERR_IRQ_ENABLE, 0x600c42fc042080f0);
+	out_be64(p->regs + PHB_INA_ERR_IRQ_ENABLE, 0xc000a3a901826020);
+	out_be64(p->regs + PHB_INB_ERR_IRQ_ENABLE, 0x0000600000800070);
+	out_be64(p->regs + PHB_LEM_ERROR_MASK,	   0x42498e327f502eae);
 
 	/* Init_141 - Enable DMA address speculation */
 	out_be64(p->regs + PHB_TCE_SPEC_CTL,		   0xf000000000000000);
 
+	/* Init_142 - PHB3 - Timeout Control Register 1 */
+	out_be64(p->regs + PHB_TIMEOUT_CTRL1,		   0x1111112016200000);
+
+	/* Init_143 - PHB3 - Timeout Control Register 2 */
+	out_be64(p->regs + PHB_TIMEOUT_CTRL2,		   0x2320d10b00000000);
 
 	/* Mark the PHB as functional which enables all the various sequences */
 	p->state = PHB3_STATE_FUNCTIONAL;
