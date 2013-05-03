@@ -27,21 +27,6 @@ static unsigned int pcia_index(const void *pcia)
 		/ spira.ntuples.pcia.alloc_len;
 }
 
-static const char *cpu_state(u32 flags)
-{
-	switch ((flags & CPU_ID_VERIFY_MASK) >> CPU_ID_VERIFY_SHIFT) {
-	case CPU_ID_VERIFY_USABLE_NO_FAILURES:
-		return "OK";
-	case CPU_ID_VERIFY_USABLE_FAILURES:
-		return "FAILURES";
-	case CPU_ID_VERIFY_NOT_INSTALLED:
-		return "NOT-INSTALLED";
-	case CPU_ID_VERIFY_UNUSABLE:
-		return "UNUSABLE";
-	}
-	return "**UNKNOWN**";
-}
-
 static const struct sppcia_cpu_thread *find_tada(const void *pcia,
 						 unsigned int thread)
 {

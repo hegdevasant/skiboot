@@ -762,4 +762,18 @@ struct sppcrd_chip_tod {
 	u32 tod_ctrl_reg;
 } __packed;
 
+static inline const char *cpu_state(u32 flags)
+{
+	switch ((flags & CPU_ID_VERIFY_MASK) >> CPU_ID_VERIFY_SHIFT) {
+	case CPU_ID_VERIFY_USABLE_NO_FAILURES:
+		return "OK";
+	case CPU_ID_VERIFY_USABLE_FAILURES:
+		return "FAILURES";
+	case CPU_ID_VERIFY_NOT_INSTALLED:
+		return "NOT-INSTALLED";
+	case CPU_ID_VERIFY_UNUSABLE:
+		return "UNUSABLE";
+	}
+	return "**UNKNOWN**";
+}
 #endif /* __SPIRA_H */

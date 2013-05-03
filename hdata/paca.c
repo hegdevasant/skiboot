@@ -22,21 +22,6 @@ static unsigned int paca_index(const struct HDIF_common_hdr *paca)
 	return ((void *)paca - start) / spira.ntuples.paca.alloc_len;
 }
 
-static const char *cpu_state(u32 flags)
-{
-	switch ((flags & CPU_ID_VERIFY_MASK) >> CPU_ID_VERIFY_SHIFT) {
-	case CPU_ID_VERIFY_USABLE_NO_FAILURES:
-		return "OK";
-	case CPU_ID_VERIFY_USABLE_FAILURES:
-		return "FAILURES";
-	case CPU_ID_VERIFY_NOT_INSTALLED:
-		return "NOT-INSTALLED";
-	case CPU_ID_VERIFY_UNUSABLE:
-		return "UNUSABLE";
-	}
-	return "**UNKNOWN**";
-}
-
 static struct dt_node *add_cpu_node(struct dt_node *cpus,
 				    const struct HDIF_common_hdr *paca,
 				    const struct sppaca_cpu_id *id,
