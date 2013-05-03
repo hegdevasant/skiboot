@@ -5,7 +5,6 @@
  * number V032404DR, executed by the parties on November 6, 2007, and
  * Supplement V032404DR-3 dated August 16, 2012 (the “NDA”). */
 #include <skiboot.h>
-#include <spira.h>
 #include <cec.h>
 #include <p7ioc.h>
 #include <p5ioc2.h>
