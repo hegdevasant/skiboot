@@ -1231,7 +1231,7 @@ static int fsp_psi_init_phb(struct fsp_iopath *fiop, bool active,
 		 */
 		out_be64(fiop->gxhb_regs + PSIHB_IRQ_SRC_COMP,
 			 (((u64)fiop->interrupt) << 45) |
-			 (0xffff0ul) << 13);
+			 ((0xffff0ul) << 13) | (0x3ull << 32));
 		out_be64(fiop->gxhb_regs + PSIHB_XIVR_FSP,
 			 (0xffull << 32) | (0 << 29));
 		out_be64(fiop->gxhb_regs + PSIHB_XIVR_OCC,
