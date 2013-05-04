@@ -12,6 +12,8 @@
 #include <ccan/str/str.h>
 #include <device.h>
 
+#include "hdata.h"
+
 #define PCIA_MAX_THREADS	8
 
 #define for_each_pcia(p)						\
@@ -206,11 +208,8 @@ static struct dt_node *add_core_node(struct dt_node *cpus,
 
 	dt_add_property_cells(cpu, "ibm,pir", t->pir);
 
-	/* XXX FIXME ? This value is a SW thingy, we want to get the real
-	 * chip ID from the PIR or the XSCOM address (can be different
-	 * between P7 and P8)
-	 */
-	dt_add_property_cells(cpu, "ibm,chip-id", id->proc_chip_id);
+	dt_add_property_cells(cpu, "ibm,chip-id",
+			      pcid_to_chip_id(id->proc_chip_id));
 
 	/* Add private "ibase" property used by other bits of skiboot */
 	dt_add_property_u64(cpu, DT_PRIVATE "ibase", cleanup_addr(t->ibase));

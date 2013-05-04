@@ -88,9 +88,9 @@ void unregister_irq_source(uint32_t start, uint32_t count)
 }
 
 /*
- * This takes a 5-bit chip id (node:3 + chip:2) and returns a 20 bit
- * value representing the PSI interrupt. This includes all the fields
- * above, ie, is a global interrupt number
+ * This takes a 6-bit chip id and returns a 20 bit value representing
+ * the PSI interrupt. This includes all the fields above, ie, is a
+ * global interrupt number
  */
 uint32_t get_psi_interrupt(uint32_t chip_id)
 {
@@ -98,10 +98,12 @@ uint32_t get_psi_interrupt(uint32_t chip_id)
 
 	switch(proc_gen) {
 	case proc_gen_p7:
-		/* Get the node ID bits into position */
-		irq  = (chip_id & 0x1c) << (4 + 9 + 1 + 2 + 1);
-		/* Get the chip ID bits into position */
-		irq |= (chip_id & 0x03) << (4 + 9 + 1);
+		/* Get the chip ID into position, it already has
+		 * the T bit so all we need is room for the GX
+		 * bit, 9 bit BUID and 4 bit level
+		 */
+		irq  = chip_id << (1 + 9 + 4);
+
 		/* Add in the BUID */
 		irq |= P7_PSI_IRQ_BUID << 4;
 		break;

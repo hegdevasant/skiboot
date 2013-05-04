@@ -17,11 +17,10 @@
  */
 static int gx_p7_configure_psi_buid(uint32_t chip, uint32_t buid)
 {
-	uint32_t gcid = xscom_chip_to_gcid(chip);
 	uint64_t mode1;
 	int rc;
 
-	rc = xscom_read(gcid, GX_P7_MODE1_REG, &mode1);
+	rc = xscom_read(chip, GX_P7_MODE1_REG, &mode1);
 	if (rc) {
 		prerror("GX: XSCOM error %d reading GX MODE1 REG\n", rc);
 		return rc;
@@ -31,7 +30,7 @@ static int gx_p7_configure_psi_buid(uint32_t chip, uint32_t buid)
 	mode1 &= ~GX_P7_MODE1_PSI_BUID_DISABLE;
 
 	printf("GX: MODE1_REG set to 0x%llx\n", mode1);
-	rc = xscom_write(gcid, GX_P7_MODE1_REG, mode1);
+	rc = xscom_write(chip, GX_P7_MODE1_REG, mode1);
 	if (rc) {
 		prerror("GX: XSCOM error %d writing GX MODE1 REG\n", rc);
 		return rc;
@@ -42,11 +41,10 @@ static int gx_p7_configure_psi_buid(uint32_t chip, uint32_t buid)
 
 static int gx_p7p_configure_psi_buid(uint32_t chip, uint32_t buid)
 {
-	uint32_t gcid = xscom_chip_to_gcid(chip);
 	uint64_t mode4;
 	int rc;
 
-	rc = xscom_read(gcid, GX_P7P_MODE4_REG, &mode4);
+	rc = xscom_read(chip, GX_P7P_MODE4_REG, &mode4);
 	if (rc) {
 		prerror("GX: XSCOM error %d reading GX MODE1 REG\n", rc);
 		return rc;
@@ -55,7 +53,7 @@ static int gx_p7p_configure_psi_buid(uint32_t chip, uint32_t buid)
 	mode4 = SETFIELD(GX_P7P_MODE4_PSI_BUID, mode4, buid);
 	mode4 &= ~GX_P7P_MODE4_PSI_BUID_DISABLE;
 
-	rc = xscom_write(gcid, GX_P7P_MODE4_REG, mode4);
+	rc = xscom_write(chip, GX_P7P_MODE4_REG, mode4);
 	if (rc) {
 		prerror("GX: XSCOM error %d writing GX MODE1 REG\n", rc);
 		return rc;
@@ -90,7 +88,6 @@ int gx_configure_psi_buid(uint32_t chip, uint32_t buid)
 static int gx_p7_configure_tce_bar(uint32_t chip, uint32_t gx, uint64_t addr,
 				   uint64_t size)
 {
-	uint32_t gcid = xscom_chip_to_gcid(chip);
 	uint32_t areg, mreg;
 	int rc;
 
@@ -116,11 +113,11 @@ static int gx_p7_configure_tce_bar(uint32_t chip, uint32_t gx, uint64_t addr,
 		taddr |= GX_P7_TCE_BAR_ENABLE;
 		tmask = SETFIELD(GX_P7_TCE_MASK, 0ul,
 				 ~((size - 1) >> GX_P7_TCE_BAR_ADDR_SHIFT));
-		rc = xscom_write(gcid, areg, 0);
-		rc |= xscom_write(gcid, mreg, tmask);
-		rc |= xscom_write(gcid, areg, taddr);
+		rc = xscom_write(chip, areg, 0);
+		rc |= xscom_write(chip, mreg, tmask);
+		rc |= xscom_write(chip, areg, taddr);
 	} else {
-		rc = xscom_write(gcid, areg, 0);
+		rc = xscom_write(chip, areg, 0);
 	}
 	return rc ? -EIO : 0;
 }

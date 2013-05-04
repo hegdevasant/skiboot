@@ -4,19 +4,15 @@
  * confidentiality governed by the Parties’ Mutual Nondisclosure Agreement
  * number V032404DR, executed by the parties on November 6, 2007, and
  * Supplement V032404DR-3 dated August 16, 2012 (the “NDA”). */
-#ifndef __HDATA_H
-#define __HDATA_H
 
-struct dt_node;
+#include <skiboot.h>
+#include <chip.h>
 
-extern void paca_parse(void);
-extern bool pcia_parse(void);
-extern void fsp_parse(void);
-extern void io_parse(struct dt_node *ics);
-extern void sysvpd_parse(void);
-
-extern struct dt_node *find_xscom_for_chip(uint32_t chip_id);
-extern uint32_t pcid_to_chip_id(uint32_t proc_chip_id);
-
-#endif /* __HDATA_H */
+uint32_t pir_to_chip_id(uint32_t pir)
+{
+	if (proc_gen == proc_gen_p8)
+		return P8_PIR2GCID(pir);
+	else
+		return P7_PIR2GCID(pir);
+}
 

@@ -8,46 +8,7 @@
 #include <io.h>
 #include <processor.h>
 #include <device.h>
-
-/*
- * P7 GCID
- *
- * Convert a PIR value to a Global Chip ID (insert Torrent bit)
- *
- * Global chip ID is a 6 bit number:
- *
- *     NodeID    T   ChipID
- * |           |   |       |
- * |___|___|___|___|___|___|
- *
- * Where T is the "torrent" bit and is 0 for P7 chips and 1 for
- * directly XSCOM'able IO chips such as Torrent
- */
-#define P7_PIR2GCID(pir) ({ 				\
-	uint32_t _pir = pir;				\
-	((_pir >> 4) & 0x38) | ((_pir >> 5) & 0x3); })
-
-/* Convert a 5-bit Chip# (NodeID | ChipID) into a GCID */
-#define P7_CHIP2GCID(chip) ({				\
-	uint32_t _chip = chip;				\
-	((_chip << 1) & 0x38) | (_chip & 0x3); })
-
-/*
- * P8 GCID
- *
- * Convert a PIR value to a Global Chip ID (insert Torrent bit)
- *
- * Global chip ID is a 6 bit number:
- *
- *     NodeID      ChipID
- * |           |           |
- * |___|___|___|___|___|___|
- *
- * The difference with P7 is the absence of T bit, the ChipID
- * is 3 bits long. There is no P8 variant of CHIP2GCID since
- * chip ID and GCID are the same thing.
- */
-#define P8_PIR2GCID(pir) (((pir) >> 7) & 0x3f)
+#include <chip.h>
 
 /* XSCOM base address default */
 #define XSCOM_DEFAULT_BASE	0x00001A0000000000UL
@@ -183,34 +144,14 @@ int xscom_write(uint32_t gcid, uint32_t pcb_addr, uint64_t val)
 	return 0;
 }
 
-uint32_t xscom_pir_to_gcid(uint32_t pir)
-{
-	if (xscom_p8_mode)
-		return P8_PIR2GCID(pir);
-	else
-		return P7_PIR2GCID(pir);
-}
-
-uint32_t xscom_chip_to_gcid(uint32_t chip_id)
-{
-	if (xscom_p8_mode)
-		return chip_id;
-	else
-		return P7_CHIP2GCID(chip_id);
-}
-
 int xscom_readme(uint32_t pcb_addr, uint64_t *val)
 {
-	uint32_t pir = this_cpu()->pir;
-
-	return xscom_read(xscom_pir_to_gcid(pir), pcb_addr, val);
+	return xscom_read(this_cpu()->chip_id, pcb_addr, val);
 }
 
 int xscom_writeme(uint32_t pcb_addr, uint64_t val)
 {
-	uint32_t pir = this_cpu()->pir;
-
-	return xscom_write(xscom_pir_to_gcid(pir), pcb_addr, val);
+	return xscom_write(this_cpu()->chip_id, pcb_addr, val);
 }
 
 void xscom_init(void)

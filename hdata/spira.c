@@ -11,6 +11,7 @@
 #include <vpd.h>
 #include <interrupts.h>
 #include <ccan/str/str.h>
+#include <chip.h>
 
 #include "hdata.h"
 
@@ -23,7 +24,6 @@
  */
 
 static int cpu_type;
-
 
 static struct proc_init_data proc_init_data = {
 	.hdr = HDIF_SIMPLE_HDR("PROCIN", 1, struct proc_init_data),
@@ -156,7 +156,7 @@ static void add_xscom(void)
 	 * be programmed in hardware, let's isolate these. This seems to give
 	 * me the right value on VPL1
 	 */
-	if (PVR_TYPE(mfspr(SPR_PVR)) == PVR_TYPE_P7)
+	if (cpu_type == PVR_TYPE_P7)
 		xscom_base &= 0x80003e0000000000ul;
 
 	xscom_base = cleanup_addr(xscom_base);
@@ -188,7 +188,11 @@ static void add_xscom(void)
 	/* Otherwise, check the old-style PACA, looking for unique chips */
 	for_each_ntuple_idx(spira.ntuples.paca, hdif, i) {
 		const struct sppaca_cpu_id *id;
+		unsigned int chip_id;
 		int ve;
+
+		/* We only suport old style PACA on P7 ! */
+		assert(cpu_type == PVR_TYPE_P7);
 
 		id = HDIF_get_idata(hdif, SPPACA_IDATA_CPU_ID, NULL);
 
@@ -203,11 +207,14 @@ static void add_xscom(void)
 		    ve == CPU_ID_VERIFY_UNUSABLE)
 			continue;
 
+		/* Convert to HW chip ID */
+		chip_id = P7_PIR2GCID(id->pir);
+
 		/* do we already have an XSCOM for this chip? */
-		if (find_xscom_for_chip(id->processor_chip_id))
+		if (find_xscom_for_chip(chip_id))
 			continue;
 
-		add_xscom_node(xscom_base, id->processor_chip_id);
+		add_xscom_node(xscom_base, chip_id);
 	}
 }
 
@@ -275,14 +282,14 @@ static void add_chiptod_old(void)
 			continue;
 		}
 
-		add_chiptod_node(id->chip_id, id->flags);
+		add_chiptod_node(pcid_to_chip_id(id->chip_id), id->flags);
 	}
 }
 
 static void add_chiptod_new(uint32_t master_cpu)
 {
 	const void *hdif;
-	unsigned int i;
+	unsigned int i, master_chip;
 
 	/*
 	 * Locate Proc Chip ID structures in SPIRA
@@ -291,6 +298,8 @@ static void add_chiptod_new(uint32_t master_cpu)
 		prerror("CHIPTOD: Cannot locate new style SPIRA TOD info\n");
 		return;
 	}
+
+	master_chip = pir_to_chip_id(master_cpu);
 
 	for_each_ntuple_idx(spira.ntuples.proc_chip, hdif, i) {
 		const struct sppcrd_chip_info *cinfo;
@@ -325,14 +334,8 @@ static void add_chiptod_new(uint32_t master_cpu)
 		 * assigned master.
 		 */
 		if (!size) {
-			struct cpu_thread *t = find_cpu_by_pir(master_cpu);
-			if (!t) {
-				prerror("CHIPTOD: NOT FOUND!\n");
-				continue;
-			}
-
 			flags = CHIPTOD_ID_FLAGS_STATUS_OK;
-			if (t->chip_id == cinfo->xscom_id)
+			if (cinfo->xscom_id == master_chip)
 				flags |= CHIPTOD_ID_FLAGS_PRIMARY;
 		}
 
@@ -445,6 +448,58 @@ static void add_iplparams(void)
 	add_iplparams_serials(ipl_parms, iplp_node);
 }
 
+/* Various structure contain a "proc_chip_id" which is an arbitrary
+ * numbering used by HDAT to reference chips, which doesn't correspond
+ * to the HW IDs. We want to use the HW IDs everywhere in the DT so
+ * we convert using this.
+ *
+ * Note: On P7, the HW ID is the XSCOM "GCID" including the T bit which
+ * is *different* from the chip ID portion of the interrupt server#
+ * (or PIR). See the explanations in chip.h
+ */
+uint32_t pcid_to_chip_id(uint32_t proc_chip_id)
+{
+	unsigned int i;
+	const void *hdif;
+
+	/* First, try the proc_chip ntuples for chip data */
+	for_each_ntuple_idx(spira.ntuples.proc_chip, hdif, i) {
+		const struct sppcrd_chip_info *cinfo;
+
+		cinfo = HDIF_get_idata(hdif, SPPCRD_IDATA_CHIP_INFO,
+						NULL);
+		if (!CHECK_SPPTR(cinfo)) {
+			prerror("XSCOM: Bad ChipID data %d\n", i);
+			continue;
+		}
+		if (proc_chip_id == cinfo->proc_chip_id)
+			return cinfo->xscom_id;
+	}
+
+	/* Otherwise, check the old-style PACA, looking for unique chips */
+	for_each_ntuple_idx(spira.ntuples.paca, hdif, i) {
+		const struct sppaca_cpu_id *id;
+
+		/* We only suport old style PACA on P7 ! */
+		assert(cpu_type == PVR_TYPE_P7);
+
+		id = HDIF_get_idata(hdif, SPPACA_IDATA_CPU_ID, NULL);
+
+		if (!CHECK_SPPTR(id)) {
+			prerror("XSCOM: Bad processor data %d\n", i);
+			continue;
+		}
+
+		if (proc_chip_id == id->processor_chip_id)
+			return P7_PIR2GCID(id->pir);
+	}
+
+	/* Not found, what to do ? Assert ? For now return a number
+	 * guaranteed to not exist
+	 */
+	return (uint32_t)-1;
+}
+
 void parse_hdat(bool is_opal, uint32_t master_cpu)
 {
 	struct dt_node *ics;
@@ -467,19 +522,15 @@ void parse_hdat(bool is_opal, uint32_t master_cpu)
 	dt_add_property_cells(dt_root, "#size-cells", 2);
 	dt_add_property_string(dt_root, "lid-type", is_opal ? "opal" : "phyp");
 
-	/*
-	 * IPL params go first, they contain stuff that may be
-	 * needed at any point later on such as the IPL side to
-	 * fetch VPD LIDs etc...
-	 */
+	/* Parse SPPACA and/or PCIA */
+	if (!pcia_parse())
+		paca_parse();
+
+	/* IPL params */
 	add_iplparams();
 
 	/* Get model property based on System VPD */
 	sysvpd_parse();
-
-	/* Parse SPPACA and/or PCIA */
-	if (!pcia_parse())
-		paca_parse();
 
 	/* Parse MS VPD */
 	memory_parse();

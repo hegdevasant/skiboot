@@ -13,6 +13,8 @@
 #include <device_tree.h>
 #include <interrupts.h>
 
+#include "hdata.h"
+
 static struct dt_node *fsp_create_node(const void *spss, int i,
 				       struct dt_node *parent)
 {
@@ -87,7 +89,7 @@ struct dt_node *fsp_create_link(const struct spss_iopath *iopath, int index,
 	       fsp_index, index, ststr, iopath->psi.gxhb_base);
 
 	addr = cleanup_addr(iopath->psi.gxhb_base);
-	chip_id = iopath->psi.proc_chip_id;
+	chip_id = pcid_to_chip_id(iopath->psi.proc_chip_id);
 
 	node = dt_new_addr(dt_root, "psi", addr);
 	assert(node);

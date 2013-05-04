@@ -42,7 +42,7 @@
 #define ECCB_TIMEOUT	100000
 
 /* We assume as single LPC bus in use in the system for now */
-static uint32_t lpc_gcid;
+static uint32_t lpc_chip_id;
 static uint32_t lpc_base;
 static struct lock lpc_lock = LOCK_UNLOCKED;
 
@@ -72,7 +72,7 @@ int lpc_write(uint32_t addr, uint32_t data, unsigned int sz)
 	}
 
 	do_unlock = lock_recursive(&lpc_lock);
-	rc = xscom_write(lpc_gcid, lpc_base + ECCB_DATA, data_reg);
+	rc = xscom_write(lpc_chip_id, lpc_base + ECCB_DATA, data_reg);
 	if (rc) {
 		prerror("LPC: XSCOM write to ECCB DATA error %d\n", rc);
 		goto bail;
@@ -81,14 +81,14 @@ int lpc_write(uint32_t addr, uint32_t data, unsigned int sz)
 	ctl = SETFIELD(ECCB_CTL_DATASZ, ctl, sz);
 	ctl = SETFIELD(ECCB_CTL_ADDRLEN, ctl, ECCB_ADDRLEN_4B);
 	ctl = SETFIELD(ECCB_CTL_ADDR, ctl, addr);
-	rc = xscom_write(lpc_gcid, lpc_base + ECCB_CTL, ctl);
+	rc = xscom_write(lpc_chip_id, lpc_base + ECCB_CTL, ctl);
 	if (rc) {
 		prerror("LPC: XSCOM write to ECCB CTL error %d\n", rc);
 		goto bail;
 	}
 
 	for (tout = 0; tout < ECCB_TIMEOUT; tout++) {
-		rc = xscom_read(lpc_gcid, lpc_base + ECCB_STAT, &stat);
+		rc = xscom_read(lpc_chip_id, lpc_base + ECCB_STAT, &stat);
 		if (rc) {
 			prerror("LPC: XSCOM read from ECCB STAT err %d\n", rc);
 			goto bail;
@@ -128,14 +128,14 @@ int lpc_read(uint32_t addr, uint32_t *data, unsigned int sz)
 	ctl = SETFIELD(ECCB_CTL_DATASZ, ctl, sz);
 	ctl = SETFIELD(ECCB_CTL_ADDRLEN, ctl, ECCB_ADDRLEN_4B);
 	ctl = SETFIELD(ECCB_CTL_ADDR, ctl, addr);
-	rc = xscom_write(lpc_gcid, lpc_base + ECCB_CTL, ctl);
+	rc = xscom_write(lpc_chip_id, lpc_base + ECCB_CTL, ctl);
 	if (rc) {
 		prerror("LPC: XSCOM write to ECCB CTL error %d\n", rc);
 		goto bail;
 	}
 
 	for (tout = 0; tout < ECCB_TIMEOUT; tout++) {
-		rc = xscom_read(lpc_gcid, lpc_base + ECCB_STAT, &stat);
+		rc = xscom_read(lpc_chip_id, lpc_base + ECCB_STAT, &stat);
 		if (rc) {
 			prerror("LPC: XSCOM read from ECCB STAT err %d\n", rc);
 			goto bail;
@@ -189,9 +189,9 @@ void lpc_init(void)
 	/* XSCOM addresses have two cells: GCID and PCB address */
 	reg = dt_find_property(xn, "reg");
 	assert(reg);
-	lpc_gcid = ((uint32_t *)reg->prop)[0];
+	lpc_chip_id = ((uint32_t *)reg->prop)[0];
 	lpc_base = ((uint32_t *)reg->prop)[1];
 
-	printf("LPC: Found, GCID=0x%x PCB_Addr=0x%x\n", lpc_gcid, lpc_base);
+	printf("LPC: Found, GCID=0x%x PCB_Addr=0x%x\n", lpc_chip_id, lpc_base);
 }
 

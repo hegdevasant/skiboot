@@ -25,7 +25,8 @@ static void io_add_common(struct dt_node *hn, const struct cechub_io_hub *hub,
 	dt_add_property_cells(hn, "#size-cells", 2);
 	dt_add_property_cells(hn, "interrupt-parent", ics->phandle);
 	dt_add_property_cells(hn, "ibm,buid-ext", hub->buid_ext);
-	dt_add_property_cells(hn, "ibm,chip-id", hub->proc_chip_id);
+	dt_add_property_cells(hn, "ibm,chip-id",
+			      pcid_to_chip_id(hub->proc_chip_id));
 	dt_add_property_cells(hn, "ibm,gx-index", hub->gx_index);
 	dt_add_property_cells(hn, "revision", hub->ec_level);
 
@@ -160,7 +161,7 @@ static struct dt_node *io_add_murano(const struct cechub_io_hub *hub)
 	}
 
 	/* HACK: We return the XSCOM device for the VPD info */
-	return dt_root;
+	return xscom;
 }
 
 static struct dt_node *io_add_hea(const struct cechub_io_hub *hub,
