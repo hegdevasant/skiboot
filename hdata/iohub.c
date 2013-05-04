@@ -530,10 +530,11 @@ void io_parse(struct dt_node *ics)
 		       i, type > 4 ? "Unknown" : typestr[type]);
 
 		/*
-		 * We currently only handle the backplane (Juno). This might
-		 * need to be revisited if we ever want to support more
+		 * We currently only handle the backplane (Juno) and
+		 * processor FRU (P8 machines)
 		 */
-		if (type != CECHUB_FRU_TYPE_CEC_BKPLANE) {
+		if (type != CECHUB_FRU_TYPE_CEC_BKPLANE &&
+		    type != CECHUB_FRU_TYPE_CPU_CARD) {
 			prerror("CEC:   Unsupported type\n");
 			continue;
 		}
