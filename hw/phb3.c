@@ -2133,7 +2133,7 @@ static void phb3_probe_pbcq(struct dt_node *pbcq)
 	reg[1] = 0x1000;
 
 	np = dt_new_addr(dt_root, "pciex", reg[0]);
-	dt_add_property_strings(np, "compatible", "ibm,p8-pciex",
+	dt_add_property_strings(np, "compatible", "ibm,power8-pciex",
 				"ibm,ioda2-phb");
 	dt_add_property_strings(np, "device_type", "pciex");
 	dt_add_property(np, "reg", reg, sizeof(reg));
@@ -2157,10 +2157,10 @@ void probe_phb3(void)
 	struct dt_node *np;
 
 	/* Look for PBCQ XSCOM nodes */
-	dt_for_each_compatible(dt_root, np, "ibm,p8-pbcq")
+	dt_for_each_compatible(dt_root, np, "ibm,power8-pbcq")
 		phb3_probe_pbcq(np);
 
 	/* Look for newly created PHB nodes */
-	dt_for_each_compatible(dt_root, np, "ibm,p8-pciex")
+	dt_for_each_compatible(dt_root, np, "ibm,power8-pciex")
 		phb3_create(np);
 }

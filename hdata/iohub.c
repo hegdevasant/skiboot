@@ -112,7 +112,7 @@ static struct dt_node *io_add_phb3(const struct cechub_io_hub *hub,
 	dt_add_property(pbcq, "reg", reg, sizeof(reg));
 
 	/* A couple more things ... */
-	dt_add_property_strings(pbcq, "compatible", "ibm,p8-pbcq");
+	dt_add_property_strings(pbcq, "compatible", "ibm,power8-pbcq");
 	dt_add_property_cells(pbcq, "ibm,phb-index", index);
 
 	switch(index) {
