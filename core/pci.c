@@ -123,7 +123,7 @@ static struct pci_device *pci_scan_one(struct phb *phb, uint16_t bdfn)
 	}
 	pd->is_multifunction = !!(htype & 0x80);
 	pd->is_bridge = (htype & 0x7f) != 0;
-	pd->scan_map = 0xffff; /* Default */
+	pd->scan_map = 0xffffffff; /* Default */
 
 	ecap = pci_find_cap(phb, bdfn, PCI_CFG_CAP_ID_EXP);
 	if (ecap > 0) {
@@ -357,7 +357,7 @@ static uint8_t pci_scan(struct phb *phb, uint8_t bus, uint8_t max_bus,
 {
 	struct pci_device *pd;
 	uint8_t dev, fn, next_bus, max_sub, save_max;
-	uint16_t scan_map;
+	uint32_t scan_map;
 
 	/* Decide what to scan  */
 	scan_map = parent ? parent->scan_map : phb->scan_map;
@@ -380,7 +380,8 @@ static uint8_t pci_scan(struct phb *phb, uint8_t bus, uint8_t max_bus,
 		if (!pd->is_multifunction)
 			continue;
 		for (fn = 1; fn < 8; fn++) {
-			pd = pci_scan_one(phb, (bus << 8) | (dev << 3) | fn);
+			pd = pci_scan_one(phb, ((uint16_t)bus << 8) |
+					  (dev << 3) | fn);
 			pci_check_clear_freeze(phb);
 			if (pd)
 				list_add_tail(list, &pd->link);
