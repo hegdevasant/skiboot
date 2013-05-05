@@ -116,6 +116,14 @@ static struct dt_node *io_add_phb3(const struct cechub_io_hub *hub,
 	dt_add_property_strings(pbcq, "compatible", "ibm,power8-pbcq");
 	dt_add_property_cells(pbcq, "ibm,phb-index", index);
 
+	/* We indicate that this is an IBM setup, which means that
+	 * the presence detect A/B bits are meaningful. So far we
+	 * don't know whether they make any sense on customer setups
+	 * so we only set that when booting with HDAT
+	 */
+	dt_add_property(pbcq, "ibm,use-ab-detect", NULL, 0);
+
+	/* XXX This is changing in the HDAT spec ... */
 	switch(index) {
 	case 0:
 		dt_add_property_cells(pbcq, "ibm,lane_eq", hub->phb0_lane_eq);

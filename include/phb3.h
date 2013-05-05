@@ -202,8 +202,13 @@ enum phb3_state {
 	PHB3_FRESET_DEASSERT_DELAY,
 
 	/* Link state machine */
+	PHB3_STATE_WAIT_LINK_ELECTRICAL,
 	PHB3_STATE_WAIT_LINK,
 };
+
+/* Link timeouts, increments of 100ms */
+#define PHB3_LINK_WAIT_RETRIES		90
+#define PHB3_LINK_ELECTRICAL_RETRIES	10
 
 struct phb3 {
 	unsigned int		index;	    /* 0..2 index inside P8 */
@@ -227,6 +232,7 @@ struct phb3 {
 
 	bool			skip_perst; /* Skip first perst */
 	bool			has_link;
+	bool			use_ab_detect;
 	enum phb3_state		state;
 	uint64_t		delay_tgt_tb;
 	uint64_t		retries;

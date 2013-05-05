@@ -197,16 +197,14 @@ static int64_t phb3_presence_detect(struct phb *phb)
 {
 	struct phb3 *p = phb_to_phb3(phb);
 	uint16_t slot_stat;
+	uint64_t hp_override;
 	int64_t rc;
 
 	/* Test for PHB in error state ? */
 	if (p->state == PHB3_STATE_BROKEN)
 		return OPAL_HARDWARE;
 
-	/* XXX Check bifurcation stuff ? Also, IBM "A/B" bits in the
-	 * HotPlug override register might be of use though simics
-	 * doesn't appear to set them to a useful state
-	 */
+	/* XXX Check bifurcation stuff ? */
 
 	/* Read slot status register */
 	rc = phb3_pcicfg_read16(&p->phb, 0, p->ecap + PCICAP_EXP_SLOTSTAT,
@@ -214,9 +212,32 @@ static int64_t phb3_presence_detect(struct phb *phb)
 	if (rc != OPAL_SUCCESS)
 		return OPAL_HARDWARE;
 
+	/* Read hotplug override */
+	hp_override = in_be64(p->regs + PHB_HOTPLUG_OVERRIDE);
+
+	printf("PHB%d: slot_stat: 0x%04x, hp_override: 0x%016llx\n",
+	       phb->opal_id, slot_stat, hp_override);
+
+	/* So if the slot status says nothing connected, we bail out */
 	if (!(slot_stat & PCICAP_EXP_SLOTSTAT_PDETECTST))
 		return OPAL_SHPC_DEV_NOT_PRESENT;
 
+	/*
+	 * At this point, we can have one of those funky IBM
+	 * systems that has the presence bit set in the slot
+	 * status and nothing actually connected. If so, we
+	 * check the hotplug override A/B bits
+	 */
+	if (p->use_ab_detect &&
+	    (hp_override & PHB_HPOVR_PRESENCE_A) &&
+	    (hp_override & PHB_HPOVR_PRESENCE_B))
+		return OPAL_SHPC_DEV_NOT_PRESENT;
+
+	/*
+	 * Anything else, we assume device present, the link state
+	 * machine will perform an early bail out if no electrical
+	 * signaling is established after a second.
+	 */
 	return OPAL_SHPC_DEV_PRESENT;
 }
 
@@ -1041,31 +1062,43 @@ static int64_t phb3_sm_link_poll(struct phb3 *p)
 	 * we want to add retries and fallback to Gen1.
 	 */
 	switch(p->state) {
+	case PHB3_STATE_WAIT_LINK_ELECTRICAL:
+		/* Wait for the link electrical connection to be
+		 * established (shorter timeout). This allows us to
+		 * workaround spurrious presence detect on some machines
+		 * without waiting 10s each time
+		 */
+		reg = in_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL);
+		if (reg & PHB_PCIE_DLP_INBAND_PRESENCE) {
+			PHBDBG(p, "Electrical link detected...\n");
+			p->state = PHB3_STATE_WAIT_LINK;
+			p->retries = PHB3_LINK_WAIT_RETRIES;
+		} else if (p->retries-- == 0) {
+			PHBDBG(p, "Timeout waiting for electrical link\n");
+			/* No link, we still mark the PHB as functional */
+			p->state = PHB3_STATE_FUNCTIONAL;
+			return OPAL_SUCCESS;
+		}
+		return phb3_set_sm_timeout(p, msecs_to_tb(100));
 	case PHB3_STATE_WAIT_LINK:
 		/* XXX I used the PHB_PCIE_LINK_MANAGEMENT register here but
 		 *     simics doesn't seem to give me anything, so I've switched
 		 *     to PCIE_DLP_TRAIN_CTL which appears more reliable
 		 */
-		//reg = in_be64(p->regs + PHB_PCIE_LINK_MANAGEMENT);
-		//if (reg & PHB_PCIE_LM_LINK_ACTIVE) {
 		reg = in_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL);
 		if (reg & PHB_PCIE_DLP_TC_DL_LINKACT) {
 			/* Setup PHB for link up */
 			phb3_setup_for_link_up(p);
-
 			PHBDBG(p, "Link is up!\n");
-
 			p->state = PHB3_STATE_FUNCTIONAL;
 			return OPAL_SUCCESS;
 		}
-
 		if (p->retries-- == 0) {
 			PHBDBG(p, "Timeout waiting for link up\n");
 			/* No link, we still mark the PHB as functional */
 			p->state = PHB3_STATE_FUNCTIONAL;
 			return OPAL_SUCCESS;
 		}
-
 		return phb3_set_sm_timeout(p, msecs_to_tb(100));
 	default:
 		/* How did we get here ? */
@@ -1076,9 +1109,14 @@ static int64_t phb3_sm_link_poll(struct phb3 *p)
 
 static int64_t phb3_start_link_poll(struct phb3 *p)
 {
-	p->retries = 10;
-	p->state = PHB3_STATE_WAIT_LINK;
-	return phb3_set_sm_timeout(p, msecs_to_tb(10));
+	/*
+	 * Wait for link up to 10s. However, we give up after
+	 * only a second if the electrical connection isn't
+	 * stablished according to the DLP link control register
+	 */
+	p->retries = PHB3_LINK_ELECTRICAL_RETRIES;
+	p->state = PHB3_STATE_WAIT_LINK_ELECTRICAL;
+	return phb3_set_sm_timeout(p, msecs_to_tb(100));
 }
 
 static int64_t phb3_sm_fundamental_reset(struct phb3 *p)
@@ -1170,6 +1208,7 @@ static int64_t phb3_poll(struct phb *phb)
 	case PHB3_STATE_FRESET_ASSERT_DELAY:
 	case PHB3_FRESET_DEASSERT_DELAY:
 		return phb3_sm_fundamental_reset(p);
+	case PHB3_STATE_WAIT_LINK_ELECTRICAL:
 	case PHB3_STATE_WAIT_LINK:
 		return phb3_sm_link_poll(p);
 	default:
@@ -2018,6 +2057,9 @@ static void phb3_create(struct dt_node *np)
 	p->skip_perst = true;
 	p->has_link = false;
 
+	/* Check if we can use the A/B detect pins */
+	p->use_ab_detect = dt_has_node_property(np, "ibm,use-ab-detect", NULL);
+
 	/* Hello ! */
 	path = dt_get_path(np);
 	printf("PHB3: Found %s @%p MMIO [0x%016llx..0x%016llx]\n",
@@ -2147,9 +2189,10 @@ static void phb3_probe_pbcq(struct dt_node *pbcq)
 			      hi32(mmio_bar), lo32(mmio_bar),
 			      hi32(mmio_sz), lo32(mmio_sz));
 	dt_add_property_cells(np, "ibm,phb-index", pno);
-
-	/* We know on P8 that GCID == chip ID */
+	dt_add_property_cells(np, "ibm,pbcq", pbcq->phandle);
 	dt_add_property_cells(np, "ibm,chip-id", gcid);
+	if (dt_has_node_property(pbcq, "ibm,use-ab-detect", NULL))
+		dt_add_property(np, "ibm,use-ab-detect", NULL, 0);
 }
 
 void probe_phb3(void)
