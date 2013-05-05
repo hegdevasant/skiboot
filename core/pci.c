@@ -353,7 +353,8 @@ static void pci_cleanup_bridge(struct phb *phb, struct pci_device *pd)
  *           here as Linux may or may not do it
  */
 static uint8_t pci_scan(struct phb *phb, uint8_t bus, uint8_t max_bus,
-			struct list_head *list, struct pci_device *parent)
+			struct list_head *list, struct pci_device *parent,
+			bool scan_downstream)
 {
 	struct pci_device *pd;
 	uint8_t dev, fn, next_bus, max_sub, save_max;
@@ -387,6 +388,15 @@ static uint8_t pci_scan(struct phb *phb, uint8_t bus, uint8_t max_bus,
 				list_add_tail(list, &pd->link);
 		}
 	}
+
+	/*
+	 * We only scan downstream if instructed to do so by the
+	 * caller. Typically we avoid the scan when we know the
+	 * link is down already, which happens for the top level
+	 * root complex, and avoids a long secondary timeout
+	 */
+	if (!scan_downstream)
+		return bus;
 
 	next_bus = bus + 1;
 	max_sub = bus;
@@ -453,7 +463,7 @@ static uint8_t pci_scan(struct phb *phb, uint8_t bus, uint8_t max_bus,
 		/* Perform recursive scan */
 		if (do_scan) {
 			max_sub = pci_scan(phb, next_bus, max_bus,
-					   &pd->children, pd);
+					   &pd->children, pd, true);
 		} else if (!use_max) {
 			/* XXX Empty bridge... we leave room for hotplug
 			 * slots etc.. but we should be smarter at figuring
@@ -520,6 +530,7 @@ static int64_t pci_reset_phb(struct phb *phb)
 static void pci_init_slot(struct phb *phb)
 {
 	int64_t rc;
+	bool has_link;
 
 	printf("PHB%d: Init slot\n", phb->opal_id);
 
@@ -546,11 +557,16 @@ static void pci_init_slot(struct phb *phb)
 		       phb->opal_id, rc);
 		return;
 	}
-	if (phb->phb_type >= phb_type_pcie_v1)
+	has_link = rc != OPAL_SHPC_LINK_DOWN;
+
+	if(!has_link)
+		printf("PHB%d: Link down\n", phb->opal_id);
+	else if (phb->phb_type >= phb_type_pcie_v1)
 		printf("PHB%d: Link up at x%lld width\n", phb->opal_id, rc);
 
-	printf("PHB%d: Scanning...\n", phb->opal_id);
-	pci_scan(phb, 0, 0xff, &phb->devices, NULL);
+	printf("PHB%d: Scanning (upstream%s)...\n", phb->opal_id,
+	       has_link ? "+downsteam" : " only");
+	pci_scan(phb, 0, 0xff, &phb->devices, NULL, has_link);
 }
 
 int64_t pci_register_phb(struct phb *phb)
