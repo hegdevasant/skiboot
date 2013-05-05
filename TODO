@@ -8,7 +8,7 @@ TODO List
      - Handle link errors, etc...
      - Handle fallback to backup link, retraining, ...
   - Mbox/FSP:
-     - Handle reset/reload
+    - Handle reset/reload
     - Handle mbox errors better
      -> Properly keep messages queued up until comm resumes
      -> Abort/escalate for upper level restart some message
@@ -36,11 +36,6 @@ TODO List
       -> Improve it, support fallback to Gen1
       -> Improve OPAL APIs for reset  
       -> Add missing APIs (M64)
-  - Implement EEH support
-      -> Basic state analysis
-      -> PE freeze handling & reporting & recovering
-      -> PHB fence handling & reporting & recovering
-      -> P7IOC/GX fence handling & reporting & recovering
 
 * HMI
   - Implement a handler
@@ -53,7 +48,6 @@ TODO List
 	pass-on the HMI to the host so KVM does an exit & re-enters
 
 * Machine Checks
-  - Implement a handler
   - Figure out what to do
      -> See existing OPAL data structures
 
@@ -75,12 +69,9 @@ TODO List
  ** NEED HARDWARE **
 
 * P8 support
-  - XSCOM addressing differences (scom ID macros...)
-  - Sort out BUID assignment
   - Different NX setup from P7+ ?
   - PHB3
-     -> Base inits
-     -> New OPAL interfaces
+     -> M64 (for SR-IOV)
      -> EEH
 
 * FSP integration
@@ -142,4 +133,40 @@ TODO List
     -> Hotswap ?
     -> Storage attachment ?
     -> etc...
+  - Console selection to improve
+
+Related Linux-side and generic work
+===================================
+
+ - PCI: Split pci_mem_offset into per-window offset (generic code
+support is there, arch/powerpc needs fixing)
+
+ - PCI: Investigate M64 support:
+    * SR-IOV options
+    * Additionally maybe a single M64 to make room for large BARs
+    * Problem of dealing with bridge window alignment
+        - Alignment changes with window size (M32 vs M64 for example)
+        - Prefetchable might be moved to non-prefetchable by generic code
+           -> OK if M64 alignment always >= M32 alignment
+
+ - PCI: EEH
+    * Add initial EEH support from Gavin
+    * Update it for P8
+    * Investigate / improve logging of errors
+    * Look at config space problem
+         -> Any cfg space clears ER's on PE. Maybe should query if it's
+            a CFG error and only clear those conditions & trigger EEH
+            like readl & co otherwise. That means that we can't differenciate
+            "probe" cfg access from real failures on cfg access though. Other
+            approach is to have a hook in generic code to differenciate "probing"
+            from any other activity.
+
+ - NVRAM (FSP): Investigate situation
+    * Does it work at all ?
+    * Conflicts with pHyp ?
+    * How to use it...
+
+ - Retreive skiboot logs
+
+ - (FSP) Retreive/Generate FSP error logs
 
