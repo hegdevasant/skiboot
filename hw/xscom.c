@@ -164,7 +164,7 @@ void xscom_init(void)
 	max_gcid = 0;
 
 	dt_for_each_compatible(dt_root, xn, "ibm,xscom") {
-		gcid = dt_prop_get_u32(xn, "ibm,chip-id");
+		gcid = dt_get_chip_id(xn);
 
 		if (gcid > max_gcid)
 			max_gcid = gcid;
@@ -180,7 +180,7 @@ void xscom_init(void)
 	xscoms = zalloc((max_gcid + 1) * sizeof(*xscoms));
 
 	dt_for_each_compatible(dt_root, xn, "ibm,xscom") {
-		gcid = dt_prop_get_u32(xn, "ibm,chip-id");
+		gcid = dt_get_chip_id(xn);
 
 		/* XXX We need a proper address parsing. For now, we just
 		 * "know" that we are looking at a u64

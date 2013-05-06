@@ -1382,7 +1382,7 @@ static void fsp_create_fsp(struct dt_node *fsp_node)
 			fiop->state = fsp_path_backup;
 
 		fiop->gxhb_regs = (void *)dt_translate_address(link, 0, NULL);
-		fiop->chip_id = dt_prop_get_u32(link, "ibm,chip-id");
+		fiop->chip_id = dt_get_chip_id(link);
 		fiop->interrupt = dt_prop_get_u32(link, "interrupts");
 
 		if (active)

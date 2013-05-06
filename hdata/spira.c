@@ -117,7 +117,7 @@ struct dt_node *find_xscom_for_chip(uint32_t chip_id)
 	uint32_t id;
 
 	dt_for_each_compatible(dt_root, node, "ibm,xscom") {
-		id = dt_prop_get_u32(node, "ibm,chip-id");
+		id = dt_get_chip_id(node);
 		if (id == chip_id)
 			return node;
 	}

@@ -627,6 +627,19 @@ u64 dt_get_address(const struct dt_node *node, unsigned int index,
 	return dt_get_number(p->prop + pos, na);
 }
 
+u32 dt_get_chip_id(const struct dt_node *node)
+{
+	const struct dt_property *prop;
+
+	for (; node; node = node->parent) {
+		prop = dt_find_property(node, "ibm,chip-id");
+		if (prop)
+			return dt_property_get_cell(prop, 0);
+	}
+
+	assert(false);
+}
+
 unsigned int dt_count_addresses(const struct dt_node *node)
 {
 	const struct dt_property *p;

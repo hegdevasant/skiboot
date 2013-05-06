@@ -56,11 +56,7 @@ static bool __chiptod_init(u32 master_cpu)
 		/* Old DT has chip-id in chiptod node, newer only in the
 		 * parent xscom bridge
 		 */
-		if (dt_has_node_property(np, "ibm,chip-id", NULL))
-			chip = dt_prop_get_u32(np, "ibm,chip-id");
-		else
-			chip = dt_prop_get_u32(np->parent, "ibm,chip-id");
-
+		chip = dt_get_chip_id(np);
 
 		if (dt_has_node_property(np, "primary", NULL)) {
 		    chiptod_primary = chip;

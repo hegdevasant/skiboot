@@ -360,8 +360,8 @@ void init_all_cpus(void)
 		 */
 		pir = dt_prop_get_u32_def(cpu, "ibm,pir", server_no);
 
-		/* If the chip ID is absent, assume 0 */
-		chip_id = dt_prop_get_u32_def(cpu, "ibm,chip-id", 0);
+		/* We should always have an ibm,chip-id property */
+		chip_id = dt_get_chip_id(cpu);
 
 		/* Only use operational CPUs */
 		if (!strcmp(dt_prop_get(cpu, "status"), "okay"))
