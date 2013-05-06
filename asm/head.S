@@ -639,7 +639,8 @@ exc_secondary_start:
 	std	%r3,STACK_SRR1(%r1)
 	mflr	%r3
 	std	%r3,STACK_LR(%r1)
-	LOAD_IMM32(%r3,SKIBOOT_BASE + exception_entry_common - __head);
+	LOAD_IMM32(%r3,exception_entry_common - __head);
+	addis	%r3,%r3,SKIBOOT_BASE@h
 	mtlr	%r3
 3:	li	%r3,0
 	blrl	/* XXX Use a BH=01 variant to avoid link stack problems */
