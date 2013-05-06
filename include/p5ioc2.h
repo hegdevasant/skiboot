@@ -10,7 +10,6 @@
 #include <stdint.h>
 #include <cec.h>
 #include <io.h>
-#include <spira.h>
 #include <cec.h>
 #include <pci.h>
 #include <lock.h>

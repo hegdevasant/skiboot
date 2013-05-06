@@ -5,7 +5,7 @@
  * number V032404DR, executed by the parties on November 6, 2007, and
  * Supplement V032404DR-3 dated August 16, 2012 (the “NDA”). */
 #include <skiboot.h>
-#include <spira.h>
+#include "spira.h"
 #include <cpu.h>
 #include <fsp.h>
 #include <opal.h>
@@ -500,8 +500,7 @@ void io_parse(struct dt_node *ics)
 	int lx_idx;
 
 	/* Look for IO Hubs */
-	sp_iohubs = spira.ntuples.cec_iohub_fru.addr;
-	if (!sp_iohubs) {
+	if (!get_hdif(&spira.ntuples.cec_iohub_fru, "IO HUB")) {
 		prerror("CEC: Cannot locate IO Hub FRU data !\n");
 		return;
 	}
@@ -517,7 +516,8 @@ void io_parse(struct dt_node *ics)
 	/* Start with LX ID 0 */
 	lx_idx = 0;
 
-	for_each_ntuple_idx(spira.ntuples.cec_iohub_fru, sp_iohubs, i) {
+	for_each_ntuple_idx(&spira.ntuples.cec_iohub_fru, sp_iohubs, i,
+			    CECHUB_FRU_HDIF_SIG) {
 		const struct cechub_hub_fru_id *fru_id_data;
 		unsigned int type;
 		static const char *typestr[] = {

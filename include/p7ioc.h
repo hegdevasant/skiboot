@@ -7,7 +7,6 @@
 #ifndef __P7IOC_H
 #define __P7IOC_H
 
-#include <spira.h>
 #include <cec.h>
 #include <pci.h>
 #include <lock.h>

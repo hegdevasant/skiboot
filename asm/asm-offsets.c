@@ -7,7 +7,7 @@
 #include <stddef.h>
 #include <types.h>
 #include <skiboot.h>
-#include <spira.h>
+#include "../hdata/spira.h"
 #include <processor.h>
 #include <cpu.h>
 #include <stack.h>

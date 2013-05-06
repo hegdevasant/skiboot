@@ -5,7 +5,7 @@
  * number V032404DR, executed by the parties on November 6, 2007, and
  * Supplement V032404DR-3 dated August 16, 2012 (the “NDA”). */
 #include <device.h>
-#include <spira.h>
+#include "spira.h"
 #include <cpu.h>
 #include <memory.h>
 #include <vpd.h>
@@ -78,6 +78,21 @@ bool spira_check_ptr(const void *ptr, const char *file, unsigned int line)
 	return false;
 }
 
+struct HDIF_common_hdr *__get_hdif(struct spira_ntuple *n, const char id[],
+				   const char *file, int line)
+{
+	struct HDIF_common_hdr *h = n->addr;
+	if (!spira_check_ptr(h, file, line))
+		return NULL;
+
+	if (!HDIF_check(h, id)) {
+		prerror("SPIRA: bad tuple %p: expected %s at %s line %d\n",
+			h, id, file, line);
+		return NULL;
+	}
+	return h;
+}
+
 static void add_xscom_node(uint64_t base, uint32_t id)
 {
 	struct dt_node *node;
@@ -127,13 +142,14 @@ struct dt_node *find_xscom_for_chip(uint32_t chip_id)
 
 static void add_xscom(void)
 {
-	const void *ms_vpd = spira.ntuples.ms_vpd.addr;
+	const void *ms_vpd;
 	const struct msvpd_pmover_bsr_synchro *pmbs;
 	unsigned int size, i;
 	uint64_t xscom_base;
 	void *hdif;
 
-	if (!ms_vpd || !HDIF_check(ms_vpd, MSVPD_HDIF_SIG)) {
+	ms_vpd = get_hdif(&spira.ntuples.ms_vpd, MSVPD_HDIF_SIG);
+	if (!ms_vpd) {
 		prerror("XSCOM: Can't find MS VPD\n");
 		return;
 	}
@@ -162,7 +178,8 @@ static void add_xscom(void)
 	xscom_base = cleanup_addr(xscom_base);
 
 	/* First, try the proc_chip ntuples for chip data */
-	for_each_ntuple_idx(spira.ntuples.proc_chip, hdif, i) {
+	for_each_ntuple_idx(&spira.ntuples.proc_chip, hdif, i,
+			    SPPCRD_HDIF_SIG) {
 		const struct sppcrd_chip_info *cinfo;
 		u32 ve;
 
@@ -186,7 +203,7 @@ static void add_xscom(void)
 		return;
 
 	/* Otherwise, check the old-style PACA, looking for unique chips */
-	for_each_ntuple_idx(spira.ntuples.paca, hdif, i) {
+	for_each_ntuple_idx(&spira.ntuples.paca, hdif, i, PACA_HDIF_SIG) {
 		const struct sppaca_cpu_id *id;
 		unsigned int chip_id;
 		int ve;
@@ -268,12 +285,12 @@ static void add_chiptod_old(void)
 	/*
 	 * Locate chiptod ID structures in SPIRA
 	 */
-	if (!CHECK_SPPTR(spira.ntuples.chip_tod.addr)) {
+	if (!get_hdif(&spira.ntuples.chip_tod, "TOD   ")) {
 		prerror("CHIPTOD: Cannot locate old style SPIRA TOD info\n");
 		return;
 	}
 
-	for_each_ntuple_idx(spira.ntuples.chip_tod, hdif, i) {
+	for_each_ntuple_idx(&spira.ntuples.chip_tod, hdif, i, "TOD   ") {
 		const struct chiptod_chipid *id;
 
 		id = HDIF_get_idata(hdif, CHIPTOD_IDATA_CHIPID, NULL);
@@ -294,14 +311,15 @@ static void add_chiptod_new(uint32_t master_cpu)
 	/*
 	 * Locate Proc Chip ID structures in SPIRA
 	 */
-	if (!CHECK_SPPTR(spira.ntuples.proc_chip.addr)) {
+	if (!get_hdif(&spira.ntuples.proc_chip, SPPCRD_HDIF_SIG)) {
 		prerror("CHIPTOD: Cannot locate new style SPIRA TOD info\n");
 		return;
 	}
 
 	master_chip = pir_to_chip_id(master_cpu);
 
-	for_each_ntuple_idx(spira.ntuples.proc_chip, hdif, i) {
+	for_each_ntuple_idx(&spira.ntuples.proc_chip, hdif, i,
+			    SPPCRD_HDIF_SIG) {
 		const struct sppcrd_chip_info *cinfo;
 		const struct sppcrd_chip_tod *tinfo;
 		unsigned int size;
@@ -428,13 +446,9 @@ static void add_iplparams(void)
 	struct dt_node *iplp_node;
 	const void *ipl_parms;
 
-	ipl_parms = spira.ntuples.ipl_parms.addr;
-	if (!CHECK_SPPTR(ipl_parms)) {
+	ipl_parms = get_hdif(&spira.ntuples.ipl_parms, "IPLPMS");
+	if (!ipl_parms) {
 		prerror("IPLPARAMS: Cannot find IPL Parms in SPIRA\n");
-		return;
-	}
-	if (!HDIF_check(ipl_parms, "IPLPMS")) {
-		prerror("IPLPARAMS: IPL Parms has wrong header type\n");
 		return;
 	}
 
@@ -463,7 +477,8 @@ uint32_t pcid_to_chip_id(uint32_t proc_chip_id)
 	const void *hdif;
 
 	/* First, try the proc_chip ntuples for chip data */
-	for_each_ntuple_idx(spira.ntuples.proc_chip, hdif, i) {
+	for_each_ntuple_idx(&spira.ntuples.proc_chip, hdif, i,
+			    SPPCRD_HDIF_SIG) {
 		const struct sppcrd_chip_info *cinfo;
 
 		cinfo = HDIF_get_idata(hdif, SPPCRD_IDATA_CHIP_INFO,
@@ -477,7 +492,7 @@ uint32_t pcid_to_chip_id(uint32_t proc_chip_id)
 	}
 
 	/* Otherwise, check the old-style PACA, looking for unique chips */
-	for_each_ntuple_idx(spira.ntuples.paca, hdif, i) {
+	for_each_ntuple_idx(&spira.ntuples.paca, hdif, i, PACA_HDIF_SIG) {
 		const struct sppaca_cpu_id *id;
 
 		/* We only suport old style PACA on P7 ! */

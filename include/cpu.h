@@ -7,7 +7,6 @@
 #ifndef __CPU_H
 #define __CPU_H
 
-#include <hdif.h>
 #include <processor.h>
 #include <ccan/list/list.h>
 #include <lock.h>

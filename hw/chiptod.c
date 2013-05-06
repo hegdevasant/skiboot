@@ -11,7 +11,6 @@
 #include <chiptod.h>
 #include <xscom.h>
 #include <io.h>
-#include <spira.h>
 #include <cpu.h>
 
 //#define DBG(fmt...)	printf("CHIPTOD: " fmt)

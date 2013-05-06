@@ -5,7 +5,7 @@
  * number V032404DR, executed by the parties on November 6, 2007, and
  * Supplement V032404DR-3 dated August 16, 2012 (the “NDA”). */
 #include <skiboot.h>
-#include <spira.h>
+#include "spira.h"
 #include <cpu.h>
 #include <fsp.h>
 #include <opal.h>
@@ -16,27 +16,12 @@
 
 #define PACA_MAX_THREADS 4
 
-#define for_each_paca(p) for_each_ntuple(spira.ntuples.paca, p)
+#define for_each_paca(p) for_each_ntuple(&spira.ntuples.paca, p, "PROCIN")
 
 static unsigned int paca_index(const struct HDIF_common_hdr *paca)
 {
-	return ((void *)paca - spira.ntuples.paca.addr)
-		/ spira.ntuples.paca.alloc_len;
-}
-
-static const char *cpu_state(u32 flags)
-{
-	switch ((flags & CPU_ID_VERIFY_MASK) >> CPU_ID_VERIFY_SHIFT) {
-	case CPU_ID_VERIFY_USABLE_NO_FAILURES:
-		return "OK";
-	case CPU_ID_VERIFY_USABLE_FAILURES:
-		return "FAILURES";
-	case CPU_ID_VERIFY_NOT_INSTALLED:
-		return "NOT-INSTALLED";
-	case CPU_ID_VERIFY_UNUSABLE:
-		return "UNUSABLE";
-	}
-	return "**UNKNOWN**";
+	void *start = get_hdif(&spira.ntuples.paca, "PROCIN");
+	return ((void *)paca - start) / spira.ntuples.paca.alloc_len;
 }
 
 static struct dt_node *add_cpu_node(struct dt_node *cpus,
@@ -237,8 +222,8 @@ static bool __paca_parse(void)
 	const struct HDIF_common_hdr *paca;
 	struct dt_node *cpus;
 
-	paca = spira.ntuples.paca.addr;
-	if (!HDIF_check(paca, "SPPACA")) {
+	paca = get_hdif(&spira.ntuples.paca, "SPPACA");
+	if (!paca) {
 		prerror("Invalid PACA (PCIA = %p)\n", spira.ntuples.pcia.addr);
 		return false;
 	}

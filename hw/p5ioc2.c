@@ -7,7 +7,6 @@
 #include <skiboot.h>
 #include <p5ioc2.h>
 #include <p5ioc2-regs.h>
-#include <spira.h>
 #include <cec.h>
 #include <gx.h>
 #include <opal.h>

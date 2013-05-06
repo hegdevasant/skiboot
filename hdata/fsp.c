@@ -5,7 +5,7 @@
  * number V032404DR, executed by the parties on November 6, 2007, and
  * Supplement V032404DR-3 dated August 16, 2012 (the “NDA”). */
 #include <device.h>
-#include <spira.h>
+#include "spira.h"
 #include <cpu.h>
 #include <memory.h>
 #include <vpd.h>
@@ -170,7 +170,7 @@ void fsp_parse(void)
 	 */
 	
 	/* Find SPSS in SPIRA */
-	base_spss = spira.ntuples.sp_subsys.addr;
+	base_spss = get_hdif(&spira.ntuples.sp_subsys, SPSS_HDIF_SIG);
 	if (!base_spss) {
 		printf("FSP: No SPSS in SPIRA !\n");
 		return;
@@ -182,13 +182,7 @@ void fsp_parse(void)
 	dt_add_property_cells(fsp_root, "#size-cells", 0);
 
 	/* Iterate FSPs in SPIRA */
-	for_each_ntuple_idx(spira.ntuples.sp_subsys, spss, i) {
-
-		if (!HDIF_check(spss, SPSS_HDIF_SIG)) {
-			prerror("FSP #%d: SPSS signature mismatch !\n", i);
-			continue;
-		}
-
+	for_each_ntuple_idx(&spira.ntuples.sp_subsys, spss, i, SPSS_HDIF_SIG) {
 		fsp_node = fsp_create_node(spss, i, fsp_root);
 		if (fsp_node)
 			fsp_create_links(spss, i, fsp_node);
