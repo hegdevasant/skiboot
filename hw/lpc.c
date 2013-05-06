@@ -177,7 +177,6 @@ bool lpc_present(void)
 void lpc_init(void)
 {
 	struct dt_node *xn;
-	const struct dt_property *reg;
 
 	/* Assume only one LPC in device-tree for now ... */
 	xn = dt_find_compatible_node(dt_root, NULL, "ibm,power8-lpc");
@@ -187,11 +186,9 @@ void lpc_init(void)
 	}
 
 	/* XSCOM addresses have two cells: GCID and PCB address */
-	reg = dt_find_property(xn, "reg");
-	assert(reg);
-	lpc_chip_id = ((uint32_t *)reg->prop)[0];
-	lpc_base = ((uint32_t *)reg->prop)[1];
+	lpc_base = dt_get_address(xn, 0, NULL);
+	lpc_chip_id = dt_get_chip_id(xn);
 
-	printf("LPC: Found, GCID=0x%x PCB_Addr=0x%x\n", lpc_chip_id, lpc_base);
+	printf("LPC: Found, Chip=0x%x PCB_Addr=0x%x\n", lpc_chip_id, lpc_base);
 }
 
