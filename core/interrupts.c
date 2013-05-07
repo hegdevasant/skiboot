@@ -48,7 +48,7 @@ void register_irq_source(const struct irq_source_ops *ops, void *data,
 
 	lock(&irq_lock);
 	list_for_each(&irq_sources, is1, link) {
-		if (is->end >= is1->start && is->start < is1->end) {
+		if (is->end > is1->start && is->start < is1->end) {
 			prerror("register IRQ source overlap !\n");
 			prerror("  new: %x..%x old: %x..%x\n",
 				is->start, is->end - 1,
