@@ -1067,9 +1067,14 @@ static int64_t phb3_sm_link_poll(struct phb3 *p)
 		 * established (shorter timeout). This allows us to
 		 * workaround spurrious presence detect on some machines
 		 * without waiting 10s each time
+		 *
+		 * Note: We *also* check for the full link up bit here
+		 * because simics doesn't seem to implement the electrical
+		 * link bit at all
 		 */
 		reg = in_be64(p->regs + PHB_PCIE_DLP_TRAIN_CTL);
-		if (reg & PHB_PCIE_DLP_INBAND_PRESENCE) {
+		if (reg & (PHB_PCIE_DLP_INBAND_PRESENCE |
+			   PHB_PCIE_DLP_TC_DL_LINKACT)) {
 			PHBDBG(p, "Electrical link detected...\n");
 			p->state = PHB3_STATE_WAIT_LINK;
 			p->retries = PHB3_LINK_WAIT_RETRIES;
