@@ -17,7 +17,7 @@ SECTIONS
   
 	.rodata : {
 		__rodata_start = .;
-		*(.rodata)
+		*(.rodata .rodata.*)
 		__rodata_end = .;
 	}
 
