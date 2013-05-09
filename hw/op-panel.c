@@ -10,7 +10,10 @@
 #include <opal.h>
 #include <device.h>
 
-static struct fsp_msg *op_msg;
+static struct fsp_msg op_msg_resp;
+static struct fsp_msg op_msg = {
+	.resp = &op_msg_resp,
+};
 static struct fsp_msg *op_req;
 static struct lock op_lock = LOCK_UNLOCKED;
 
@@ -24,34 +27,21 @@ void op_display(enum op_severity sev, enum op_module mod, uint16_t code)
 	w1 |= tohex((code >>  4) & 0xf) <<  8;
 	w1 |= tohex((code      ) & 0xf);
 
-	/* We don't use mkmsg, we try to re-use the same msg to avoid
+	/* We don't use mkmsg, we use a preallocated msg to avoid
 	 * going down the malloc path etc... since this can be called
 	 * in case of fatal errors
 	 */
 	lock(&op_lock);
-	if (!op_msg)
-		op_msg = fsp_allocmsg(true);
-	if (!op_msg) {
-		unlock(&op_lock);
-		return;
-	}
-
-	fsp_fillmsg(op_msg, FSP_CMD_DISP_SRC_DIRECT, 3, 1, w0, w1);
-	fsp_sync_msg(op_msg, false);
+	fsp_fillmsg(&op_msg, FSP_CMD_DISP_SRC_DIRECT, 3, 1, w0, w1);
+	fsp_sync_msg(&op_msg, false);
 	unlock(&op_lock);
 }
 
 void op_panel_disable_src_echo(void)
 {
 	lock(&op_lock);
-	if (!op_msg)
-		op_msg = fsp_allocmsg(true);
-	if (!op_msg) {
-		unlock(&op_lock);
-		return;
-	}
-	fsp_fillmsg(op_msg, FSP_CMD_DIS_SRC_ECHO, 0);
-	fsp_sync_msg(op_msg, false);
+	fsp_fillmsg(&op_msg, FSP_CMD_DIS_SRC_ECHO, 0);
+	fsp_sync_msg(&op_msg, false);
 	unlock(&op_lock);
 }
 
