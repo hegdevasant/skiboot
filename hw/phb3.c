@@ -792,8 +792,8 @@ static int64_t phb3_lsi_set_xive(void *data,
 				 uint8_t prio)
 {
 	struct phb3 *p = data;
-	uint32_t chip, index, irq;
-	uint64_t lxive, m_server, m_prio;
+	uint32_t chip, index, irq, entry;
+	uint64_t lxive;
 
 	chip = P8_IRQ_TO_CHIP(isn);
 	index = P8_IRQ_TO_PHB(isn);
@@ -813,22 +813,14 @@ static int64_t phb3_lsi_set_xive(void *data,
 	 * it in order to hijack 3 bits of priority to extend
 	 * the server number
 	 */
-	p->lxive_cache[irq - PHB3_LSI_IRQ_MIN] = lxive;
-
-	/* Now we mangle the server and priority */
-	if (prio == 0xff) {
-		m_server = 0;
-		m_prio = 0xff;
-	} else {
-		m_server = server >> 3;
-		m_prio = (prio >> 3) | ((server & 7) << 5);
-	}
+	entry = irq - PHB3_LSI_IRQ_MIN;
+	p->lxive_cache[entry] = lxive;
 
 	/* We use HRT entry 0 always for now */
-	phb3_ioda_sel(p, IODA2_TBL_LXIVT, irq, false);
+	phb3_ioda_sel(p, IODA2_TBL_LXIVT, entry, false);
 	lxive = in_be64(p->regs + PHB_IODA_DATA0);
-	lxive = SETFIELD(IODA2_LXIVT_SERVER, lxive, m_server);
-	lxive = SETFIELD(IODA2_LXIVT_PRIORITY, lxive, m_prio);
+	lxive = SETFIELD(IODA2_LXIVT_SERVER, lxive, server);
+	lxive = SETFIELD(IODA2_LXIVT_PRIORITY, lxive, prio);
 	out_be64(p->regs + PHB_IODA_DATA0, lxive);
 
 	return OPAL_SUCCESS;
