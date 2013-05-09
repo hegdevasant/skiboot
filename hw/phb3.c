@@ -289,17 +289,14 @@ static void phb3_init_ioda_cache(struct phb3 *p)
 static int64_t phb3_ioda_reset(struct phb *phb, bool purge)
 {
 	struct phb3 *p = phb_to_phb3(phb);
-	uint64_t server, prio, m_server, m_prio;
+	uint64_t server, prio;
 	uint64_t *pdata64, data64;
 	uint32_t i;
 
-	if (purge)
+	if (purge) {
+		printf("PHB%d: Purging all IODA tables...\n", p->phb.opal_id);
 		phb3_init_ioda_cache(p);
-
-	/* Invalidate RTE, IVE, TCE cache */
-	out_be64(p->regs + PHB_RTC_INVALIDATE, PHB_RTC_INVALIDATE_ALL);
-	out_be64(p->regs + PHB_IVC_INVALIDATE, PHB_IVC_INVALIDATE_ALL);
-	out_be64(p->regs + PHB_TCE_KILL, PHB_TCE_KILL_ALL);
+	}
 
 	/* Init_27..28 - LIXVT */
 	phb3_ioda_sel(p, IODA2_TBL_LXIVT, 0, true);
@@ -307,18 +304,8 @@ static int64_t phb3_ioda_reset(struct phb *phb, bool purge)
 		data64 = p->lxive_cache[i];
 		server = GETFIELD(IODA2_LXIVT_SERVER, data64);
 		prio = GETFIELD(IODA2_LXIVT_PRIORITY, data64);
-
-		/* Now we mangle the server and priority */
-		if (prio == 0xff) {
-			m_server = 0;
-			m_prio = 0xff;
-		} else {
-			m_server = server >> 3;
-			m_prio = (prio >> 3) | ((server & 7) << 5);
-		}
-
-		data64 = SETFIELD(IODA2_LXIVT_SERVER, data64, m_server);
-		data64 = SETFIELD(IODA2_LXIVT_PRIORITY, data64, m_prio);
+		data64 = SETFIELD(IODA2_LXIVT_SERVER, data64, server);
+		data64 = SETFIELD(IODA2_LXIVT_PRIORITY, data64, prio);
 		out_be64(p->regs + PHB_IODA_DATA0, data64);
 	}
 
@@ -355,6 +342,26 @@ static int64_t phb3_ioda_reset(struct phb *phb, bool purge)
 			pdata64[i * IVT_TABLE_STRIDE] = p->ive_cache[i];
 	}
 
+	/* Invalidate RTE, IVE, TCE cache */
+	out_be64(p->regs + PHB_RTC_INVALIDATE, PHB_RTC_INVALIDATE_ALL);
+	out_be64(p->regs + PHB_IVC_INVALIDATE, PHB_IVC_INVALIDATE_ALL);
+	out_be64(p->regs + PHB_TCE_KILL, PHB_TCE_KILL_ALL);
+
+	/* Clear freeze */
+	for (i = 0; i < PHB3_MAX_PE_NUM; i++) {
+		uint64_t pesta, pestb;
+
+		phb3_ioda_sel(p, IODA2_TBL_PESTA, i, false);
+		pesta = in_be64(p->regs + PHB_IODA_DATA0);
+		out_be64(p->regs + PHB_IODA_DATA0, 0);
+		phb3_ioda_sel(p, IODA2_TBL_PESTB, i, false);
+		pestb = in_be64(p->regs + PHB_IODA_DATA0);
+		out_be64(p->regs + PHB_IODA_DATA0, 0);
+
+		if ((pesta & IODA2_PESTA_MMIO_FROZEN) ||
+		    (pestb & IODA2_PESTB_DMA_STOPPED))
+			printf("PHB%d: PE# %d was frozen\n", phb->opal_id, i);
+	}
 	return OPAL_SUCCESS;
 }
 
