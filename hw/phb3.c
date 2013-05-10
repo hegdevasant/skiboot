@@ -250,8 +250,18 @@ static void phb3_init_ioda_cache(struct phb3 *p)
 	/*
 	 * RTT and PELTV. RTE should be 0xFF's to indicate
 	 * invalid PE# for the corresponding RID.
+	 *
+	 * Note: Instead we set all RTE entries to 0x00 to
+	 * work around a problem where PE lookups might be
+	 * done before Linux has established valid PE's
+	 * (during PCI probing). We can revisit that once/if
+	 * Linux has been fixed to always setup valid PEs.
+	 *
+	 * The value 0x00 corresponds to the default PE# Linux
+	 * uses to check for config space freezes before it
+	 * has assigned PE# to busses.
 	 */
-	memset(p->rte_cache,   0xff, sizeof(p->rte_cache));
+	memset(p->rte_cache, 0x00, RTT_TABLE_SIZE);
 	memset(p->peltv_cache, 0x0,  sizeof(p->peltv_cache));
 
 	/* Disable all LSI */
@@ -903,7 +913,7 @@ static int64_t phb3_set_pe(struct phb *phb,
 	/* Map or unmap the RTT range */
 	if (all == 0x7) {
 		if (action == OPAL_MAP_PE) {
-			for (idx = 0; idx < RTT_TABLE_SIZE/2; idx++)
+			for (idx = 0; idx < RTT_TABLE_ENTRIES; idx++)
 				p->rte_cache[idx] = pe_num;
 		} else {
 			memset(p->rte_cache, 0xff, RTT_TABLE_SIZE);
@@ -913,7 +923,7 @@ static int64_t phb3_set_pe(struct phb *phb,
 			 PHB_RTC_INVALIDATE_ALL);
 	} else {
 		rte = (uint16_t *)p->tbl_rtt;
-		for (idx = 0; idx < RTT_TABLE_SIZE/2; idx++, rte++) {
+		for (idx = 0; idx < RTT_TABLE_ENTRIES; idx++, rte++) {
 			if ((idx & mask) != val)
 				continue;
 			p->rte_cache[idx] = (action ? pe_num : 0xffff);

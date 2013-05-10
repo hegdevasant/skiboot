@@ -92,7 +92,8 @@
  *
  * Entries are 2 bytes indexed by PCIe RID
  */
-#define RTT_TABLE_SIZE		0x20000
+#define RTT_TABLE_ENTRIES	0x10000
+#define RTT_TABLE_SIZE		(RTT_TABLE_ENTRIES * sizeof(struct rtt_entry))
 struct rtt_entry {
 	uint16_t pe_num;
 };
