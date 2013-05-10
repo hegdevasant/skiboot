@@ -140,21 +140,16 @@ static bool __chiptod_init(u32 master_cpu)
 	return true;
 }
 
-static uint64_t chiptod_setup_base_tfmr(void)
+static void chiptod_setup_base_tfmr(void)
 {
-	uint64_t tfmr;
-
-	tfmr = SPR_TFMR_TB_ECLIPZ;
+	base_tfmr = SPR_TFMR_TB_ECLIPZ;
 
 	/* XXX Those values need to be derived from the core freq
 	 *     I'm working on getting the right formula -- BenH
 	 */
-	tfmr = SETFIELD(SPR_TFMR_MAX_CYC_BET_STEPS, tfmr, 0x4b);
-	tfmr = SETFIELD(SPR_TFMR_N_CLKS_PER_STEP, tfmr, 0);
-	tfmr = SETFIELD(SPR_TFMR_SYNC_BIT_SEL, tfmr, 4);
-	mtspr(SPR_TFMR, tfmr);
-
-	return tfmr;
+	base_tfmr = SETFIELD(SPR_TFMR_MAX_CYC_BET_STEPS, base_tfmr, 0x4b);
+	base_tfmr = SETFIELD(SPR_TFMR_N_CLKS_PER_STEP, base_tfmr, 0);
+	base_tfmr = SETFIELD(SPR_TFMR_SYNC_BIT_SEL, base_tfmr, 4);
 }
 
 static bool chiptod_mod_tb(void)
@@ -165,15 +160,11 @@ static bool chiptod_mod_tb(void)
 	/* Switch timebase to "Not Set" state */
 	mtspr(SPR_TFMR, tfmr | SPR_TFMR_LOAD_TOD_MOD);
 	do {
-		if (++timeout >= TIMEOUT_LOOPS) {
+		if (++timeout >= (TIMEOUT_LOOPS*2)) {
 			prerror("CHIPTOD: TB \"Not Set\" timeout\n");
 			return false;
 		}
 		tfmr = mfspr(SPR_TFMR);
-		if (tfmr & SPR_TFMR_CHIP_TOD_TIMEOUT) {
-			prerror("CHIPTOD: TB \"Not Set\" X timeout\n");
-			return false;
-		}
 		if (tfmr & SPR_TFMR_TFMR_CORRUPT) {
 			prerror("CHIPTOD: TB \"Not Set\" TFMR corrupt\n");
 			return false;
@@ -480,6 +471,7 @@ static void chiptod_sync_master(void *data)
 	*result = true;
 	return;
  error:
+	prerror("CHIPTOD: Master sync failed! TFMR=0x%16lx\n", mfspr(SPR_TFMR));
 	*result = false;
 }
 
@@ -537,7 +529,7 @@ static void chiptod_sync_slave(void *data)
 	*result = true;
 	return;
  error:
-	prerror("CHIPTOD: Slave sync failed !\n");
+	prerror("CHIPTOD: Slave sync failed ! TFMR=0x%16lx\n", mfspr(SPR_TFMR));
 	*result = false;
 }
 
@@ -568,13 +560,12 @@ void chiptod_init(u32 master_cpu)
 	/* Calculate the base TFMR value used for everybody */
 	chiptod_setup_base_tfmr();
 
-	DBG("Base TFMR=0x%016lx\n", base_tfmr);
+	printf("CHIPTOD: Base TFMR=0x%016llx\n", base_tfmr);
 
 	/* Schedule master sync */
 	sres = false;
 	cpu_wait_job(cpu_queue_job(cpu0, chiptod_sync_master, &sres), true);
 	if (!sres) {
-		prerror("CHIPTOD: Master sync failed !\n");
 		op_display(OP_FATAL, OP_MOD_CHIPTOD, 2);
 		abort();
 	}
@@ -592,8 +583,6 @@ void chiptod_init(u32 master_cpu)
 		cpu_wait_job(cpu_queue_job(cpu, chiptod_sync_slave, &sres),
 			     true);
 		if (!sres) {
-			prerror("CHIPTOD: Slave sync failed on PIR 0x%04x !\n",
-				cpu->pir);
 			op_display(OP_WARN, OP_MOD_CHIPTOD, 3|(cpu->pir << 8));
 
 			/* Disable threads */
