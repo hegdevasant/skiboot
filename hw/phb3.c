@@ -715,18 +715,19 @@ static int64_t phb3_msi_set_xive(void *data,
 				 uint8_t prio)
 {
 	struct phb3 *p = data;
-	uint32_t chip, index, irq;
-	uint64_t *ive, data64, m_server, m_prio;
+	uint32_t chip, index;
+	uint64_t *cache, ive_num, data64, m_server, m_prio;
+	uint32_t *ive;
 
 	chip = P8_IRQ_TO_CHIP(isn);
 	index = P8_IRQ_TO_PHB(isn);
-	irq = PHB3_IRQ_NUM(isn);
+	ive_num = PHB3_IRQ_NUM(isn);
 
 	if (!p->tbl_rtt)
 		return OPAL_HARDWARE;
 	if (chip != p->chip_id ||
 	    index != p->index ||
-	    irq > PHB3_MSI_IRQ_MAX)
+	    ive_num > PHB3_MSI_IRQ_MAX)
 		return OPAL_PARAMETER;
 
 	/*
@@ -739,23 +740,34 @@ static int64_t phb3_msi_set_xive(void *data,
 	m_server = server;
 	m_prio = prio;
 
-	ive = &p->ive_cache[irq];
-	*ive = SETFIELD(IODA2_IVT_SERVER, *ive, m_server);
-	*ive = SETFIELD(IODA2_IVT_PRIORITY, *ive, m_prio);
+	cache = &p->ive_cache[ive_num];
+	*cache = SETFIELD(IODA2_IVT_SERVER,   *cache, m_server);
+	*cache = SETFIELD(IODA2_IVT_PRIORITY, *cache, m_prio);
 
 	/*
 	 * Update IVT and IVC. We need use IVC update register
 	 * to do that. Each IVE in the table has 128 bytes
 	 */
-	ive = (uint64_t *)p->tbl_ivt;
-	ive += (irq * IVT_TABLE_STRIDE);
+	ive = (uint32_t *)(p->tbl_ivt + ive_num * IVT_TABLE_STRIDE * 8);
 	data64 = PHB_IVC_UPDATE_ENABLE_SERVER | PHB_IVC_UPDATE_ENABLE_PRI;
+	data64 = SETFIELD(PHB_IVC_UPDATE_SID, data64, ive_num);
 	data64 = SETFIELD(PHB_IVC_UPDATE_SERVER, data64, m_server);
 	data64 = SETFIELD(PHB_IVC_UPDATE_PRI, data64, m_prio);
 
-	*ive = SETFIELD(IODA2_IVT_SERVER, *ive, m_server);
-	*ive = SETFIELD(IODA2_IVT_PRIORITY, *ive, m_prio);
+	/*
+	 * Don't use SETFIELD to update IVE entry since that
+	 * might have race condition to overwrite P/Q bits
+	 */
+	*ive = (m_server << 8) | m_prio;
 	out_be64(p->regs + PHB_IVC_UPDATE, data64);
+
+	/*
+	 * Handle P/Q bit if we're going to enable the interrupt.
+	 * The OS should make sure the interrupt handler has
+	 * been installed already.
+	 */
+	if (prio != 0xff)
+		return phb3_pci_msi_eoi(&p->phb, isn);
 
 	return OPAL_SUCCESS;
 }
