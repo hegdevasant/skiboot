@@ -602,7 +602,8 @@ static int64_t phb3_set_ive_pe(struct phb *phb,
 			       uint32_t ive_num)
 {
 	struct phb3 *p = phb_to_phb3(phb);
-	uint64_t *ive, data64;
+	uint64_t *cache, ivep, data64;
+	uint16_t *pe_word;
 
 	/* OS should enable the BAR in advance */
 	if (!p->tbl_ivt)
@@ -614,13 +615,13 @@ static int64_t phb3_set_ive_pe(struct phb *phb,
 		return OPAL_PARAMETER;
 
 	/* Update IVE cache */
-	ive = &p->ive_cache[ive_num];
-	*ive = SETFIELD(IODA2_IVT_PE, *ive, pe_num);
+	cache = &p->ive_cache[ive_num];
+	*cache = SETFIELD(IODA2_IVT_PE, *cache, pe_num);
 
-	/* Update in-memory IVE */
-	ive = (uint64_t *)p->tbl_ivt;
-	ive += (ive_num * IVT_TABLE_STRIDE);
-	*ive = SETFIELD(IODA2_IVT_PE, *ive, pe_num);
+	/* Update in-memory IVE without clobbering P and Q */
+	ivep = p->tbl_ivt + (ive_num * IVT_TABLE_STRIDE * 8);
+	pe_word = (uint16_t *)(ivep + 6);
+	*pe_word = pe_num;
 
 	/* Invalidate IVC */
 	data64 = SETFIELD(PHB_IVC_INVALIDATE_SID, 0ul, ive_num);
