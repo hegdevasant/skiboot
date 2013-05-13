@@ -11,49 +11,15 @@ char __rodata_start[16];
 
 #define __rodata_end (__rodata_start + sizeof(__rodata_start))
 
+#define zalloc(bytes) calloc((bytes), 1)
+
 #include "../device.c"
 #include <assert.h>
-
-/* These make it link... */
-int fdt_begin_node(void *fdt, const char *name)
-{
-	return -1;
-}
-
-int fdt_property(void *fdt, const char *name, const void *val, int len)
-{
-	return -1;
-}
-
-int fdt_end_node(void *fdt)
-{
-	return -1;
-}
-
-int fdt_create(void *buf, int bufsize)
-{
-	return -1;
-}
-
-int fdt_add_reservemap_entry(void *fdt, uint64_t addr, uint64_t size)
-{
-	return -1;
-}
-
-int fdt_finish_reservemap(void *fdt)
-{
-	return -1;
-}
-
-const char *fdt_strerror(int errval)
-{
-	return NULL;
-}
 
 int main(void)
 {
 	struct dt_node *root, *c1, *c2, *gc1, *gc2, *gc3, *ggc1, *i;
-	struct dt_property *p;
+	const struct dt_property *p;
 	unsigned int n;
 
 	root = dt_new_root("root");
