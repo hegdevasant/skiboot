@@ -312,7 +312,7 @@ static bool __paca_parse(void)
 		num = prop->len / sizeof(u32);
 		new_prop = malloc((num + 1) * sizeof(u32));
 		if (!new_prop) {
-			prerror("Property allocation length %lu failed\n",
+			prerror("Property allocation length %zu failed\n",
 				(num + 1) * sizeof(u32));
 			return false;
 		}

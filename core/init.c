@@ -79,7 +79,7 @@ static bool load_kernel(void)
 			       (void *)load_base, &ksize);
 	}
 
-	printf("INIT: Kernel loaded, size: %ld bytes\n", ksize);
+	printf("INIT: Kernel loaded, size: %zu bytes\n", ksize);
 
 	/* Check it's a ppc64 ELF */
 	kh = (struct elf64_hdr *)load_base;
