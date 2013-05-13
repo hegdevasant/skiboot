@@ -19,29 +19,28 @@ struct mem_region skiboot_heap = {
 	.name		= "ibm,firmware-heap",
 	.start		= HEAP_BASE,
 	.len		= HEAP_SIZE,
-	.for_skiboot	= true,
-	.allocatable	= true
+	.type		= REGION_SKIBOOT_HEAP,
 };
 
 static struct mem_region skiboot_code_and_text = {
 	.name		= "ibm,firmware-code",
 	.start		= SKIBOOT_BASE,
 	.len		= HEAP_BASE - SKIBOOT_BASE,
-	.for_skiboot	= true
+	.type		= REGION_SKIBOOT_FIRMWARE,
 };
 
 static struct mem_region skiboot_after_heap = {
 	.name		= "ibm,firmware-data",
 	.start		= HEAP_BASE + HEAP_SIZE,
 	.len		= SKIBOOT_BASE + SKIBOOT_SIZE - (HEAP_BASE + HEAP_SIZE),
-	.for_skiboot	= true
+	.type		= REGION_SKIBOOT_FIRMWARE,
 };
 
 static struct mem_region skiboot_cpu_stacks = {
 	.name		= "ibm,firmware-stacks",
 	.start		= CPU_STACKS_BASE,
 	.len		= 0, /* TBA */
-	.for_skiboot	= true
+	.type		= REGION_SKIBOOT_FIRMWARE,
 };
 
 struct alloc_hdr {
@@ -88,7 +87,7 @@ static struct alloc_hdr *next_hdr(const struct mem_region *region,
 static void init_allocatable_region(struct mem_region *region)
 {
 	struct free_hdr *f = region_start(region);
-	assert(region->allocatable);
+	assert(region->type == REGION_SKIBOOT_HEAP);
 	f->hdr.num_longs = region->len / sizeof(long);
 	f->hdr.free = true;
 	f->hdr.prev_free = false;
@@ -215,7 +214,7 @@ void *mem_alloc(struct mem_region *region, size_t size, size_t align,
 	assert(is_rodata(location));
 
 	/* Unallocatable region? */
-	if (!region->allocatable)
+	if (region->type != REGION_SKIBOOT_HEAP)
 		return NULL;
 
 	/* First allocation? */
@@ -380,7 +379,8 @@ bool mem_check(const struct mem_region *region)
 	}
 
 	/* Not ours to play with, or empty?  Don't do anything. */
-	if (!region->allocatable || region->free_list.n.next == NULL)
+	if (region->type != REGION_SKIBOOT_HEAP ||
+			region->free_list.n.next == NULL)
 		return true;
 
 	/* Walk linearly. */
@@ -440,8 +440,7 @@ bool mem_check(const struct mem_region *region)
 static struct mem_region *new_region(const char *name,
 				     uint64_t start, uint64_t len,
 				     struct dt_node *mem_node,
-				     bool for_skiboot,
-				     bool allocatable)
+				     enum mem_region_type type)
 {
 	struct mem_region *region;
 
@@ -455,8 +454,7 @@ static struct mem_region *new_region(const char *name,
 	region->start = start;
 	region->len = len;
 	region->mem_node = mem_node;
-	region->for_skiboot = for_skiboot;
-	region->allocatable = allocatable;
+	region->type = type;
 	region->free_list.n.next = NULL;
 
 	return region;
@@ -465,14 +463,13 @@ static struct mem_region *new_region(const char *name,
 /* We always split regions, so we only have to replace one. */
 static struct mem_region *split_region(struct mem_region *head,
 				       uint64_t split_at,
-				       bool for_skiboot,
-				       bool allocatable)
+				       enum mem_region_type type)
 {
 	struct mem_region *tail;
 	uint64_t end = head->start + head->len;
 
 	tail = new_region(head->name, split_at, end - split_at,
-			  head->mem_node, for_skiboot, allocatable);
+			  head->mem_node, type);
 	/* Original region becomes head. */
 	if (tail)
 		head->len -= tail->len;
@@ -493,7 +490,7 @@ static bool maybe_split(struct mem_region *r, uint64_t split_at)
 	if (!intersects(r, split_at))
 		return true;
 
-	tail = split_region(r, split_at, r->for_skiboot, r->allocatable);
+	tail = split_region(r, split_at, r->type);
 	if (!tail)
 		return false;
 
@@ -559,7 +556,8 @@ void mem_region_init(void)
 			continue;
 
 		start = dt_get_address(i, 0, &len);
-		region = new_region(i->name, start, len, i, true, true);
+		region = new_region(i->name, start, len, i,
+				REGION_SKIBOOT_HEAP);
 		if (!region) {
 			prerror("MEM: Could not add mem region %s!\n", i->name);
 			abort();
@@ -617,7 +615,7 @@ void mem_region_release_unused(void)
 		uint64_t used_len;
 
 		/* If it's not allocatable, ignore it. */
-		if (!r->allocatable)
+		if (r->type != REGION_SKIBOOT_HEAP)
 			continue;
 
 		used_len = allocated_length(r);
@@ -631,7 +629,7 @@ void mem_region_release_unused(void)
 
 		/* Nothing used?  Whole thing is for Linux. */
 		if (used_len == 0)
-			r->for_skiboot = false;
+			r->type = REGION_OS;
 		/* Partially used?  Split region. */
 		else if (used_len != r->len) {
 			struct mem_region *for_linux;
@@ -641,7 +639,7 @@ void mem_region_release_unused(void)
 			list_del_from(&r->free_list, &last->list);
 
 			for_linux = split_region(r, r->start + used_len,
-						 false, false);
+						 REGION_OS);
 			if (!for_linux) {
 				prerror("OOM splitting mem node %s for linux\n",
 					r->name);

@@ -186,10 +186,10 @@ int main(void)
 
 	/* Test splitting of a region. */
 	r = new_region("base", (unsigned long)test_heap,
-		       TEST_HEAP_SIZE, NULL, true, false);
+		       TEST_HEAP_SIZE, NULL, REGION_SKIBOOT_HEAP);
 	assert(add_region(r));
 	r = new_region("splitter", (unsigned long)test_heap + TEST_HEAP_SIZE/4,
-		       TEST_HEAP_SIZE/2, NULL, true, true);
+		       TEST_HEAP_SIZE/2, NULL, REGION_RESERVED);
 	assert(add_region(r));
 	/* Now we should have *three* regions. */
 	i = 0;
@@ -197,20 +197,16 @@ int main(void)
 		if (region_start(r) == test_heap) {
 			assert(r->len == TEST_HEAP_SIZE/4);
 			assert(strcmp(r->name, "base") == 0);
-			assert(r->for_skiboot);
-			assert(!r->allocatable);
+			assert(r->type == REGION_SKIBOOT_HEAP);
 		} else if (region_start(r) == test_heap + TEST_HEAP_SIZE / 4) {
 			assert(r->len == TEST_HEAP_SIZE/2);
 			assert(strcmp(r->name, "splitter") == 0);
-			assert(r->for_skiboot);
-			assert(r->allocatable);
+			assert(r->type == REGION_RESERVED);
 			assert(!r->free_list.n.next);
-			init_allocatable_region(r);
 		} else if (region_start(r) == test_heap + TEST_HEAP_SIZE/4*3) {
 			assert(r->len == TEST_HEAP_SIZE/4);
 			assert(strcmp(r->name, "base") == 0);
-			assert(r->for_skiboot);
-			assert(!r->allocatable);
+			assert(r->type == REGION_SKIBOOT_HEAP);
 		} else
 			abort();
 		assert(mem_check(r));

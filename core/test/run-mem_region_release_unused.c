@@ -121,12 +121,10 @@ int main(void)
 		if (r == &skiboot_cpu_stacks)
 			continue;
 		if (r == other) {
-			assert(r->for_skiboot);
-			assert(r->allocatable);
+			assert(r->type == REGION_SKIBOOT_HEAP);
 			assert(r->len < 1024 * 1024);
 		} else {
-			assert(!r->for_skiboot);
-			assert(!r->allocatable);
+			assert(r->type == REGION_OS);
 			assert(r->start == other->start + other->len);
 			assert(r->start + r->len == other->start + 1024*1024);
 		}

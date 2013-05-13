@@ -136,7 +136,7 @@ int main(void)
 		    r == &skiboot_cpu_stacks)
 			builtins++;
 		else
-			assert(r->allocatable);
+			assert(r->type == REGION_SKIBOOT_HEAP);
 		assert(mem_check(r));
 	}
 	assert(builtins == 4);

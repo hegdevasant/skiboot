@@ -9,16 +9,27 @@
 #include <ccan/list/list.h>
 #include <stdint.h>
 
+enum mem_region_type {
+	/* ranges allocatable by mem_alloc: this will be most of memory */
+	REGION_SKIBOOT_HEAP,
+
+	/* ranges used explicitly for skiboot, but not allocatable. eg .text */
+	REGION_SKIBOOT_FIRMWARE,
+
+	/* ranges reserved, possibly before skiboot init, eg HW framebuffer */
+	REGION_RESERVED,
+
+	/* ranges available for the OS, created by mem_region_release_unused */
+	REGION_OS,
+};
+
 /* An area of physical memory. */
 struct mem_region {
 	struct list_node list;
 	const char *name;
 	uint64_t start, len;
 	struct dt_node *mem_node;
-	/* Anything not for skiboot can be used by Linux. */
-	bool for_skiboot;
-	/* Can we allocate within this region? */
-	bool allocatable;
+	enum mem_region_type type;
 	struct list_head free_list;
 };
 
