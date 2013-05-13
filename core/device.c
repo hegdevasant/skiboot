@@ -10,6 +10,7 @@
 #include <libfdt/libfdt.h>
 #include <libfdt/libfdt_internal.h>
 #include <ccan/str/str.h>
+#include <ccan/endian/endian.h>
 
 /* Used to give unique handles. */
 u32 last_phandle = 0;
@@ -592,7 +593,7 @@ u64 dt_get_number(const void *pdata, unsigned int cells)
 	u64 ret = 0;
 
 	while(cells--)
-		ret = (ret << 32) | *(p++);
+		ret = (ret << 32) | be32_to_cpu(*(p++));
 	return ret;
 }
 
