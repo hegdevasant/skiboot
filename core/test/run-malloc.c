@@ -18,6 +18,7 @@ static unsigned int cpu_max_pir = 1;
 
 #include "../mem_region.c"
 #include "../malloc.c"
+#include "../device.c"
 
 #include "mem_region-malloc.h"
 

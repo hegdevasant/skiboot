@@ -30,6 +30,7 @@ static inline void real_free(void *p)
 #define is_rodata(p) true
 #include "../malloc.c"
 #include "../mem_region.c"
+#include "../device.c"
 
 #undef malloc
 #undef free

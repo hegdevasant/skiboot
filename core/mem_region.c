@@ -543,6 +543,8 @@ static bool add_region(struct mem_region *region)
 /* Trawl through device tree, create memory regions from nodes. */
 void mem_region_init(void)
 {
+	const struct dt_property *names, *ranges;
+	struct mem_region *region;
 	struct dt_node *i;
 
 	lock(&mem_region_lock);
@@ -550,7 +552,6 @@ void mem_region_init(void)
 	/* Add each memory node. */
 	dt_for_each_node(dt_root, i) {
 		uint64_t start, len;
-		struct mem_region *region;
 
 		if (!dt_has_node_property(i, "device_type", "memory"))
 			continue;
@@ -577,7 +578,41 @@ void mem_region_init(void)
 		abort();
 	}
 
+	/* Add reserved ranges from the DT */
+	names = dt_find_property(dt_root, "reserved-names");
+	ranges = dt_find_property(dt_root, "reserved-ranges");
+	if (names && ranges) {
+		uint64_t *range;
+		int n, len;
+
+		range = (void *)ranges->prop;
+
+		for (n = 0; n < names->len; n += len, range += 2) {
+			char *name;
+
+			len = strlen(names->prop + n) + 1;
+
+			name = mem_alloc(&skiboot_heap, len,
+					__alignof__(*name), __location__);
+			memcpy(name, names->prop + n, len);
+
+			region = new_region(name,
+					dt_get_number(range, 2),
+					dt_get_number(range + 1, 2),
+					NULL, REGION_RESERVED);
+			list_add(&regions, &region->list);
+		}
+	}
+
 	unlock(&mem_region_lock);
+
+	/* We generate the reservation properties from our own region list,
+	 * which now includes the existing data.
+	 */
+	if (names)
+		dt_del_property(dt_root, (struct dt_property *)names);
+	if (ranges)
+		dt_del_property(dt_root, (struct dt_property *)ranges);
 }
 
 static uint64_t allocated_length(const struct mem_region *r)

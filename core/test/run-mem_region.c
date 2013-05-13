@@ -12,6 +12,7 @@
 static unsigned int cpu_max_pir = 1;
 
 #include <stdlib.h>
+#include <string.h>
 
 /* Use these before we override definitions below. */
 static void *__malloc(size_t size, const char *location __attribute__((unused)))
@@ -24,11 +25,19 @@ static inline void __free(void *p, const char *location __attribute__((unused)))
 	return free(p);
 }
 
+static void *__zalloc(size_t size, const char *location __attribute__((unused)))
+{
+	void *ptr = malloc(size);
+	memset(ptr, 0, size);
+	return ptr;
+}
+
 #include <skiboot.h>
 
 #define is_rodata(p) true
 
 #include "../mem_region.c"
+#include "../device.c"
 
 #include <assert.h>
 #include <stdio.h>
