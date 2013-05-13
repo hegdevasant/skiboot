@@ -602,6 +602,11 @@ void mem_region_init(void)
 					NULL, REGION_RESERVED);
 			list_add(&regions, &region->list);
 		}
+	} else if (names || ranges) {
+		prerror("Invalid properties: reserved-names=%p "
+				"with reserved-ranges=%p\n",
+				names, ranges);
+		abort();
 	}
 
 	unlock(&mem_region_lock);
