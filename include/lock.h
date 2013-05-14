@@ -24,10 +24,7 @@ struct lock {
 
 /* Note vs. libc and locking:
  *
- * The libc only uses locks to protect the malloc pool. The core
- * "sbrk" function will be called under the protection of that lock.
- *
- * It also has very little global state. The printf() family of
+ * The printf() family of
  * functions use stack based t buffers and call into skiboot
  * underlying read() and write() which use a console lock.
  *
