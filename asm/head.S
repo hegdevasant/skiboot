@@ -388,12 +388,41 @@ init_shared_sprs:
 	mtspr	SPR_SDR1, %r0
 	mtspr	SPR_AMOR, %r0
 
-	/* TSCR: doc recommended value */
-	LOAD_IMM32(%r3,0x88CC6880)
-	mtspr	SPR_TSCR, %r3
+	mfspr	%r3,SPR_PVR
+	srdi	%r3,%r3,16
+	cmpwi	cr0,%r3,PVR_TYPE_P7
+	beq	1f
+	cmpwi	cr0,%r3,PVR_TYPE_P7P
+	beq	2f
+	cmpwi	cr0,%r3,PVR_TYPE_P8
+	beq	3f
+	/* Unsupported CPU type... what do we do ? */
+	b	9f
 
-	/* XXX TODO: Add more */
-	blr
+1:	/* P7 */
+	/* TSCR: Value from pHyp */
+	LOAD_IMM32(%r3,0x880DE880)
+	mtspr	SPR_TSCR, %r3
+	b	9f
+
+2:	/* P7+ */
+	/* TSCR: Recommended value by HW folks */
+	LOAD_IMM32(%r3,0x88CDE880)
+	mtspr	SPR_TSCR, %r3
+	b	9f
+
+3:	/* P8 */
+	/* TSCR: Recommended value by HW folks */
+	LOAD_IMM32(%r3,0x8ACC6880)
+	mtspr	SPR_TSCR, %r3
+	mfspr	%r3,SPR_LPCR
+	rldicr	%r3,%r3,12,60
+	ori	%r3,%r3,4
+	rldicr	%r3,%r3,52,63
+	mtspr	SPR_LPCR,%r3
+	sync
+	isync
+9:	blr
 
 .global init_replicated_sprs
 init_replicated_sprs:
