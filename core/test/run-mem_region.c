@@ -37,7 +37,7 @@ void unlock(struct lock *l)
 
 static bool heap_empty(void)
 {
-	const struct alloc_hdr *h = skiboot_heap.start;
+	const struct alloc_hdr *h = region_start(&skiboot_heap);
 	return h->num_longs == skiboot_heap.len / sizeof(long);
 }
 
@@ -50,7 +50,7 @@ int main(void)
 
 	/* Use malloc for the heap, so valgrind can find issues. */
 	test_heap = malloc(TEST_HEAP_SIZE);
-	skiboot_heap.start = test_heap;
+	skiboot_heap.start = (unsigned long)test_heap;
 	skiboot_heap.len = TEST_HEAP_SIZE;
 
 	/* Allocations of various sizes. */
@@ -168,27 +168,28 @@ int main(void)
 	assert(mem_check(&skiboot_heap));
 
 	/* Test splitting of a region. */
-	r = new_region("base", test_heap, TEST_HEAP_SIZE, NULL, true, false);
+	r = new_region("base", (unsigned long)test_heap,
+		       TEST_HEAP_SIZE, NULL, true, false);
 	assert(add_region(r));
-	r = new_region("splitter", test_heap + TEST_HEAP_SIZE/4,
+	r = new_region("splitter", (unsigned long)test_heap + TEST_HEAP_SIZE/4,
 		       TEST_HEAP_SIZE/2, NULL, true, true);
 	assert(add_region(r));
 	/* Now we should have *three* regions. */
 	i = 0;
 	list_for_each(&regions, r, list) {
-		if (r->start == test_heap) {
+		if (region_start(r) == test_heap) {
 			assert(r->len == TEST_HEAP_SIZE/4);
 			assert(strcmp(r->name, "base") == 0);
 			assert(r->for_skiboot);
 			assert(!r->allocatable);
-		} else if (r->start == test_heap + TEST_HEAP_SIZE / 4) {
+		} else if (region_start(r) == test_heap + TEST_HEAP_SIZE / 4) {
 			assert(r->len == TEST_HEAP_SIZE/2);
 			assert(strcmp(r->name, "splitter") == 0);
 			assert(r->for_skiboot);
 			assert(r->allocatable);
 			assert(!r->free_list.n.next);
 			init_allocatable_region(r);
-		} else if (r->start == test_heap + TEST_HEAP_SIZE / 4 * 3) {
+		} else if (region_start(r) == test_heap + TEST_HEAP_SIZE/4*3) {
 			assert(r->len == TEST_HEAP_SIZE/4);
 			assert(strcmp(r->name, "base") == 0);
 			assert(r->for_skiboot);

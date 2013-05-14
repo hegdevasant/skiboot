@@ -16,7 +16,7 @@ static struct list_head regions = LIST_HEAD_INIT(regions);
 
 struct mem_region skiboot_heap = {
 	.name		= "ibm,firmware-heap",
-	.start		= (void *)HEAP_BASE,
+	.start		= HEAP_BASE,
 	.len		= HEAP_SIZE,
 	.for_skiboot	= true,
 	.allocatable	= true
@@ -24,21 +24,21 @@ struct mem_region skiboot_heap = {
 
 static struct mem_region skiboot_code_and_text = {
 	.name		= "ibm,firmware-code",
-	.start		= (void *)SKIBOOT_BASE,
+	.start		= SKIBOOT_BASE,
 	.len		= HEAP_BASE - SKIBOOT_BASE,
 	.for_skiboot	= true
 };
 
 static struct mem_region skiboot_after_heap = {
 	.name		= "ibm,firmware-data",
-	.start		= (void *)HEAP_BASE + HEAP_SIZE,
+	.start		= HEAP_BASE + HEAP_SIZE,
 	.len		= SKIBOOT_BASE + SKIBOOT_SIZE - (HEAP_BASE + HEAP_SIZE),
 	.for_skiboot	= true
 };
 
 static struct mem_region skiboot_cpu_stacks = {
 	.name		= "ibm,firmware-stacks",
-	.start		= (void *)CPU_STACKS_BASE,
+	.start		= CPU_STACKS_BASE,
 	.len		= 0, /* TBA */
 	.for_skiboot	= true
 };
@@ -58,6 +58,12 @@ struct free_hdr {
 #define ALLOC_HDR_LONGS (sizeof(struct alloc_hdr) / sizeof(long))
 #define ALLOC_MIN_LONGS (sizeof(struct free_hdr) / sizeof(long) + 1)
 
+/* Avoid ugly casts. */
+static void *region_start(const struct mem_region *region)
+{
+	return (void *)(unsigned long)region->start;
+}
+
 /* Each free block has a tailer, so we can walk backwards. */
 static unsigned long *tailer(struct free_hdr *f)
 {
@@ -71,7 +77,7 @@ static struct alloc_hdr *next_hdr(const struct mem_region *region,
 	void *next;
 
 	next = ((unsigned long *)hdr + hdr->num_longs);
-	if (next >= region->start + region->len)
+	if (next >= region_start(region) + region->len)
 		next = NULL;
 	return next;
 }
@@ -79,7 +85,7 @@ static struct alloc_hdr *next_hdr(const struct mem_region *region,
 /* Creates free block covering entire region. */
 static void init_allocatable_region(struct mem_region *region)
 {
-	struct free_hdr *f = region->start;
+	struct free_hdr *f = region_start(region);
 	assert(region->allocatable);
 	f->hdr.num_longs = region->len / sizeof(long);
 	f->hdr.free = true;
@@ -256,8 +262,8 @@ void mem_free(struct mem_region *region, void *mem)
 		return;
 
 	/* Your memory is in the region, right? */
-	assert(mem >= region->start + sizeof(*hdr));
-	assert(mem < region->start + region->len);
+	assert(mem >= region_start(region) + sizeof(*hdr));
+	assert(mem < region_start(region) + region->len);
 
 	/* Grab header. */
 	hdr = mem - sizeof(*hdr);
@@ -317,9 +323,9 @@ bool mem_check(const struct mem_region *region)
 	struct free_hdr *f;
 
 	/* Check it's sanely aligned. */
-	if ((long)region->start % sizeof(struct alloc_hdr)) {
-		prerror("Region '%s' not sanely aligned (%p)\n",
-			region->name, region->start);
+	if (region->start % sizeof(struct alloc_hdr)) {
+		prerror("Region '%s' not sanely aligned (%llx)\n",
+			region->name, (unsigned long long)region->start);
 		return false;
 	}
 	if ((long)region->len % sizeof(struct alloc_hdr)) {
@@ -333,14 +339,14 @@ bool mem_check(const struct mem_region *region)
 		return true;
 
 	/* Walk linearly. */
-	for (hdr = region->start; hdr; hdr = next_hdr(region, hdr)) {
+	for (hdr = region_start(region); hdr; hdr = next_hdr(region, hdr)) {
 		if (hdr->num_longs < ALLOC_MIN_LONGS) {
 			prerror("Region '%s' %s %p size %zu\n",
 				region->name, hdr->free ? "free" : "alloc",
 				hdr, hdr->num_longs * sizeof(long));
 				return false;
 		}			
-		if ((void *)hdr + hdr->num_longs * sizeof(long) >
+		if ((unsigned long)hdr + hdr->num_longs * sizeof(long) >
 		    region->start + region->len) {
 			prerror("Region '%s' %s %p oversize %zu\n",
 				region->name, hdr->free ? "free" : "alloc",
@@ -356,7 +362,7 @@ bool mem_check(const struct mem_region *region)
 				return false;
 			}
 			prev_free = hdr;
-			frees ^= (void *)hdr - region->start;
+			frees ^= (unsigned long)hdr - region->start;
 		} else {
 			if (hdr->prev_free != (bool)prev_free) {
 				prerror("Region '%s' alloc %p has prev_free"
@@ -371,7 +377,7 @@ bool mem_check(const struct mem_region *region)
 
 	/* Now walk free list. */
 	list_for_each(&region->free_list, f, list)
-		frees ^= (void *)f - region->start;
+		frees ^= (unsigned long)f - region->start;
 
 	if (frees) {
 		prerror("Region '%s' free list and walk do not match!\n",
@@ -382,7 +388,7 @@ bool mem_check(const struct mem_region *region)
 }
 
 static struct mem_region *new_region(const char *name,
-				     void *start, uint64_t len,
+				     uint64_t start, uint64_t len,
 				     struct dt_node *mem_node,
 				     bool for_skiboot,
 				     bool allocatable)
@@ -408,12 +414,12 @@ static struct mem_region *new_region(const char *name,
 
 /* We always split regions, so we only have to replace one. */
 static struct mem_region *split_region(struct mem_region *head,
-				       void *split_at,
+				       uint64_t split_at,
 				       bool for_skiboot,
 				       bool allocatable)
 {
 	struct mem_region *tail;
-	void *end = head->start + head->len;
+	uint64_t end = head->start + head->len;
 
 	tail = new_region(head->name, split_at, end - split_at,
 			  head->mem_node, for_skiboot, allocatable);
@@ -424,13 +430,13 @@ static struct mem_region *split_region(struct mem_region *head,
 	return tail;
 }
 
-static bool intersects(const struct mem_region *region, void *addr)
+static bool intersects(const struct mem_region *region, uint64_t addr)
 {
 	return addr > region->start &&
 		addr < region->start + region->len;
 }
 
-static bool maybe_split(struct mem_region *r, void *split_at)
+static bool maybe_split(struct mem_region *r, uint64_t split_at)
 {
 	struct mem_region *tail;
 
@@ -496,14 +502,13 @@ void mem_region_init(void)
 
 	/* Add each memory node. */
 	dt_for_each_node(dt_root, i) {
-		void *start;
-		uint64_t len;
+		uint64_t start, len;
 		struct mem_region *region;
 
 		if (!dt_has_node_property(i, "device_type", "memory"))
 			continue;
 
-		start = (void *)(long)dt_get_address(i, 0, &len);
+		start = dt_get_address(i, 0, &len);
 		region = new_region(i->name, start, len, i, true, true);
 		if (!region) {
 			prerror("MEM: Could not add mem region %s!\n", i->name);

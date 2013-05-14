@@ -37,7 +37,7 @@ void unlock(struct lock *l)
 
 static bool heap_empty(void)
 {
-	const struct alloc_hdr *h = skiboot_heap.start;
+	const struct alloc_hdr *h = region_start(&skiboot_heap);
 	return h->num_longs == skiboot_heap.len / sizeof(long);
 }
 
@@ -47,7 +47,7 @@ int main(void)
 	size_t i;
 
 	/* Use malloc for the heap, so valgrind can find issues. */
-	skiboot_heap.start = test_heap;
+	skiboot_heap.start = (unsigned long)test_heap;
 	skiboot_heap.len = TEST_HEAP_SIZE;
 
 	/* Allocations of various sizes. */

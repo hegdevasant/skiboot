@@ -67,16 +67,17 @@ int main(void)
 	void *p[NUM_ALLOCS];
 
 	/* Use malloc for the heap, so valgrind can find issues. */
-	skiboot_heap.start = real_malloc(skiboot_heap.len);
+	skiboot_heap.start = (unsigned long)real_malloc(skiboot_heap.len);
 
 	len = skiboot_heap.len / NUM_ALLOCS - sizeof(struct alloc_hdr);
 	for (i = 0; i < NUM_ALLOCS; i++) {
 		p[i] = skiboot_malloc(len);
-		assert(p[i] > skiboot_heap.start);
-		assert(p[i] + len <= skiboot_heap.start + skiboot_heap.len);
+		assert(p[i] > region_start(&skiboot_heap));
+		assert(p[i] + len <= region_start(&skiboot_heap)
+		       + skiboot_heap.len);
 	}
 	assert(mem_check(&skiboot_heap));
 	assert(mem_region_lock.lock_val == 0);
-	free(skiboot_heap.start);
+	free(region_start(&skiboot_heap));
 	return 0;
 }

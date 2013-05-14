@@ -13,8 +13,7 @@
 struct mem_region {
 	struct list_node list;
 	const char *name;
-	void *start;
-	uint64_t len;
+	uint64_t start, len;
 	struct dt_node *mem_node;
 	/* Anything not for skiboot can be used by Linux. */
 	bool for_skiboot;
