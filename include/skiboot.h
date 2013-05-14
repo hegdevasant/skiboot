@@ -28,6 +28,11 @@
 /* Readonly section start and end. */
 extern char __rodata_start[], __rodata_end[];
 
+static inline bool is_rodata(const void *p)
+{
+	return ((char *)p >= __rodata_start && (char *)p < __rodata_end);
+}
+
 /* General utilities */
 #define prerror(fmt...)	do { fprintf(stderr, fmt); } while(0)
 

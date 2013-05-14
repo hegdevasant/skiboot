@@ -34,8 +34,7 @@ static inline void real_free(void *p)
 
 #include "../malloc.c"
 #include "../mem_region.c"
-char __rodata_start[16];
-#define __rodata_end (__rodata_start + sizeof(__rodata_start))
+char __rodata_start[1], __rodata_end[1];
 
 static inline char *skiboot_strdup(const char *str)
 {

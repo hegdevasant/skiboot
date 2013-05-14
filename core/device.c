@@ -18,11 +18,6 @@ u32 last_phandle = 0;
 struct dt_node *dt_root;
 struct dt_node *dt_chosen;
 
-static bool is_rodata(const void *p)
-{
-	return ((char *)p >= __rodata_start && (char *)p < __rodata_end);
-}
-
 static const char *take_name(const char *name)
 {
 	if (!is_rodata(name) && !(name = strdup(name))) {

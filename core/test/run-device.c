@@ -7,9 +7,15 @@
 #include <skiboot.h>
 
 /* Override this for testing. */
-char __rodata_start[16];
+#define is_rodata(p) fake_is_rodata(p)
 
+char __rodata_start[16];
 #define __rodata_end (__rodata_start + sizeof(__rodata_start))
+
+static inline bool fake_is_rodata(const void *p)
+{
+	return ((char *)p >= __rodata_start && (char *)p < __rodata_end);
+}
 
 #define zalloc(bytes) calloc((bytes), 1)
 

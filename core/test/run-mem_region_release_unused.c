@@ -19,8 +19,7 @@ static unsigned int cpu_max_pir = 1;
 
 #include <skiboot.h>
 
-char __rodata_start[16];
-#define __rodata_end (__rodata_start + sizeof(__rodata_start))
+char __rodata_start[1], __rodata_end[1];
 
 #include "../mem_region.c"
 #include "../device.c"
