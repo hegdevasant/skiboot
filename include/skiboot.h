@@ -115,6 +115,5 @@ extern void uart_init(void);
 
 /* Flatten device-tree */
 extern void *create_dtb(const struct dt_node *root);
-
 #endif /* __SKIBOOT_H */
 

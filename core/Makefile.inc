@@ -1,7 +1,7 @@
 # -*-Makefile-*-
 
 SUBDIRS += core
-CORE_OBJS = relocate.o console.o heapstack.o init.o chip.o
+CORE_OBJS = relocate.o console.o heapstack.o init.o chip.o mem_region.o
 CORE_OBJS += lock.o cpu.o utils.o fdt.o opal.o interrupts.o time.o
 CORE_OBJS += pci.o pci-opal.o fast-reboot.o device.o exceptions.o
 CORE=core/built-in.o
