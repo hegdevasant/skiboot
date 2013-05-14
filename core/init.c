@@ -278,6 +278,9 @@ void main_cpu_entry(const void *fdt, u32 master_cpu)
 	 */
 	add_opal_nodes();
 
+	/* Now release parts of memory nodes we haven't used ourselves. */
+	mem_region_release_unused();
+
 	load_and_boot_kernel(false);
 }
 

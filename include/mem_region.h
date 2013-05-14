@@ -28,6 +28,7 @@ void mem_free(struct mem_region *region, void *mem);
 bool mem_resize(struct mem_region *region, void *mem, size_t len);
 size_t mem_size(const struct mem_region *region, const void *ptr);
 bool mem_check(const struct mem_region *region);
+void mem_region_release_unused(void);
 
 /* Specifically for working on the heap. */
 extern struct mem_region skiboot_heap;

@@ -531,3 +531,74 @@ void mem_region_init(void)
 
 	unlock(&mem_region_lock);
 }
+
+static uint64_t allocated_length(const struct mem_region *r)
+{
+	struct free_hdr *f, *last = NULL;
+
+	/* No allocations at all? */
+	if (r->free_list.n.next == NULL)
+		return r->len;
+
+	/* Find last free block. */
+	list_for_each(&r->free_list, f, list)
+		if (f > last)
+			last = f;
+
+	/* No free blocks? */
+	if (!last)
+		return r->len;
+
+	/* Last free block isn't at end? */
+	if (next_hdr(r, &last->hdr))
+		return r->len;
+	return (unsigned long)last - r->start;
+}
+
+/* Separate out allocated sections into their own region. */
+void mem_region_release_unused(void)
+{
+	struct mem_region *r;
+
+	lock(&mem_region_lock);
+
+	printf("Releasing unused memory:\n");
+	list_for_each(&regions, r, list) {
+		uint64_t used_len;
+
+		/* If it's not allocatable, ignore it. */
+		if (!r->allocatable)
+			continue;
+
+		used_len = allocated_length(r);
+
+		printf("    %s: %llu/%llu used\n",
+		       r->name, (long long)used_len, (long long)r->len);
+
+		/* We keep the skiboot heap. */
+		if (r == &skiboot_heap)
+			continue;
+
+		/* Nothing used?  Whole thing is for Linux. */
+		if (used_len == 0)
+			r->for_skiboot = false;
+		/* Partially used?  Split region. */
+		else if (used_len != r->len) {
+			struct mem_region *for_linux;
+			struct free_hdr *last = region_start(r) + used_len;
+
+			/* Remove the final free block. */
+			list_del_from(&r->free_list, &last->list);
+
+			for_linux = split_region(r, r->start + used_len,
+						 false, false);
+			if (!for_linux) {
+				prerror("OOM splitting mem node %s for linux\n",
+					r->name);
+				abort();
+			}
+			list_add(&regions, &for_linux->list);
+		}
+	}
+	unlock(&mem_region_lock);
+}
