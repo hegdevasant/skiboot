@@ -11,9 +11,13 @@
 
 /* An area of physical memory. */
 struct mem_region {
+	struct list_node list;
 	const char *name;
 	void *start;
 	uint64_t len;
+	struct dt_node *mem_node;
+	/* Anything not for skiboot can be used by Linux. */
+	bool for_skiboot;
 	/* Can we allocate within this region? */
 	bool allocatable;
 	struct list_head free_list;
@@ -29,4 +33,5 @@ bool mem_check(const struct mem_region *region);
 /* Specifically for working on the heap. */
 extern struct mem_region skiboot_heap;
 
+void mem_region_init(void);
 #endif /* __MEMORY_REGION */

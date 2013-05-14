@@ -19,8 +19,8 @@
 #include <pci.h>
 #include <lpc.h>
 #include <interrupts.h>
+#include <mem_region.h>
 #include <libfdt/libfdt.h>
-
 
 /*
  * Boot semaphore, incremented by each CPU calling in
@@ -214,6 +214,9 @@ void main_cpu_entry(const void *fdt, u32 master_cpu)
 
 	/* Initialize the rest of the cpu thread structs */
 	init_all_cpus();
+
+	/* Mark out memory areas. */
+	mem_region_init();
 
 	/* Initialize XSCOM */
 	xscom_init();

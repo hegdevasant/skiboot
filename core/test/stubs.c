@@ -21,3 +21,7 @@ STUB(_fdt_check_node_offset);
 STUB(fdt_next_tag);
 STUB(fdt_string);
 STUB(fdt_get_name);
+STUB(dt_first);
+STUB(dt_next);
+STUB(dt_has_node_property);
+STUB(dt_get_address);

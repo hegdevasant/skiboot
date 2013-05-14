@@ -7,14 +7,40 @@
 #include <skiboot.h>
 #include <mem_region.h>
 #include <lock.h>
+#include <device.h>
+#include <cpu.h>
 
 struct lock mem_region_lock = LOCK_UNLOCKED;
+
+static struct list_head regions = LIST_HEAD_INIT(regions);
 
 struct mem_region skiboot_heap = {
 	.name		= "ibm,firmware-heap",
 	.start		= (void *)HEAP_BASE,
 	.len		= HEAP_SIZE,
+	.for_skiboot	= true,
 	.allocatable	= true
+};
+
+static struct mem_region skiboot_code_and_text = {
+	.name		= "ibm,firmware-code",
+	.start		= (void *)SKIBOOT_BASE,
+	.len		= HEAP_BASE - SKIBOOT_BASE,
+	.for_skiboot	= true
+};
+
+static struct mem_region skiboot_after_heap = {
+	.name		= "ibm,firmware-data",
+	.start		= (void *)HEAP_BASE + HEAP_SIZE,
+	.len		= SKIBOOT_BASE + SKIBOOT_SIZE - (HEAP_BASE + HEAP_SIZE),
+	.for_skiboot	= true
+};
+
+static struct mem_region skiboot_cpu_stacks = {
+	.name		= "ibm,firmware-stacks",
+	.start		= (void *)CPU_STACKS_BASE,
+	.len		= 0, /* TBA */
+	.for_skiboot	= true
 };
 
 struct alloc_hdr {
@@ -353,4 +379,150 @@ bool mem_check(const struct mem_region *region)
 		return false;
 	}
 	return true;
+}
+
+static struct mem_region *new_region(const char *name,
+				     void *start, uint64_t len,
+				     struct dt_node *mem_node,
+				     bool for_skiboot,
+				     bool allocatable)
+{
+	struct mem_region *region;
+
+	/* Avoid lock recursion, call mem_alloc directly. */
+	region = mem_alloc(&skiboot_heap,
+			   sizeof(*region), __alignof__(*region));
+	if (!region)
+		return NULL;
+
+	region->name = name;
+	region->start = start;
+	region->len = len;
+	region->mem_node = mem_node;
+	region->for_skiboot = for_skiboot;
+	region->allocatable = allocatable;
+	region->free_list.n.next = NULL;
+
+	return region;
+}
+
+/* We always split regions, so we only have to replace one. */
+static struct mem_region *split_region(struct mem_region *head,
+				       void *split_at,
+				       bool for_skiboot,
+				       bool allocatable)
+{
+	struct mem_region *tail;
+	void *end = head->start + head->len;
+
+	tail = new_region(head->name, split_at, end - split_at,
+			  head->mem_node, for_skiboot, allocatable);
+	/* Original region becomes head. */
+	if (tail)
+		head->len -= tail->len;
+
+	return tail;
+}
+
+static bool intersects(const struct mem_region *region, void *addr)
+{
+	return addr > region->start &&
+		addr < region->start + region->len;
+}
+
+static bool maybe_split(struct mem_region *r, void *split_at)
+{
+	struct mem_region *tail;
+
+	if (!intersects(r, split_at))
+		return true;
+
+	tail = split_region(r, split_at, r->for_skiboot, r->allocatable);
+	if (!tail)
+		return false;
+
+	/* Tail add is important: we may need to split again! */
+	list_add_tail(&regions, &tail->list);
+	return true;
+}
+
+static bool overlaps(const struct mem_region *r1, const struct mem_region *r2)
+{
+	return (r1->start + r1->len > r2->start
+		&& r1->start < r2->start + r2->len);
+}
+
+static struct mem_region *get_overlap(const struct mem_region *region)
+{
+	struct mem_region *i;
+
+	list_for_each(&regions, i, list) {
+		if (overlaps(region, i))
+			return i;
+	}
+	return NULL;
+}
+
+static bool add_region(struct mem_region *region)
+{
+	struct mem_region *r;
+
+	/* First split any regions which intersect. */
+	list_for_each(&regions, r, list)
+		if (!maybe_split(r, region->start) ||
+		    !maybe_split(r, region->start + region->len))
+			return false;
+
+	/* Now we have only whole overlaps, if any. */
+	while ((r = get_overlap(region)) != NULL) {
+		assert(r->start == region->start);
+		assert(r->len == region->len);
+		list_del_from(&regions, &r->list);
+		/* We already hold mem_region lock */
+		mem_free(&skiboot_heap, r);
+	}
+
+	/* Finally, add in our own region. */
+	list_add(&regions, &region->list);
+	return true;
+}
+
+/* Trawl through device tree, create memory regions from nodes. */
+void mem_region_init(void)
+{
+	struct dt_node *i;
+
+	lock(&mem_region_lock);
+
+	/* Add each memory node. */
+	dt_for_each_node(dt_root, i) {
+		void *start;
+		uint64_t len;
+		struct mem_region *region;
+
+		if (!dt_has_node_property(i, "device_type", "memory"))
+			continue;
+
+		start = (void *)(long)dt_get_address(i, 0, &len);
+		region = new_region(i->name, start, len, i, true, true);
+		if (!region) {
+			prerror("MEM: Could not add mem region %s!\n", i->name);
+			abort();
+		}
+		list_add(&regions, &region->list);
+	}
+
+	/* Now we know how many CPU stacks we have, fix that up. */
+	skiboot_cpu_stacks.len = cpu_max_pir * STACK_SIZE;
+
+	/* Now carve out our own reserved areas. */
+	if (!add_region(&skiboot_code_and_text) ||
+	    !add_region(&skiboot_heap) ||
+	    !add_region(&skiboot_after_heap) ||
+	    !add_region(&skiboot_cpu_stacks)) {
+		prerror("Out of memory adding skiboot reserved areas\n");
+		abort();
+	}
+
+	unlock(&mem_region_lock);
 }

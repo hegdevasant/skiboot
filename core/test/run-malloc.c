@@ -8,6 +8,10 @@
 
 #define BITS_PER_LONG (sizeof(long) * 8)
 
+/* Don't include this, it's PPC-specific */
+#define __CPU_H
+static unsigned int cpu_max_pir = 1;
+
 #include "../mem_region.c"
 #include "../malloc.c"
 #include <assert.h>
@@ -16,6 +20,8 @@
 
 #define TEST_HEAP_ORDER 12
 #define TEST_HEAP_SIZE (1ULL << TEST_HEAP_ORDER)
+
+struct dt_node *dt_root;
 
 void lock(struct lock *l)
 {

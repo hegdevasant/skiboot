@@ -7,11 +7,30 @@
 #include <config.h>
 
 #define BITS_PER_LONG (sizeof(long) * 8)
+/* Don't include this, it's PPC-specific */
+#define __CPU_H
+static unsigned int cpu_max_pir = 1;
+
+/* Under valgrind, even a shrinking realloc moves, so override */
+#include <stdlib.h>
+#define realloc(p, size) (p)
 
 #include "../mem_region.c"
+
 #include <assert.h>
-#include <stdlib.h>
 #include <stdio.h>
+
+struct dt_node *dt_root;
+
+void lock(struct lock *l)
+{
+	l->lock_val++;
+}
+
+void unlock(struct lock *l)
+{
+	l->lock_val--;
+}
 
 #define TEST_HEAP_ORDER 12
 #define TEST_HEAP_SIZE (1ULL << TEST_HEAP_ORDER)
@@ -27,6 +46,7 @@ int main(void)
 	char *test_heap;
 	void *p, *ptrs[100];
 	size_t i;
+	struct mem_region *r;
 
 	/* Use malloc for the heap, so valgrind can find issues. */
 	test_heap = malloc(TEST_HEAP_SIZE);
@@ -146,6 +166,44 @@ int main(void)
 
 	mem_free(&skiboot_heap, p);
 	assert(mem_check(&skiboot_heap));
+
+	/* Test splitting of a region. */
+	r = new_region("base", test_heap, TEST_HEAP_SIZE, NULL, true, false);
+	assert(add_region(r));
+	r = new_region("splitter", test_heap + TEST_HEAP_SIZE/4,
+		       TEST_HEAP_SIZE/2, NULL, true, true);
+	assert(add_region(r));
+	/* Now we should have *three* regions. */
+	i = 0;
+	list_for_each(&regions, r, list) {
+		if (r->start == test_heap) {
+			assert(r->len == TEST_HEAP_SIZE/4);
+			assert(strcmp(r->name, "base") == 0);
+			assert(r->for_skiboot);
+			assert(!r->allocatable);
+		} else if (r->start == test_heap + TEST_HEAP_SIZE / 4) {
+			assert(r->len == TEST_HEAP_SIZE/2);
+			assert(strcmp(r->name, "splitter") == 0);
+			assert(r->for_skiboot);
+			assert(r->allocatable);
+			assert(!r->free_list.n.next);
+			init_allocatable_region(r);
+		} else if (r->start == test_heap + TEST_HEAP_SIZE / 4 * 3) {
+			assert(r->len == TEST_HEAP_SIZE/4);
+			assert(strcmp(r->name, "base") == 0);
+			assert(r->for_skiboot);
+			assert(!r->allocatable);
+		} else
+			abort();
+		assert(mem_check(r));
+		i++;
+	}
+	assert(i == 3);
+	while ((r = list_pop(&regions, struct mem_region, list)) != NULL) {
+		list_del(&r->list);
+		mem_free(&skiboot_heap, r);
+	}
+	assert(mem_region_lock.lock_val == 0);
 	free(test_heap);
 	return 0;
 }

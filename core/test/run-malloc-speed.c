@@ -9,6 +9,7 @@
 #define BITS_PER_LONG (sizeof(long) * 8)
 /* Don't include this, it's PPC-specific */
 #define __CPU_H
+static unsigned int cpu_max_pir = 1;
 
 #include <stdlib.h>
 
@@ -40,6 +41,8 @@ static inline void real_free(void *p)
 
 #include <assert.h>
 #include <stdio.h>
+
+struct dt_node *dt_root;
 
 void lock(struct lock *l)
 {
