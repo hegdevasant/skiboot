@@ -1,5 +1,5 @@
 # -*-Makefile-*-
-CORE_TEST := core/test/run-device core/test/run-mem_region core/test/run-malloc core/test/run-malloc-speed
+CORE_TEST := core/test/run-device core/test/run-mem_region core/test/run-malloc core/test/run-malloc-speed core/test/run-mem_region_init
 
 check: $(CORE_TEST:%=%-check)
 
@@ -12,7 +12,7 @@ core/test/stubs.o: core/test/stubs.c
 $(CORE_TEST) : core/test/stubs.o
 
 $(CORE_TEST) : % : %.c 
-	$(HOSTCC) $(HOSTCFLAGS) -g -I include -I . -I libfdt -o $@ $< core/test/stubs.o
+	$(HOSTCC) $(HOSTCFLAGS) -O0 -g -I include -I . -I libfdt -o $@ $< core/test/stubs.o
 
 clean: core-test-clean
 
