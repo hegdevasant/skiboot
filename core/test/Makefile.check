@@ -1,0 +1,18 @@
+# -*-Makefile-*-
+
+check: run-device-check
+
+run-device-check: core/test/run-device
+	$(VALGRIND) core/test/run-device
+
+core/test/stubs.o: core/test/stubs.c
+	$(HOSTCC) $(HOSTCFLAGS) -g -c -o $@ $<
+
+core/test/run-device: core/test/run-device.c core/test/stubs.o
+	$(HOSTCC) $(HOSTCFLAGS) -g -I include -I . -I libfdt -o $@ $^
+
+clean: core-test-clean
+
+core-test-clean:
+	$(RM) core/test/*.o core/test/run-device
+
