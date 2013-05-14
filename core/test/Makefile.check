@@ -1,5 +1,5 @@
 # -*-Makefile-*-
-CORE_TEST := core/test/run-device core/test/run-mem_region
+CORE_TEST := core/test/run-device core/test/run-mem_region core/test/run-malloc
 
 check: $(CORE_TEST:%=%-check)
 
