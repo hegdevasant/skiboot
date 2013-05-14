@@ -23,9 +23,12 @@ struct mem_region {
 };
 
 extern struct lock mem_region_lock;
-void *mem_alloc(struct mem_region *region, size_t size, size_t align);
-void mem_free(struct mem_region *region, void *mem);
-bool mem_resize(struct mem_region *region, void *mem, size_t len);
+void *mem_alloc(struct mem_region *region, size_t size, size_t align,
+		const char *location);
+void mem_free(struct mem_region *region, void *mem,
+	      const char *location);
+bool mem_resize(struct mem_region *region, void *mem, size_t len,
+		const char *location);
 size_t mem_size(const struct mem_region *region, const void *ptr);
 bool mem_check(const struct mem_region *region);
 void mem_region_release_unused(void);

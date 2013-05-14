@@ -12,11 +12,14 @@
 #define __CPU_H
 static unsigned int cpu_max_pir = 1;
 
+#include <skiboot.h>
+
+#define is_rodata(p) true
+
 #include "../mem_region.c"
 #include "../malloc.c"
-#include <assert.h>
-#include <stdlib.h>
-#include <stdio.h>
+
+#include "mem_region-malloc.h"
 
 #define TEST_HEAP_ORDER 12
 #define TEST_HEAP_SIZE (1ULL << TEST_HEAP_ORDER)

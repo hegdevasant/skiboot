@@ -5,61 +5,62 @@
 
 #define DEFAULT_ALIGN __alignof__(long)
 
-void *memalign(size_t blocksize, size_t bytes)
+void *__memalign(size_t blocksize, size_t bytes, const char *location)
 {
 	void *p;
 
 	lock(&mem_region_lock);
-	p = mem_alloc(&skiboot_heap, bytes, blocksize);
+	p = mem_alloc(&skiboot_heap, bytes, blocksize, location);
 	unlock(&mem_region_lock);
 
 	return p;
 }
 
-void *malloc(size_t bytes)
+void *__malloc(size_t bytes, const char *location)
 {
-	return memalign(DEFAULT_ALIGN, bytes);
+	return __memalign(DEFAULT_ALIGN, bytes, location);
 }
 
-void free(void *p)
+void __free(void *p, const char *location)
 {
 	lock(&mem_region_lock);
-	mem_free(&skiboot_heap, p);
+	mem_free(&skiboot_heap, p, location);
 	unlock(&mem_region_lock);
 }
 
-void *realloc(void *ptr, size_t size)
+void *__realloc(void *ptr, size_t size, const char *location)
 {
 	void *newptr;
 
 	/* Two classic malloc corner cases. */
 	if (!size) {
-		free(ptr);
+		__free(ptr, location);
 		return NULL;
 	}
 	if (!ptr)
-		return malloc(size);
+		return __malloc(size, location);
 
 	lock(&mem_region_lock);
-	if (mem_resize(&skiboot_heap, ptr, size)) {
+	if (mem_resize(&skiboot_heap, ptr, size, location)) {
 		newptr = ptr;
 	} else {
-		newptr = mem_alloc(&skiboot_heap, size, DEFAULT_ALIGN);
+		newptr = mem_alloc(&skiboot_heap, size, DEFAULT_ALIGN,
+				   location);
 		if (newptr) {
 			size_t copy = mem_size(&skiboot_heap, ptr);
 			if (copy > size)
 				copy = size;
 			memcpy(newptr, ptr, copy);
-			mem_free(&skiboot_heap, ptr);
+			mem_free(&skiboot_heap, ptr, location);
 		}
 	}
 	unlock(&mem_region_lock);
 	return newptr;
 }
 
-void *zalloc(size_t bytes)
+void *__zalloc(size_t bytes, const char *location)
 {
-	void *p = malloc(bytes);
+	void *p = __malloc(bytes, location);
 
 	if (p)
 		memset(p, 0, bytes);

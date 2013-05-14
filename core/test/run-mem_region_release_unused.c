@@ -11,17 +11,33 @@
 #define __CPU_H
 static unsigned int cpu_max_pir = 1;
 
-/* Under valgrind, even a shrinking realloc moves, so override */
 #include <stdlib.h>
-#define realloc(p, size) (p)
 
-#define zalloc(size) calloc((size), 1)
+static void *__malloc(size_t size, const char *location __attribute__((unused)))
+{
+	return malloc(size);
+}
+
+static void *__zalloc(size_t size, const char *location __attribute__((unused)))
+{
+	return calloc(size, 1);
+}
+
+static inline void __free(void *p, const char *location __attribute__((unused)))
+{
+	return free(p);
+}
 
 #include <skiboot.h>
 
-char __rodata_start[1], __rodata_end[1];
-
+/* We need mem_region to accept __location__ */
+#define is_rodata(p) true
 #include "../mem_region.c"
+
+/* But we need device tree to make copies of names. */
+#undef is_rodata
+#define is_rodata(p) false
+
 #include "../device.c"
 #include <assert.h>
 #include <stdio.h>
@@ -83,14 +99,18 @@ int main(void)
 	}
 	/* This could happen if skiboot addresses clashed with our alloc. */
 	assert(other);
+	assert(mem_check(other));
 
 	/* Allocate 1k from other region. */
-	mem_alloc(other, 1024, 1);
+	mem_alloc(other, 1024, 1, "1k");
 	mem_region_release_unused();
+
+	assert(mem_check(&skiboot_heap));
 
 	/* Now we expect it to be split. */
 	i = 0;
 	list_for_each(&regions, r, list) {
+		assert(mem_check(r));
 		i++;
 		if (r == &skiboot_code_and_text)
 			continue;

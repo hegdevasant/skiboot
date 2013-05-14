@@ -6,6 +6,7 @@
  * Supplement V032404DR-3 dated August 16, 2012 (the “NDA”). */
 #include <skiboot.h>
 #include <mem_region.h>
+#include <mem_region-malloc.h>
 #include <lock.h>
 #include <device.h>
 #include <cpu.h>
@@ -47,6 +48,7 @@ struct alloc_hdr {
 	bool free : 1;
 	bool prev_free : 1;
 	unsigned long num_longs : BITS_PER_LONG-2; /* Including header. */
+	const char *location;
 };
 
 struct free_hdr {
@@ -95,7 +97,8 @@ static void init_allocatable_region(struct mem_region *region)
 	list_add(&region->free_list, &f->list);
 }
 
-static void make_free(struct mem_region *region, struct free_hdr *f)
+static void make_free(struct mem_region *region, struct free_hdr *f,
+		      const char *location)
 {
 	struct alloc_hdr *next;
 
@@ -112,6 +115,7 @@ static void make_free(struct mem_region *region, struct free_hdr *f)
 		f = prev;
 	} else {
 		f->hdr.free = true;
+		f->hdr.location = location;
 		list_add(&region->free_list, &f->list);
 	}
 
@@ -126,7 +130,7 @@ static void make_free(struct mem_region *region, struct free_hdr *f)
 			struct free_hdr *next_free = (void *)next;
 			list_del_from(&region->free_list, &next_free->list);
 			/* Maximum of one level of recursion */
-			make_free(region, next_free);
+			make_free(region, next_free, location);
 		}
 	}
 }
@@ -154,7 +158,8 @@ static bool fits(struct free_hdr *f, size_t longs, size_t align, size_t *offset)
 }
 
 static void discard_excess(struct mem_region *region,
-			   struct alloc_hdr *hdr, size_t alloc_longs)
+			   struct alloc_hdr *hdr, size_t alloc_longs,
+			   const char *location)
 {
 	/* Do we have excess? */
 	if (hdr->num_longs > alloc_longs + ALLOC_MIN_LONGS) {
@@ -169,11 +174,35 @@ static void discard_excess(struct mem_region *region,
 		hdr->num_longs = alloc_longs;
 
 		/* This coalesces as required. */
-		make_free(region, post);
+		make_free(region, post, location);
 	}
 }
 
-void *mem_alloc(struct mem_region *region, size_t size, size_t align)
+static const char *hdr_location(const struct alloc_hdr *hdr)
+{
+	/* Corrupt: step carefully! */
+	if (is_rodata(hdr->location))
+		return hdr->location;
+	return "*CORRUPT*";
+}
+
+static void bad_header(const struct mem_region *region,
+		       const struct alloc_hdr *hdr,
+		       const char *during,
+		       const char *location)
+{
+	/* Corrupt: step carefully! */
+	if (is_rodata(hdr->location))
+		prerror("%p (in %s) %s at %s, previously %s\n",
+			hdr-1, region->name, during, location, hdr->location);
+	else
+		prerror("%p (in %s) %s at %s, previously %p\n",
+			hdr-1, region->name, during, location, hdr->location);
+	abort();
+}
+
+void *mem_alloc(struct mem_region *region, size_t size, size_t align,
+		const char *location)
 {
 	size_t alloc_longs, offset;
 	struct free_hdr *f;
@@ -181,6 +210,9 @@ void *mem_alloc(struct mem_region *region, size_t size, size_t align)
 
 	/* Align must be power of 2. */
 	assert(!((align - 1) & align));
+
+	/* This should be a constant. */
+	assert(is_rodata(location));
 
 	/* Unallocatable region? */
 	if (!region->allocatable)
@@ -221,6 +253,8 @@ found:
 	/* This block is no longer free. */
 	list_del_from(&region->free_list, &f->list);
 	f->hdr.free = false;
+	f->hdr.location = location;
+
 	next = next_hdr(region, &f->hdr);
 	if (next) {
 		assert(next->prev_free);
@@ -243,19 +277,22 @@ found:
 		pre->hdr.prev_free = false;
 
 		/* This coalesces as required. */
-		make_free(region, pre);
+		make_free(region, pre, location);
 	}
 
 	/* We might be too long; put the rest back. */
-	discard_excess(region, &f->hdr, alloc_longs);
+	discard_excess(region, &f->hdr, alloc_longs, location);
 
 	/* Their pointer is immediately after header. */
 	return &f->hdr + 1;
 }
 
-void mem_free(struct mem_region *region, void *mem)
+void mem_free(struct mem_region *region, void *mem, const char *location)
 {
 	struct alloc_hdr *hdr;
+
+	/* This should be a constant. */
+	assert(is_rodata(location));
 
 	/* Freeing NULL is always a noop. */
 	if (!mem)
@@ -267,10 +304,11 @@ void mem_free(struct mem_region *region, void *mem)
 
 	/* Grab header. */
 	hdr = mem - sizeof(*hdr);
-	assert(!hdr->free);
-	assert(hdr->num_longs);
 
-	make_free(region, (struct free_hdr *)hdr);
+	if (hdr->free)
+		bad_header(region, hdr, "re-freed", location);
+
+	make_free(region, (struct free_hdr *)hdr, location);
 }
 
 size_t mem_size(const struct mem_region *region __unused, const void *ptr)
@@ -279,14 +317,19 @@ size_t mem_size(const struct mem_region *region __unused, const void *ptr)
 	return hdr->num_longs * sizeof(long);
 }
 
-bool mem_resize(struct mem_region *region, void *mem, size_t len)
+bool mem_resize(struct mem_region *region, void *mem, size_t len,
+		const char *location)
 {
 	struct alloc_hdr *hdr, *next;
 	struct free_hdr *f;
 
+	/* This should be a constant. */
+	assert(is_rodata(location));
+
 	/* Get header. */
 	hdr = mem - sizeof(*hdr);
-	assert(hdr->num_longs);
+	if (hdr->free)
+		bad_header(region, hdr, "resize", location);
 
 	/* Round up size to multiple of longs. */
 	len = (sizeof(*hdr) + len + sizeof(long) - 1) / sizeof(long);
@@ -297,7 +340,8 @@ bool mem_resize(struct mem_region *region, void *mem, size_t len)
 
 	/* Shrinking is simple. */
 	if (len <= hdr->num_longs) {
-		discard_excess(region, hdr, len);
+		hdr->location = location;
+		discard_excess(region, hdr, len, location);
 		return true;
 	}
 
@@ -310,9 +354,10 @@ bool mem_resize(struct mem_region *region, void *mem, size_t len)
 	f = (struct free_hdr *)next;
 	list_del_from(&region->free_list, &f->list);
 	hdr->num_longs += next->num_longs;
+	hdr->location = location;
 
 	/* Now we might have *too* much. */
-	discard_excess(region, hdr, len);
+	discard_excess(region, hdr, len, location);
 	return true;
 }
 
@@ -341,33 +386,38 @@ bool mem_check(const struct mem_region *region)
 	/* Walk linearly. */
 	for (hdr = region_start(region); hdr; hdr = next_hdr(region, hdr)) {
 		if (hdr->num_longs < ALLOC_MIN_LONGS) {
-			prerror("Region '%s' %s %p size %zu\n",
+			prerror("Region '%s' %s %p (%s) size %zu\n",
 				region->name, hdr->free ? "free" : "alloc",
-				hdr, hdr->num_longs * sizeof(long));
+				hdr, hdr_location(hdr),
+				hdr->num_longs * sizeof(long));
 				return false;
 		}			
 		if ((unsigned long)hdr + hdr->num_longs * sizeof(long) >
 		    region->start + region->len) {
-			prerror("Region '%s' %s %p oversize %zu\n",
+			prerror("Region '%s' %s %p (%s) oversize %zu\n",
 				region->name, hdr->free ? "free" : "alloc",
-				hdr, hdr->num_longs * sizeof(long));
+				hdr, hdr_location(hdr),
+				hdr->num_longs * sizeof(long));
 				return false;
 		}
 		if (hdr->free) {
 			if (hdr->prev_free || prev_free) {
-				prerror("Region '%s' free %p has prev_free"
-					" %p %sset?\n",
-					region->name, hdr,
-					prev_free, hdr->prev_free ? "" : "un");
+				prerror("Region '%s' free %p (%s) has prev_free"
+					" %p (%s) %sset?\n",
+					region->name, hdr, hdr_location(hdr),
+					prev_free,
+					prev_free ? hdr_location(prev_free)
+					: "NULL",
+					hdr->prev_free ? "" : "un");
 				return false;
 			}
 			prev_free = hdr;
 			frees ^= (unsigned long)hdr - region->start;
 		} else {
 			if (hdr->prev_free != (bool)prev_free) {
-				prerror("Region '%s' alloc %p has prev_free"
-					" %p %sset?\n",
-					region->name, hdr,
+				prerror("Region '%s' alloc %p (%s) has"
+					" prev_free %p %sset?\n",
+					region->name, hdr, hdr_location(hdr),
 					prev_free, hdr->prev_free ? "" : "un");
 				return false;
 			}
@@ -397,7 +447,7 @@ static struct mem_region *new_region(const char *name,
 
 	/* Avoid lock recursion, call mem_alloc directly. */
 	region = mem_alloc(&skiboot_heap,
-			   sizeof(*region), __alignof__(*region));
+			   sizeof(*region), __alignof__(*region), __location__);
 	if (!region)
 		return NULL;
 
@@ -485,7 +535,7 @@ static bool add_region(struct mem_region *region)
 		assert(r->len == region->len);
 		list_del_from(&regions, &r->list);
 		/* We already hold mem_region lock */
-		mem_free(&skiboot_heap, r);
+		mem_free(&skiboot_heap, r, __location__);
 	}
 
 	/* Finally, add in our own region. */

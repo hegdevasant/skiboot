@@ -24,31 +24,26 @@ static inline void real_free(void *p)
 	return free(p);
 }
 
-/* We want *mem_region* to use the skiboot malloc, but not us. */
-#undef malloc
-#undef free
-#undef realloc
-#define malloc skiboot_malloc
-#define free skiboot_free
-#define realloc skiboot_realloc
-
 #include "../malloc.c"
+
+#include <skiboot.h>
+/* We need mem_region to accept __location__ */
+#define is_rodata(p) true
 #include "../mem_region.c"
-char __rodata_start[1], __rodata_end[1];
+
+/* But we need device tree to make copies of names. */
+#undef is_rodata
+#define is_rodata(p) false
 
 static inline char *skiboot_strdup(const char *str)
 {
-	char *ret = skiboot_malloc(strlen(str) + 1);
+	char *ret = __malloc(strlen(str) + 1, "");
 	return memcpy(ret, str, strlen(str) + 1);
 }
 #undef strdup
 #define strdup skiboot_strdup
 
 #include "../device.c"
-
-#undef malloc
-#undef free
-#undef realloc
 
 #include <skiboot.h>
 
@@ -84,6 +79,7 @@ static void add_mem_node(uint64_t start, uint64_t len)
 	sprintf(name, "memory@%llx", (unsigned long long)start);
 
 	mem = dt_new(dt_root, name);
+	assert(mem);
 	dt_add_property_string(mem, "device_type", "memory");
 	dt_add_property(mem, "reg", reg, sizeof(reg));
 }
@@ -153,7 +149,7 @@ int main(void)
 		    r != &skiboot_heap &&
 		    r != &skiboot_after_heap &&
 		    r != &skiboot_cpu_stacks) {
-			skiboot_free(r);
+			free(r);
 		}
 		assert(mem_check(&skiboot_heap));
 	}

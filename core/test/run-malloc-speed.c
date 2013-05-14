@@ -24,14 +24,10 @@ static inline void real_free(void *p)
 	return free(p);
 }
 
-/* We want *mem_region* to use the skiboot malloc, but not us. */
-#undef malloc
-#undef free
-#undef realloc
-#define malloc skiboot_malloc
-#define free skiboot_free
-#define realloc skiboot_realloc
+#include <skiboot.h>
 
+/* We need mem_region to accept __location__ */
+#define is_rodata(p) true
 #include "../malloc.c"
 #include "../mem_region.c"
 
@@ -42,6 +38,7 @@ static inline void real_free(void *p)
 #include <assert.h>
 #include <stdio.h>
 
+char __rodata_start[1], __rodata_end[1];
 struct dt_node *dt_root;
 
 void lock(struct lock *l)
@@ -71,7 +68,7 @@ int main(void)
 
 	len = skiboot_heap.len / NUM_ALLOCS - sizeof(struct alloc_hdr);
 	for (i = 0; i < NUM_ALLOCS; i++) {
-		p[i] = skiboot_malloc(len);
+		p[i] = __malloc(len, __location__);
 		assert(p[i] > region_start(&skiboot_heap));
 		assert(p[i] + len <= region_start(&skiboot_heap)
 		       + skiboot_heap.len);
