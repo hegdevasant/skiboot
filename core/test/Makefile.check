@@ -1,23 +1,20 @@
 # -*-Makefile-*-
+CORE_TEST := core/test/run-device core/test/run-mem_region
 
-check: run-device-check run-mem_region-check
+check: $(CORE_TEST:%=%-check)
 
-run-device-check: core/test/run-device
-	$(VALGRIND) core/test/run-device
-
-run-mem_region-check: core/test/run-mem_region
-	$(VALGRIND) core/test/run-mem_region
+$(CORE_TEST:%=%-check) : %-check: %
+	$(VALGRIND) $<
 
 core/test/stubs.o: core/test/stubs.c
 	$(HOSTCC) $(HOSTCFLAGS) -g -c -o $@ $<
 
-core/test/run-device: core/test/run-device.c core/test/stubs.o
-	$(HOSTCC) $(HOSTCFLAGS) -g -I include -I . -I libfdt -o $@ $^
+$(CORE_TEST) : core/test/stubs.o
 
-core/test/run-mem_region: core/test/run-mem_region.c core/test/stubs.o
-	$(HOSTCC) $(HOSTCFLAGS) -O0 -g -I include -I . -I libfdt -o $@ $^
+$(CORE_TEST) : % : %.c 
+	$(HOSTCC) $(HOSTCFLAGS) -g -I include -I . -I libfdt -o $@ $< core/test/stubs.o
 
 clean: core-test-clean
 
 core-test-clean:
-	$(RM) core/test/*.o core/test/run-device core/test/run-mem_region
+	$(RM) core/test/*.o $(CORE_TEST)
