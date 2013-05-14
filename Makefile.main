@@ -23,6 +23,7 @@ CWARNS := -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs \
 HOSTCC=gcc
 HOSTEND=$(shell uname -m | sed -e 's/^i.*86$$/LITTLE/' -e 's/^x86.*/LITTLE/' -e 's/^ppc.*/BIG/')
 HOSTCFLAGS=-O1 $(CWARNS) -DHAVE_$(HOSTEND)_ENDIAN
+VALGRIND=valgrind -q --leak-check=full --show-reachable=yes --error-exitcode=99
 
 # Target options
 
@@ -105,6 +106,10 @@ gitid.c:
 	@echo "const char gitid[] = \"`git describe --always --dirty`\";" > $@
 
 .PHONY: gitid.c
+
+include $(shell find $(SRC)/* -name Makefile.check)
+
+.PHONY: check
 
 tags:
 	find . -name '*.[chS]' | xargs ctags
