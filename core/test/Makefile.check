@@ -1,5 +1,5 @@
 # -*-Makefile-*-
-CORE_TEST := core/test/run-device core/test/run-mem_region core/test/run-malloc
+CORE_TEST := core/test/run-device core/test/run-mem_region core/test/run-malloc core/test/run-malloc-speed
 
 check: $(CORE_TEST:%=%-check)
 
