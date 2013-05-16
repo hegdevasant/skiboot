@@ -4,13 +4,15 @@
  * confidentiality governed by the Parties’ Mutual Nondisclosure Agreement
  * number V032404DR, executed by the parties on November 6, 2007, and
  * Supplement V032404DR-3 dated August 16, 2012 (the “NDA”). */
-#include "spira.h"
 #include <memory.h>
 #include <cpu.h>
 #include <device_tree.h>
 #include <device.h>
 #include <ccan/str/str.h>
 #include <libfdt/libfdt.h>
+
+#include "spira.h"
+#include "hdata.h"
 
 struct HDIF_ram_area_id {
 	uint16_t id;
@@ -54,7 +56,7 @@ static struct dt_node *find_shared(struct dt_node *root, u16 id, u64 start, u64 
 		u64 reg[2];
 		const struct dt_property *shared, *type;
 
-		type = dt_find_property(i, "device-type");
+		type = dt_find_property(i, "device_type");
 		if (!type || strcmp(type->prop, "memory") != 0)
 			continue;
 
@@ -77,11 +79,14 @@ static bool add_address_range(struct dt_node *root,
 	u64 reg[2];
 	char name[sizeof("memory@") + STR_MAX_CHARS(reg[0])];
 
+	printf("  Range: 0x%016llx..0x%016llx on Chip 0x%x mattr: 0x%x\n",
+	       arange->start, arange->end, pcid_to_chip_id(arange->chip),
+	       arange->mirror_attr);
+
 	/* reg contains start and length */
 	reg[0] = cleanup_addr(arange->start);
 	reg[1] = cleanup_addr(arange->end) - reg[0];
 
-	/* FIXME: Untested code! */
 	if (id->flags & MS_AREA_SHARED) {
 		/* Only enter shared nodes once. */ 
 		if (find_shared(root, id->share_id, reg[0], reg[1]))
