@@ -62,7 +62,6 @@ static int64_t opal_rtc_decode_msg(struct fsp_msg *msg, uint32_t *y_m_d,
 				   uint64_t *h_m_s_m)
 {
 	uint8_t rc;
-	uint64_t tmp;
 
 	if (!msg || msg->state != fsp_msg_response)
 		return OPAL_INTERNAL_ERROR;
@@ -89,7 +88,11 @@ static int64_t opal_rtc_decode_msg(struct fsp_msg *msg, uint32_t *y_m_d,
 	 * The OPAL API is defined as returned a u64 of a
 	 * similar format except that microseconds is milliseconds
 	 * in OPAL and is flush with seconds (the reserved bits are
-	 * at the bottom).
+	 * at the bottom):
+	 *
+	 *  |  hour  | minutes | secs  | millisec |
+	 *  | -------------------------------------
+	 *  |        millisec          | reserved |
 	 *
 	 * We simply ignore the microseconds/milliseconds for now
 	 * as I don't quite understand why the OPAL API defines that
@@ -99,9 +102,7 @@ static int64_t opal_rtc_decode_msg(struct fsp_msg *msg, uint32_t *y_m_d,
 	 *
 	 * Note that Linux doesn't use nor set the ms field anyway.
 	 */
-	tmp = (((uint64_t)msg->data.words[1]) & 0xffffff00) << 32;
-	tmp |= (uint64_t)msg->data.bytes[4] << 32;
-	*h_m_s_m = tmp;
+	*h_m_s_m = (((uint64_t)msg->data.words[1]) & 0xffffff00) << 32;
 
 	return OPAL_SUCCESS;
 }
