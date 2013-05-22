@@ -88,6 +88,8 @@ static inline u64 cleanup_addr(u64 addr)
 /* Start the kernel */
 extern void start_kernel(uint64_t entry, void* fdt,
 			 uint64_t mem_top) __noreturn;
+extern void start_kernel32(uint64_t entry, void* fdt,
+			   uint64_t mem_top) __noreturn;
 extern void start_kernel_secondary(uint64_t entry) __noreturn;
 
 /* Get description of machine from HDAT and create device-tree */

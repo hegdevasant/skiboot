@@ -9,8 +9,8 @@
 
 #include <stdint.h>
 
-/* 64-bit ELF header */
-struct elf64_hdr {
+/* Generic ELF header */
+struct elf_hdr {
 	uint32_t ei_ident;
 #define ELF_IDENT	0x7F454C46
 	uint8_t ei_class;
@@ -23,7 +23,20 @@ struct elf64_hdr {
 	uint8_t ei_pad[9];
 	uint16_t e_type;
 	uint16_t e_machine;
+#define ELF_MACH_PPC32	0x14
 #define ELF_MACH_PPC64	0x15
+	uint32_t e_version;
+};
+
+/* 64-bit ELF header */
+struct elf64_hdr {
+	uint32_t ei_ident;
+	uint8_t ei_class;
+	uint8_t ei_data;
+	uint8_t ei_version;
+	uint8_t ei_pad[9];
+	uint16_t e_type;
+	uint16_t e_machine;
 	uint32_t e_version;
 	uint64_t e_entry;
 	uint64_t e_phoff;
@@ -74,6 +87,39 @@ struct elf64_rela {
 /* relocs we support */
 #define R_PPC64_RELATIVE	22
 
+/* 32-bit ELF header */
+struct elf32_hdr {
+	uint32_t ei_ident;
+	uint8_t ei_class;
+	uint8_t ei_data;
+	uint8_t ei_version;
+	uint8_t ei_pad[9];
+	uint16_t e_type;
+	uint16_t e_machine;
+	uint32_t e_version;
+	uint32_t e_entry;
+	uint32_t e_phoff;
+	uint32_t e_shoff;
+	uint32_t e_flags;
+	uint16_t e_ehsize;
+	uint16_t e_phentsize;
+	uint16_t e_phnum;
+	uint16_t e_shentsize;
+	uint16_t e_shnum;
+	uint16_t e_shstrndx;
+};
+
+/* 32-bit ELF program header*/
+struct elf32_phdr {
+	uint32_t p_type;
+	uint32_t p_offset;
+	uint32_t p_vaddr;
+	uint32_t p_paddr;
+	uint32_t p_filesz;
+	uint32_t p_memsz;
+	uint32_t p_flags;
+	uint32_t p_align;
+};
 
 
 #endif /* __ELF_H */

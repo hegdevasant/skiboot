@@ -633,6 +633,15 @@ start_kernel:
 	li	%r5,0
 	bctr
 
+	.global start_kernel32
+start_kernel32:
+	mfmsr	%r10
+	clrldi	%r10,%r10,1
+	mtmsrd	%r10,0
+	sync
+	isync
+	b	start_kernel
+
 .global start_kernel_secondary
 start_kernel_secondary:
 	sync

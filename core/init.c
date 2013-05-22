@@ -32,8 +32,112 @@ enum proc_gen proc_gen;
 
 static uint64_t kernel_entry;
 static uint64_t kernel_top;
+static bool kernel_32bit;
 static void *fdt;
 
+static bool try_load_elf64(struct elf_hdr *header, size_t ksize)
+{
+	struct elf64_hdr *kh = (struct elf64_hdr *)header;
+	uint64_t load_base = (uint64_t)kh;
+	struct elf64_phdr *ph;
+	unsigned int i;
+
+	/* Check it's a ppc64 ELF */
+	if (kh->ei_ident != ELF_IDENT		||
+	    kh->ei_data != ELF_DATA_MSB		||
+	    kh->e_machine != ELF_MACH_PPC64) {
+		prerror("INIT: Kernel doesn't look like an ppc64 ELF\n");
+		return false;
+	}
+
+	/* Look for a loadable program header that has our entry in it
+	 *
+	 * Note that we execute the kernel in-place, we don't actually
+	 * obey the load informations in the headers. This is expected
+	 * to work for the Linux Kernel because it's a fairly dumb ELF
+	 * but it will not work for any ELF binary.
+	 */
+	ph = (struct elf64_phdr *)(load_base + kh->e_phoff);
+	for (i = 0; i < kh->e_phnum; i++, ph++) {
+		if (ph->p_type != ELF_PTYPE_LOAD)
+			continue;
+		if (ph->p_vaddr > kh->e_entry ||
+		    (ph->p_vaddr + ph->p_memsz) < kh->e_entry)
+			continue;
+
+		/* Get our entry */
+		kernel_entry = kh->e_entry - ph->p_vaddr + ph->p_offset;
+		break;
+	}
+
+	if (!kernel_entry) {
+		prerror("INIT: Failed to find kernel entry !\n");
+		return false;
+	}
+	kernel_entry += load_base;
+	kernel_top = load_base + ksize;
+	kernel_32bit = false;
+
+	printf("INIT: 64-bit kernel entry at 0x%llx\n", kernel_entry);
+
+	return true;
+}
+
+static bool try_load_elf32(struct elf_hdr *header, size_t ksize)
+{
+	struct elf32_hdr *kh;
+	struct elf32_phdr *ph;
+	unsigned int i;
+	uint64_t load_base;
+
+	/* Check it's a ppc32 ELF */
+	if (header->ei_ident != ELF_IDENT		||
+	    header->ei_data != ELF_DATA_MSB		||
+	    header->e_machine != ELF_MACH_PPC32) {
+		prerror("INIT: Kernel doesn't look like an ppc32 ELF\n");
+		return false;
+	}
+
+	/* Move kernel to higher up since it's likely to be a zImage
+	 * wrapper which doesn't like too much being down low
+	 */
+	memmove((void *)KERNEL_STRADALE_BASE, header, ksize);
+	kh = (struct elf32_hdr *)KERNEL_STRADALE_BASE;
+	load_base = KERNEL_STRADALE_BASE;
+
+	/* Look for a loadable program header that has our entry in it
+	 *
+	 * Note that we execute the kernel in-place, we don't actually
+	 * obey the load informations in the headers. This is expected
+	 * to work for the Linux Kernel because it's a fairly dumb ELF
+	 * but it will not work for any ELF binary.
+	 */
+	ph = (struct elf32_phdr *)(load_base + kh->e_phoff);
+	for (i = 0; i < kh->e_phnum; i++, ph++) {
+		if (ph->p_type != ELF_PTYPE_LOAD)
+			continue;
+		if (ph->p_vaddr > kh->e_entry ||
+		    (ph->p_vaddr + ph->p_memsz) < kh->e_entry)
+			continue;
+
+		/* Get our entry */
+		kernel_entry = kh->e_entry - ph->p_vaddr + ph->p_offset;
+		break;
+	}
+
+	if (!kernel_entry) {
+		prerror("INIT: Failed to find kernel entry !\n");
+		return false;
+	}
+
+	kernel_entry += load_base;
+	kernel_top = load_base + ksize;
+	kernel_32bit = true;
+
+	printf("INIT: 32-bit kernel entry at 0x%llx\n", kernel_entry);
+
+	return true;
+}
 
 /* LID numbers. For now we hijack some of pHyp's own until i figure
  * out the whole business with the MasterLID
@@ -44,10 +148,8 @@ static void *fdt;
 static bool load_kernel(void)
 {
 	uint64_t load_base;
-	struct elf64_hdr *kh;
-	struct elf64_phdr *ph;
+	struct elf_hdr *kh;
 	struct dt_node *iplp;
-	unsigned int i;
 	uint32_t lid;
 	size_t ksize;
 	const char *ltype, *side = NULL;
@@ -81,46 +183,14 @@ static bool load_kernel(void)
 
 	printf("INIT: Kernel loaded, size: %ld bytes\n", ksize);
 
-	/* Check it's a ppc64 ELF */
-	kh = (struct elf64_hdr *)load_base;
-	if (kh->ei_ident != ELF_IDENT		||
-	    kh->ei_class != ELF_CLASS_64	||
-	    kh->ei_data != ELF_DATA_MSB		||
-	    kh->e_machine != ELF_MACH_PPC64) {
-		prerror("INIT: Kernel doesn't look like an ppc64 ELF\n");
-		return false;
-	}
+	kh = (struct elf_hdr *)load_base;
+	if (kh->ei_class == ELF_CLASS_64)
+		return try_load_elf64(kh, ksize);
+	else if (kh->ei_class == ELF_CLASS_32)
+		return try_load_elf32(kh, ksize);
 
-	/* Look for a loadable program header that has our entry in it
-	 *
-	 * Note that we execute the kernel in-place, we don't actually
-	 * obey the load informations in the headers. This is expected
-	 * to work for the Linux Kernel because it's a fairly dumb ELF
-	 * but it will not work for any ELF binary.
-	 */
-	ph = (struct elf64_phdr *)(load_base + kh->e_phoff);
-	for (i = 0; i < kh->e_phnum; i++, ph++) {
-		if (ph->p_type != ELF_PTYPE_LOAD)
-			continue;
-		if (ph->p_vaddr > kh->e_entry ||
-		    (ph->p_vaddr + ph->p_memsz) < kh->e_entry)
-			continue;
-
-		/* Get our entry */
-		kernel_entry = kh->e_entry - ph->p_vaddr + ph->p_offset;
-		break;
-	}
-
-	if (!kernel_entry) {
-		prerror("INIT: Failed to find kernel entry !\n");
-		return false;
-	}
-	kernel_entry += load_base;
-	kernel_top = load_base + ksize;
-
-	printf("INIT: Kernel entry at 0x%llx\n", kernel_entry);
-
-	return true;
+	printf("INIT: Neither ELF32 not ELF64 ?\n");
+	return false;
 }
 
 void load_and_boot_kernel(bool is_reboot)
@@ -171,6 +241,8 @@ void load_and_boot_kernel(bool is_reboot)
 	printf("INIT: Starting kernel at 0x%llx\n", kernel_entry);
 
 	fdt_set_boot_cpuid_phys(fdt, this_cpu()->pir);
+	if (kernel_32bit)
+		start_kernel32(kernel_entry, fdt, mem_top);
 	start_kernel(kernel_entry, fdt, mem_top);
 }
 
