@@ -12,9 +12,11 @@
 
 #define EPAPR_MAGIC	0x65504150
 
-#define EXCEPTION(nr)	\
-	.= nr;		\
-	b .;
+#define EXCEPTION(nr)		\
+	.= nr;			\
+	mtsprg0	%r3;		\
+	mfspr	%r3,SPR_CFAR;	\
+	b . ;
 
 
 /**
