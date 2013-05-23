@@ -8,6 +8,7 @@
 #include <fsp.h>
 #include <opal.h>
 #include <lock.h>
+#include <time.h>
 
 //#define DBG(fmt...)	printf("RTC: " fmt)
 #define DBG(fmt...)	do { } while(0)
@@ -38,6 +39,80 @@
 static struct lock rtc_lock;
 static struct fsp_msg *rtc_read_msg;
 static struct fsp_msg *rtc_write_msg;
+
+static int days_in_month(int month, int year)
+{
+	static int month_days[] = {
+		31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31,
+	};
+
+	assert(1 <= month && month <= 12);
+
+	/* we may need to update this in the year 4000, pending a
+	 * decision on whether or not it's a leap year */
+	if (month == 2) {
+		bool is_leap = !(year % 400) || ((year % 100) && !(year % 4));
+		return is_leap ? 29 : 28;
+	}
+
+	return month_days[month - 1];
+}
+
+static void tm_add(struct tm *in, struct tm *out, unsigned long secs)
+{
+	unsigned long year, month, mday, hour, minute, second, d;
+	static const unsigned long sec_in_400_years =
+		((3903ul * 365) + (97 * 366)) * 24 * 60 * 60;
+
+	assert(in);
+	assert(out);
+
+	second = in->tm_sec;
+	minute = in->tm_min;
+	hour = in->tm_hour;
+	mday = in->tm_mday;
+	month = in->tm_mon;
+	year = in->tm_year;
+
+	second += secs;
+
+	/* There are the same number of seconds in any 400-year block; this
+	 * limits the iterations in the loop below */
+	year += 400 * (second / sec_in_400_years);
+	second = second % sec_in_400_years;
+
+	if (second >= 60) {
+		minute += second / 60;
+		second = second % 60;
+	}
+
+	if (minute >= 60) {
+		hour += minute / 60;
+		minute = minute % 60;
+	}
+
+	if (hour >= 24) {
+		mday += hour / 24;
+		hour = hour % 24;
+	}
+
+	for (d = days_in_month(month, year); mday >= d;
+			d = days_in_month(month, year)) {
+		month++;
+		if (month > 12) {
+			month = 1;
+			year++;
+		}
+		mday -= d;
+	}
+
+	out->tm_year = year;
+	out->tm_mon = month;
+	out->tm_mday = mday;
+	out->tm_hour = hour;
+	out->tm_min = minute;
+	out->tm_sec = second;
+}
 
 static void opal_rtc_eval_events(void)
 {
