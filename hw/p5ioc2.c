@@ -12,7 +12,7 @@
 #include <opal.h>
 #include <interrupts.h>
 #include <device.h>
-#include <time.h>
+#include <timebase.h>
 #include <vpd.h>
 #include <ccan/str/str.h>
 

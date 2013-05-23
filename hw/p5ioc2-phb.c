@@ -8,7 +8,7 @@
 #include <p5ioc2.h>
 #include <p5ioc2-regs.h>
 #include <io.h>
-#include <time.h>
+#include <timebase.h>
 #include <pci.h>
 #include <pci-cfg.h>
 #include <interrupts.h>

@@ -1,6 +1,6 @@
 #include <stdlib.h>
 #include <stdbool.h>
-#include <time.h>
+#include <timebase.h>
 
 #include <ccan/list/list.h>
 #include "helper.h"

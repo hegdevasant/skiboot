@@ -13,7 +13,7 @@
 #include <fsp.h>
 #include <console.h>
 #include <opal.h>
-#include <time.h>
+#include <timebase.h>
 #include <device.h>
 
 struct fsp_serbuf_hdr {
