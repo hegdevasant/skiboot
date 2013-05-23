@@ -373,8 +373,6 @@ static int64_t opal_rtc_write(uint32_t year_month_day __unused,
 
 	lock(&rtc_lock);
 
-	DBG("Got opal_rtc_write() call...\n");
-
 	if (rtc_tod_state == RTC_TOD_PERMANENT_ERROR) {
 		rc = OPAL_HARDWARE;
 		msg = NULL;
@@ -384,17 +382,15 @@ static int64_t opal_rtc_write(uint32_t year_month_day __unused,
 	/* Do we have a request already ? */
 	msg = rtc_write_msg;
 	if (msg) {
-		DBG("Pending request @%p, state=%d\n", msg, msg->state);
-
 		/* If it's still in progress, return */
 		if (fsp_msg_busy(msg)) {
-			DBG(" -> busy\n");
 			/* Don't free the message */
 			msg = NULL;
 			rc = OPAL_BUSY_EVENT;
 			goto bail;
 		}
 
+		DBG("Completed write request @%p, state=%d\n", msg, msg->state);
 		/* It's complete, clear events */
 		rtc_write_msg = NULL;
 		opal_rtc_eval_events();
@@ -425,7 +421,7 @@ static int64_t opal_rtc_write(uint32_t year_month_day __unused,
 		rc = OPAL_INTERNAL_ERROR;
 		goto bail;
 	}
-	DBG(" -> req at %p\n", rtc_read_msg);
+	DBG(" -> req at %p\n", rtc_write_msg);
 	if (fsp_queue_msg(rtc_write_msg, fsp_rtc_req_complete)) {
 		DBG(" -> queueing failed !\n");
 		rc = OPAL_INTERNAL_ERROR;
@@ -438,8 +434,6 @@ static int64_t opal_rtc_write(uint32_t year_month_day __unused,
 	unlock(&rtc_lock);
 	if (msg)
 		fsp_freemsg(msg);
-	DBG(" -> opal ret=%lld\n", rc);
-
 	return rc;
 }
 opal_call(OPAL_RTC_WRITE, opal_rtc_write);
