@@ -610,4 +610,7 @@ extern void fsp_nvram_init(void);
 extern void add_opal_nvram_node(struct dt_node *opal);
 extern void fsp_nvram_wait_open(void);
 
+/* RTC */
+extern void fsp_rtc_init(void);
+
 #endif /* __FSP_H */
