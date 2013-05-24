@@ -7,7 +7,7 @@
 #include <skiboot.h>
 #include <pci.h>
 #include <pci-cfg.h>
-#include <time.h>
+#include <timebase.h>
 #include <lock.h>
 
 static int64_t opal_pci_config_read_byte(uint64_t phb_id,

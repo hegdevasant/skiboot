@@ -12,7 +12,7 @@
 #include <xscom.h>
 #include <io.h>
 #include <cpu.h>
-#include <time.h>
+#include <timebase.h>
 
 //#define DBG(fmt...)	printf("CHIPTOD: " fmt)
 #define DBG(fmt...)	do { } while(0)

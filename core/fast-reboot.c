@@ -11,7 +11,7 @@
 #include <xscom.h>
 #include <interrupts.h>
 #include <cec.h>
-#include <time.h>
+#include <timebase.h>
 #include <memory.h>
 #include <pci.h>
 #include <chip.h>

@@ -323,6 +323,9 @@ void main_cpu_entry(const void *fdt, u32 master_cpu)
 	/* Enable timebase synchronization */
 	chiptod_init(master_cpu);
 
+	/* Read our initial RTC value */
+	fsp_rtc_init();
+
 	op_display(OP_LOG, OP_MOD_INIT, 0x0003);
 
 	op_display(OP_LOG, OP_MOD_INIT, 0x0004);

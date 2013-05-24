@@ -13,7 +13,7 @@
 #include <p7ioc-regs.h>
 #include <io.h>
 #include <processor.h>
-#include <time.h>
+#include <timebase.h>
 
 #undef DUMP_CI_ROUTING
 #undef DUMP_REG_WRITES

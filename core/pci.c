@@ -7,7 +7,7 @@
 #include <skiboot.h>
 #include <pci.h>
 #include <pci-cfg.h>
-#include <time.h>
+#include <timebase.h>
 #include <lock.h>
 #include <device.h>
 
