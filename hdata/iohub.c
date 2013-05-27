@@ -342,7 +342,7 @@ static struct dt_node *io_add_hea(const struct cechub_io_hub *hub,
 	/* BUID is base + 0x30 */
 	dt_add_property(np, "interrupt-controller", NULL, 0);
 	dt_add_property_cells(np, "interrupt-base",
-			      (hub->buid_ext << 9) | 0x30);
+			      ((hub->buid_ext << 9) | 0x30) << 4);
 	dt_add_property_cells(np, "interrupt-max-count", 128);
 
 	/* Always 2 port groups */
