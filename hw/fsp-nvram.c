@@ -30,17 +30,17 @@
  * (Q: should we save the whole thing in case of FSP failover ?)
  *
  * The nvram is expected to comply with the CHRP/PAPR defined format,
- * and specifically contain a System partition (ID 0x70). If present
- * SkiBoot will be able to obtain some configuration from it at boot
- * time.
+ * and specifically contain a System partition (ID 0x70) named "common"
+ * with configuration variables for the bootloader and a FW private
+ * partition for future use by skiboot.
+ *
+ * If the partition layout appears broken or lacks one of the above
+ * partitions, we reformat the entire nvram at boot time.
  *
  * We do not exploit the ability of the FSP to store a checksum. This
  * is documented as possibly going away. The CHRP format for nvram
  * that Linux uses has its own (though weak) checksum mechanism already
  *
- * The supported configuration informations currently are:
- *
- * XXX TODO
  */
 
 #define NVRAM_BLKSIZE	0x1000
@@ -272,6 +272,8 @@ static int64_t opal_read_nvram(uint64_t buffer, uint64_t size, uint64_t offset)
 {
 	int64_t rc;
 
+	if (!nvram_was_read)
+		return OPAL_HARDWARE;
 	if (offset >= nvram_size || (offset + size) > nvram_size)
 		return OPAL_PARAMETER;
 
@@ -289,6 +291,8 @@ static int64_t opal_write_nvram(uint64_t buffer, uint64_t size, uint64_t offset)
 {
 	int64_t rc;
 
+	if (!nvram_was_read)
+		return OPAL_HARDWARE;
 	if (offset >= nvram_size || (offset + size) > nvram_size)
 		return OPAL_PARAMETER;
 
@@ -318,9 +322,12 @@ static bool nvram_get_size(void)
 		nvram_state = NVRAM_STATE_BROKEN;
 		return false;
 	}
-	printf("FSP: NVRAM file size is %d bytes\n", size);
-	if (size > NVRAM_SIZE)
-		size = NVRAM_SIZE;
+	printf("FSP: NVRAM file size from FSP is %d bytes\n", size);
+	if (size > NVRAM_MAX_SIZE) {
+		printf("FSP: Cropping to max supported size of %d bytes\n",
+		       NVRAM_MAX_SIZE);
+		size = NVRAM_MAX_SIZE;
+	}
 	nvram_size = size;
 	return true;
 }
@@ -351,6 +358,133 @@ void fsp_nvram_init(void)
 	unlock(&nvram_lock);
 }
 
+struct chrp_nvram_hdr {
+	uint8_t		sig;
+	uint8_t		cksum;
+	uint16_t	len;
+	char		name[12];
+};
+
+#define NVRAM_SIG_FW_PRIV	0x51
+#define NVRAM_SIG_SYSTEM	0x70
+#define NVRAM_SIG_FREE		0x7f
+
+#define NVRAM_NAME_COMMON	"common"
+#define NVRAM_NAME_FW_PRIV	"ibm,skiboot"
+#define NVRAM_NAME_FREE		"wwwwwwwwwwww"
+
+/* 64k should be enough, famous last words... */
+#define NVRAM_SIZE_COMMON	0x10000
+
+/* 4k should be enough, famous last words... */
+#define NVRAM_SIZE_FW_PRIV	0x1000
+
+static uint8_t chrp_nv_cksum(struct chrp_nvram_hdr *hdr)
+{
+	struct chrp_nvram_hdr h_copy = *hdr;
+	uint8_t b_data, i_sum, c_sum;
+	uint8_t *p = (uint8_t *)&h_copy;
+	unsigned int nbytes = sizeof(h_copy);
+
+	h_copy.cksum = 0;
+	for (c_sum = 0; nbytes; nbytes--) {
+		b_data = *(p++);
+		i_sum = c_sum + b_data;
+		if (i_sum < c_sum)
+			i_sum++;
+		c_sum = i_sum;
+	}
+	return c_sum;
+}
+
+static void fsp_nvram_format(void)
+{
+	struct chrp_nvram_hdr *h;
+	unsigned int offset = 0;
+
+	prerror("FSP NVRAM: Re-initializing\n");
+	memset(nvram_image, 0, nvram_size);
+
+	/* Create private partition */
+	h = nvram_image + offset;
+	h->sig = NVRAM_SIG_FW_PRIV;
+	h->len = NVRAM_SIZE_FW_PRIV >> 4;
+	strcpy(h->name, NVRAM_NAME_FW_PRIV);
+	h->cksum = chrp_nv_cksum(h);
+	offset += NVRAM_SIZE_FW_PRIV;
+
+	/* Create common partition */
+	h = nvram_image + offset;
+	h->sig = NVRAM_SIG_SYSTEM;
+	h->len = NVRAM_SIZE_COMMON >> 4;
+	strcpy(h->name, NVRAM_NAME_COMMON);
+	h->cksum = chrp_nv_cksum(h);
+	offset += NVRAM_SIZE_COMMON;
+
+	/* Create free space partition */
+	h = nvram_image + offset;
+	h->sig = NVRAM_SIG_FREE;
+	h->len = (nvram_size - offset) >> 4;
+	strncpy(h->name, NVRAM_NAME_FREE, 12);
+	h->cksum = chrp_nv_cksum(h);
+
+	nvram_mark_dirty(0, nvram_size);
+}
+
+/*
+ * Check that the nvram partition layout is sane and that it
+ * contains our required partitions. If not, we re-format the
+ * lot of it
+ */
+static void fsp_nvram_check(void)
+{
+	unsigned int offset = 0;
+	bool found_common = false;
+	bool found_skiboot = false;
+
+	while (offset + sizeof(struct chrp_nvram_hdr) < nvram_size) {
+		struct chrp_nvram_hdr *h = nvram_image + offset;
+
+		if (chrp_nv_cksum(h) != h->cksum) {
+			prerror("FSP NVRAM: Partition at offset 0x%x"
+				" has bad checksum\n", offset);
+			goto failed;
+		}
+		if (h->len < 1) {
+			prerror("FSP NVRAM: Partition at offset 0x%x"
+				" has incorrect 0 length\n", offset);
+			goto failed;
+		}
+
+		if (h->sig == NVRAM_SIG_SYSTEM &&
+		    strcmp(h->name, NVRAM_NAME_COMMON) == 0)
+			found_common = true;
+
+		if (h->sig == NVRAM_SIG_FW_PRIV &&
+		    strcmp(h->name, NVRAM_NAME_FW_PRIV) == 0)
+			found_skiboot = true;
+
+		offset += h->len << 4;
+		if (offset > nvram_size) {
+			prerror("FSP NVRAM: Partition at offset 0x%x"
+				" extends beyond end of nvram !\n", offset);
+			goto failed;
+		}
+	}
+	if (!found_common) {
+		prerror("FSP NVRAM: Common partition not found !\n");
+		goto failed;
+	}
+	if (!found_skiboot) {
+		prerror("FSP NVRAM: Skiboot private partition not found !\n");
+		goto failed;
+	}
+	prerror("FSP NVRAM: Layout appears sane\n");
+	return;
+ failed:
+	fsp_nvram_format();
+}
+
 /* This is called right before starting the payload (Linux) to
  * ensure the initial open & read of nvram has happened before
  * we transfer control as the guest OS. This is necessary as
@@ -364,6 +498,13 @@ void fsp_nvram_wait_open(void)
 
 	while(nvram_state == NVRAM_STATE_OPENING)
 		fsp_poll();
+
+	if (!nvram_was_read) {
+		prerror("FSP: NVRAM not read, skipping init\n");
+		return;
+	}
+
+	fsp_nvram_check();
 }
 
 void add_opal_nvram_node(struct dt_node *opal)

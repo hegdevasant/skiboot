@@ -96,7 +96,7 @@
 
 /* This is our NVRAM image at base + 24M, it is set to be 1M in size */
 #define NVRAM_BASE		(SKIBOOT_BASE + 0x01800000)
-#define NVRAM_SIZE		0x00100000
+#define NVRAM_MAX_SIZE		0x00100000
 
 /* Total size of the above area */
 #define SKIBOOT_SIZE		0x01900000
