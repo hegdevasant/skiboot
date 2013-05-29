@@ -16,7 +16,6 @@
 			   SPR_HMER_XSCOM_DONE | \
 			   SPR_HMER_XSCOM_STATUS_MASK))
 
-static bool xscom_p8_mode;
 static uint64_t *xscoms;
 static int max_gcid;
 
@@ -187,10 +186,8 @@ void xscom_init(void)
 		assert(reg);
 		xscoms[gcid] = dt_translate_address(xn, 0, NULL);
 
-		/* Check for P8 variant (different GCID encoding) */
-		xscom_p8_mode = dt_node_is_compatible(xn, "ibm,power8-xscom");
-
 		printf("XSCOM: %s mode at 0x%llx\n",
-		       xscom_p8_mode ? "P8" : "P7", xscoms[gcid]);
+		       dt_node_is_compatible(xn, "ibm,power8-xscom") ? "P8" : "P7",
+		       xscoms[gcid]);
 	}
 }
