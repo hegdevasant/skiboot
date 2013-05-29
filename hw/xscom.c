@@ -11,9 +11,6 @@
 #include <device.h>
 #include <chip.h>
 
-/* XSCOM base address default */
-#define XSCOM_DEFAULT_BASE	0x00001A0000000000UL
-
 /* Mask of bits to clear in HMER before an access */
 #define HMER_CLR_MASK	(~(SPR_HMER_XSCOM_FAIL | \
 			   SPR_HMER_XSCOM_DONE | \
