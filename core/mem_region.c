@@ -16,6 +16,13 @@ struct lock mem_region_lock = LOCK_UNLOCKED;
 
 static struct list_head regions = LIST_HEAD_INIT(regions);
 
+static struct mem_region skiboot_os_reserve = {
+	.name		= "ibm,os-reserve",
+	.start		= 0,
+	.len		= SKIBOOT_BASE,
+	.type		= REGION_OS,
+};
+
 struct mem_region skiboot_heap = {
 	.name		= "ibm,firmware-heap",
 	.start		= HEAP_BASE,
@@ -571,7 +578,8 @@ void mem_region_init(void)
 	skiboot_cpu_stacks.len = cpu_max_pir * STACK_SIZE;
 
 	/* Now carve out our own reserved areas. */
-	if (!add_region(&skiboot_code_and_text) ||
+	if (!add_region(&skiboot_os_reserve) ||
+	    !add_region(&skiboot_code_and_text) ||
 	    !add_region(&skiboot_heap) ||
 	    !add_region(&skiboot_after_heap) ||
 	    !add_region(&skiboot_cpu_stacks)) {
