@@ -182,6 +182,9 @@ print_format(char **buffer, const char *format, void *var)
 					length_mod = sizeof(short int);
 				}
 				break;
+			case 'z':
+				length_mod = sizeof(size_t);
+				break;
 			default:
 				if(*form >= '0' && *form <= '9')
 					sizec[i++] = *form;

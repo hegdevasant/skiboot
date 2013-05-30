@@ -10,17 +10,13 @@
 #include <libfdt/libfdt.h>
 #include <libfdt/libfdt_internal.h>
 #include <ccan/str/str.h>
+#include <ccan/endian/endian.h>
 
 /* Used to give unique handles. */
 u32 last_phandle = 0;
 
 struct dt_node *dt_root;
 struct dt_node *dt_chosen;
-
-static bool is_rodata(const void *p)
-{
-	return ((char *)p >= __rodata_start && (char *)p < __rodata_end);
-}
 
 static const char *take_name(const char *name)
 {
@@ -233,7 +229,7 @@ static struct dt_property *new_property(struct dt_node *node,
 {
 	struct dt_property *p = malloc(sizeof(*p) + size);
 	if (!p) {
-		prerror("Failed to allocate property %s for %s of %lu bytes\n",
+		prerror("Failed to allocate property %s for %s of %zu bytes\n",
 			name, dt_get_path(node), size);
 		abort();
 	}
@@ -409,7 +405,7 @@ const struct dt_property *dt_require_property(const struct dt_node *node,
 
 		prerror("DT: Unexpected property length %s/%s\n",
 			path, name);
-		prerror("DT: Expected len: %d got len: %ld\n",
+		prerror("DT: Expected len: %d got len: %zu\n",
 			wanted_len, p->len);
 		assert(false);
 	}
@@ -592,7 +588,7 @@ u64 dt_get_number(const void *pdata, unsigned int cells)
 	u64 ret = 0;
 
 	while(cells--)
-		ret = (ret << 32) | *(p++);
+		ret = (ret << 32) | be32_to_cpu(*(p++));
 	return ret;
 }
 

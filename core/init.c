@@ -19,8 +19,8 @@
 #include <pci.h>
 #include <lpc.h>
 #include <interrupts.h>
+#include <mem_region.h>
 #include <libfdt/libfdt.h>
-
 
 /*
  * Boot semaphore, incremented by each CPU calling in
@@ -181,7 +181,7 @@ static bool load_kernel(void)
 			       (void *)load_base, &ksize);
 	}
 
-	printf("INIT: Kernel loaded, size: %ld bytes\n", ksize);
+	printf("INIT: Kernel loaded, size: %zu bytes\n", ksize);
 
 	kh = (struct elf_hdr *)load_base;
 	if (kh->ei_class == ELF_CLASS_64)
@@ -287,6 +287,9 @@ void main_cpu_entry(const void *fdt, u32 master_cpu)
 	/* Initialize the rest of the cpu thread structs */
 	init_all_cpus();
 
+	/* Mark out memory areas. */
+	mem_region_init();
+
 	/* Initialize XSCOM */
 	xscom_init();
 
@@ -349,6 +352,12 @@ void main_cpu_entry(const void *fdt, u32 master_cpu)
 	 * boot process.
 	 */
 	add_opal_nodes();
+
+	/* Now release parts of memory nodes we haven't used ourselves... */
+	mem_region_release_unused();
+
+	/* ... and add remaining reservations to the DT */
+	mem_region_add_dt_reserved();
 
 	load_and_boot_kernel(false);
 }

@@ -11,8 +11,8 @@
 
 #include <compiler.h>
 #include <stdint.h>
-#include <byteorder.h>
 #include <processor.h>
+#include <ccan/endian/endian.h>
 
 /*
  * IO access functions

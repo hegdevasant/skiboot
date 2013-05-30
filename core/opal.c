@@ -81,17 +81,6 @@ static void add_opal_firmware_node(struct dt_node *opal)
 	dt_add_property_string(firmware, "git-id", gitid);
 }
 
-uint64_t opal_get_base(void)
-{
-	return SKIBOOT_BASE;
-}
-
-uint64_t opal_get_size(void)
-{
-	return (CPU_STACKS_BASE +
-		(cpu_max_pir + 1) * STACK_SIZE) - SKIBOOT_BASE;
-}
-
 void add_opal_nodes(void)
 {
 	uint64_t base, entry, size;
@@ -106,9 +95,10 @@ void add_opal_nodes(void)
 	 * extracted
 	 */
 
-	base = opal_get_base();
-	size = opal_get_size();
 	entry = (uint64_t)&opal_entry;
+	base = SKIBOOT_BASE;
+	size = (CPU_STACKS_BASE +
+		(cpu_max_pir + 1) * STACK_SIZE) - SKIBOOT_BASE;
 
 	opal = dt_new(dt_root, "ibm,opal");
 	dt_add_property_cells(opal, "#address-cells", 0);

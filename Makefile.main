@@ -21,7 +21,9 @@ CWARNS := -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs \
 
 # Host tools and options
 HOSTCC=gcc
-HOSTCFLAGS=-O1 $(CWARNS)
+HOSTEND=$(shell uname -m | sed -e 's/^i.*86$$/LITTLE/' -e 's/^x86.*/LITTLE/' -e 's/^ppc.*/BIG/')
+HOSTCFLAGS=-O1 $(CWARNS) -DHAVE_$(HOSTEND)_ENDIAN
+VALGRIND=valgrind -q --leak-check=full --show-reachable=yes --error-exitcode=99
 
 # Target options
 
@@ -32,7 +34,7 @@ CPPFLAGS := -I$(SRC)/include -MMD -include $(SRC)/include/config.h
 CPPFLAGS += -I$(SRC)/libfdt -I$(SRC)/libc/include -I$(SRC)
 CPPFLAGS += -D__SKIBOOT__ -nostdinc
 CPPFLAGS += -isystem $(shell $(CC) -print-file-name=include)
-CPPFLAGS += -DBITS_PER_LONG=64 -m64
+CPPFLAGS += -DBITS_PER_LONG=64 -m64 -DHAVE_BIG_ENDIAN
 
 CFLAGS := -fno-strict-aliasing -fno-stack-protector -pie
 CFLAGS += $(CWARNS) $(OPTS) $(DBG)
@@ -104,6 +106,10 @@ gitid.c:
 	@echo "const char gitid[] = \"`git describe --always --dirty`\";" > $@
 
 .PHONY: gitid.c
+
+include $(shell find $(SRC)/* -name Makefile.check)
+
+.PHONY: check
 
 tags:
 	find . -name '*.[chS]' | xargs ctags

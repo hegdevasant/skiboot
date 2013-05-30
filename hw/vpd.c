@@ -161,7 +161,7 @@ static void *vpd_lid_load(const uint8_t *lx, uint8_t lxrn, size_t *size)
 		goto fail;
 	}
 
-	printf("VPD: Loaded %ld bytes\n", *size);
+	printf("VPD: Loaded %zu bytes\n", *size);
 
 	/* Got it ! */
 	realloc(data, *size);

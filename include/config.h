@@ -122,5 +122,17 @@
 /* Size allocated to build the device-tree */
 #define	DEVICE_TREE_MAX_SIZE	0x80000
 
+/* Keep -Wundef happy by defining whatever isn't on commandline to 0 */
+#if defined(HAVE_LITTLE_ENDIAN) && HAVE_LITTLE_ENDIAN
+#define HAVE_BIG_ENDIAN 0
+#endif
+#if defined(HAVE_BIG_ENDIAN) && HAVE_BIG_ENDIAN
+#define HAVE_LITTLE_ENDIAN 0
+#endif
+
+/* We don't have a byteswap.h, and thus no bswap_64 */
+#define HAVE_BYTESWAP_H 0
+#define HAVE_BSWAP_64 0
+
 #endif /* __CONFIG_H */
 

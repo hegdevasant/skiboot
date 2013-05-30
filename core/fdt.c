@@ -129,17 +129,32 @@ static void flatten_dt_node(const struct dt_node *root)
 	}
 }
 
+void create_dtb_reservemap(const struct dt_node *root)
+{
+	uint64_t base, size;
+	const uint64_t *ranges;
+	const struct dt_property *prop;
+	int i;
+
+	/* Duplicate the reserved-ranges property into the fdt reservemap */
+	prop = dt_find_property(root, "reserved-ranges");
+	if (prop) {
+		ranges = (void *)prop->prop;
+
+		for (i = 0; i < prop->len / (sizeof(uint64_t) * 2); i++) {
+			base = *(ranges++);
+			size = *(ranges++);
+			save_err(fdt_add_reservemap_entry(fdt, base, size));
+		}
+	}
+
+	save_err(fdt_finish_reservemap(fdt));
+}
+
 void *create_dtb(const struct dt_node *root)
 {
 	size_t len = DEVICE_TREE_MAX_SIZE;
-	uint64_t sbase, total_size;
 	uint32_t old_last_phandle = last_phandle;
-
-	/* Calculate our total size, which is SKIBOOT_SIZE
-	 * plus all the CPU stacks
-	 */
-	sbase = opal_get_base();
-	total_size = opal_get_size();
 
 	do {
 		if (fdt)
@@ -153,8 +168,8 @@ void *create_dtb(const struct dt_node *root)
 		}
 
 		fdt_create(fdt, len);
-		save_err(fdt_add_reservemap_entry(fdt, sbase, total_size));
-		save_err(fdt_finish_reservemap(fdt));
+
+		create_dtb_reservemap(root);
 
 		/* Open root node */
 		dt_begin_node(root->name, root->phandle);
