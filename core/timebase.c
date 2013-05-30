@@ -17,6 +17,6 @@ void time_wait(unsigned long duration)
 
 void time_wait_ms(unsigned long ms)
 {
-	time_wait(ms * (tb_hz / 1000));
+	time_wait(msecs_to_tb(ms));
 }
 
