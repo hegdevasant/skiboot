@@ -1234,11 +1234,18 @@ static int64_t p7ioc_get_diag_data(struct phb *phb, void *diag_buffer,
 				   uint64_t diag_buffer_len)
 {
 	struct p7ioc_phb *p = phb_to_p7ioc_phb(phb);
+	struct OpalIoPhbErrorCommon *common = diag_buffer;
 	struct OpalIoP7IOCPhbErrorData *data = diag_buffer;
 
 	if (diag_buffer_len < sizeof(struct OpalIoP7IOCPhbErrorData))
 		return OPAL_PARAMETER;
 
+	/* Error data common part */
+	common->version = OPAL_PHB_ERROR_DATA_VERSION_1;
+	common->ioType  = OPAL_PHB_ERROR_DATA_TYPE_P7IOC;
+	common->len	= sizeof(struct OpalIoP7IOCPhbErrorData);
+
+	/* Specific error data */
 	p7ioc_eeh_read_phb_status(p, data);
 
 	/*
@@ -1891,7 +1898,8 @@ static const struct phb_ops p7ioc_phb_ops = {
 	.choose_bus		= p7ioc_choose_bus,
 	.eeh_freeze_status	= p7ioc_eeh_freeze_status,
 	.eeh_freeze_clear	= p7ioc_eeh_freeze_clear,
-	.get_diag_data		= p7ioc_get_diag_data,
+	.get_diag_data		= NULL,
+	.get_diag_data2		= p7ioc_get_diag_data,
 	.next_error		= p7ioc_eeh_next_error,
 	.phb_mmio_enable	= p7ioc_phb_mmio_enable,
 	.set_phb_mem_window	= p7ioc_set_phb_mem_window,

@@ -624,6 +624,26 @@ static int64_t opal_pci_get_phb_diag_data(uint64_t phb_id,
 }
 opal_call(OPAL_PCI_GET_PHB_DIAG_DATA, opal_pci_get_phb_diag_data);
 
+static int64_t opal_pci_get_phb_diag_data2(uint64_t phb_id,
+					   void *diag_buffer,
+					   uint64_t diag_buffer_len)
+{
+	struct phb *phb = pci_get_phb(phb_id);
+	int64_t rc;
+
+	if (!phb)
+		return OPAL_PARAMETER;
+	if (!phb->ops->get_diag_data2)
+		return OPAL_UNSUPPORTED;
+	phb->ops->lock(phb);
+	rc = phb->ops->get_diag_data2(phb, diag_buffer, diag_buffer_len);
+	phb->ops->unlock(phb);
+	pci_put_phb(phb);
+
+	return rc;
+}
+opal_call(OPAL_PCI_GET_PHB_DIAG_DATA2, opal_pci_get_phb_diag_data2);
+
 static int64_t opal_pci_next_error(uint64_t phb_id, uint64_t *first_frozen_pe,
 				   uint16_t *pci_error_type, uint16_t *severity)
 {

@@ -88,7 +88,8 @@
 #define OPAL_PCI_EEH_FREEZE_STATUS2		61
 #define OPAL_PCI_POLL				62
 #define OPAL_PCI_MSI_EOI			63
-#define OPAL_LAST				63
+#define OPAL_PCI_GET_PHB_DIAG_DATA2		64
+#define OPAL_LAST				64
 
 #ifndef __ASSEMBLY__
 
@@ -414,10 +415,26 @@ struct OpalIoP7IOCErrorData {
  * data upon request.
  */
 enum {
+	OPAL_PHB_ERROR_DATA_VERSION_1 = 1,
+};
+
+enum {
+	OPAL_PHB_ERROR_DATA_TYPE_P7IOC = 1,
+};
+
+enum {
 	OPAL_P7IOC_NUM_PEST_REGS = 128,
 };
 
+struct OpalIoPhbErrorCommon {
+	uint32_t version;
+	uint32_t ioType;
+	uint32_t len;
+};
+
 struct OpalIoP7IOCPhbErrorData {
+	struct OpalIoPhbErrorCommon common;
+
 	uint32_t brdgCtl;
 
 	// P7IOC utl regs
