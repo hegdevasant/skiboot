@@ -573,6 +573,13 @@ static int64_t opal_pci_poll(uint64_t phb_id)
 	phb->ops->unlock(phb);
 	pci_put_phb(phb);
 
+	/* Return milliseconds for caller to sleep: round up */
+	if (rc > 0) {
+		rc = tb_to_msecs(rc);
+		if (rc == 0)
+			rc = 1;
+	}
+
 	return rc;
 }
 opal_call(OPAL_PCI_POLL, opal_pci_poll);
