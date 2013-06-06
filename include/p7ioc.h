@@ -277,6 +277,7 @@ struct p7ioc;
 
 struct p7ioc_phb {
 	uint8_t				index;	/* 0..5 index inside p7ioc */
+	uint8_t				use_asb;
 	void				*regs_asb;
 	void				*regs;	/* AIB regs */
 	struct lock			lock;

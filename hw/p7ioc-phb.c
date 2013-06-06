@@ -74,6 +74,17 @@ static  void p7ioc_phb_unlock(struct phb *phb)
 	unlock(&p->lock);
 }
 
+static bool p7ioc_phb_fenced(struct p7ioc_phb *p)
+{
+	struct p7ioc *ioc = p->ioc;
+	uint64_t fence, fbits;
+
+	fbits = 0x0003000000000000 >> (p->index * 4);
+	fence = in_be64(ioc->regs + P7IOC_CHIP_FENCE_SHADOW);
+
+	return (fence & fbits) != 0;
+}
+
 /*
  * Configuration space access
  *
@@ -109,6 +120,7 @@ static int64_t p7ioc_pcicfg_read##size(struct phb *phb, uint32_t bdfn,	\
 {									\
 	struct p7ioc_phb *p = phb_to_p7ioc_phb(phb);			\
 	uint64_t addr;							\
+	void *base = p->regs;						\
 	int64_t rc;							\
 									\
 	/* Initialize data in case of error */				\
@@ -118,10 +130,17 @@ static int64_t p7ioc_pcicfg_read##size(struct phb *phb, uint32_t bdfn,	\
 	if (rc)								\
 		return rc;						\
 									\
+	if (p7ioc_phb_fenced(p)) {					\
+		if (!p->use_asb)					\
+			return OPAL_HARDWARE;				\
+									\
+		base = p->regs_asb;					\
+	}								\
+									\
 	addr = PHB_CA_ENABLE | ((uint64_t)bdfn << PHB_CA_FUNC_LSH);	\
 	addr = SETFIELD(PHB_CA_REG, addr, offset);			\
-	out_be64(p->regs + PHB_CONFIG_ADDRESS, addr);			\
-	*data = in_le##size(p->regs + PHB_CONFIG_DATA +			\
+	out_be64(base + PHB_CONFIG_ADDRESS, addr);			\
+	*data = in_le##size(base + PHB_CONFIG_DATA +			\
 		     (offset & (4 - sizeof(type))));			\
 									\
 	return OPAL_SUCCESS;						\
@@ -132,6 +151,7 @@ static int64_t p7ioc_pcicfg_write##size(struct phb *phb, uint32_t bdfn,	\
 					uint32_t offset, type data)	\
 {									\
 	struct p7ioc_phb *p = phb_to_p7ioc_phb(phb);			\
+	void *base = p->regs;						\
 	uint64_t addr;							\
 	int64_t rc;							\
 									\
@@ -139,10 +159,17 @@ static int64_t p7ioc_pcicfg_write##size(struct phb *phb, uint32_t bdfn,	\
 	if (rc)								\
 		return rc;						\
 									\
+	if (p7ioc_phb_fenced(p)) {					\
+		if (!p->use_asb)					\
+			return OPAL_HARDWARE;				\
+									\
+		base = p->regs_asb;					\
+	}								\
+									\
 	addr = PHB_CA_ENABLE | ((uint64_t)bdfn << PHB_CA_FUNC_LSH);	\
 	addr = SETFIELD(PHB_CA_REG, addr, offset);			\
-	out_be64(p->regs + PHB_CONFIG_ADDRESS, addr);			\
-	out_le##size(p->regs + PHB_CONFIG_DATA +			\
+	out_be64(base + PHB_CONFIG_ADDRESS, addr);			\
+	out_le##size(base + PHB_CONFIG_DATA +				\
 		     (offset & (4 - sizeof(type))), data);		\
 									\
 	return OPAL_SUCCESS;						\
@@ -861,17 +888,6 @@ static void p7ioc_eeh_read_phb_status(struct p7ioc_phb *p,
 	p7ioc_phb_ioda_sel(p, IODA_TBL_PESTB, 0, true);
 	for (i = 0; i < OPAL_P7IOC_NUM_PEST_REGS; i++)
 		stat->pestB[i] = in_be64(p->regs + PHB_IODA_DATA0);
-}
-
-static bool p7ioc_phb_fenced(struct p7ioc_phb *p)
-{
-	struct p7ioc *ioc = p->ioc;
-	uint64_t fence, fbits;
-
-	fbits = 0x0003000000000000 >> (p->index * 4);
-	fence = in_be64(ioc->regs + P7IOC_CHIP_FENCE_SHADOW);
-
-	return (fence & fbits) != 0;
 }
 
 static int64_t p7ioc_eeh_freeze_status(struct phb *phb, uint64_t pe_number,
