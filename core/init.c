@@ -238,7 +238,8 @@ void load_and_boot_kernel(bool is_reboot)
 		op_panel_disable_src_echo();
 	cpu_give_self_os();
 
-	printf("INIT: Starting kernel at 0x%llx\n", kernel_entry);
+	printf("INIT: Starting kernel at 0x%llx, fdt at %p\n",
+	       kernel_entry, fdt);
 
 	fdt_set_boot_cpuid_phys(fdt, this_cpu()->pir);
 	if (kernel_32bit)
