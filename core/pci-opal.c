@@ -10,112 +10,36 @@
 #include <timebase.h>
 #include <lock.h>
 
-static int64_t opal_pci_config_read_byte(uint64_t phb_id,
-					 uint64_t bus_dev_func,
-					 uint64_t offset, uint8_t *data)
-{
-	struct phb *phb = pci_get_phb(phb_id);
-	int64_t rc;
-
-	if (!phb)
-		return OPAL_PARAMETER;
-	phb->ops->lock(phb);
-	rc = phb->ops->cfg_read8(phb, bus_dev_func, offset, data);
-	phb->ops->unlock(phb);
-	pci_put_phb(phb);
-
-	return rc;
+#define OPAL_PCICFG_ACCESS(op, cb, type)	\
+static int64_t opal_pci_config_##op(uint64_t phb_id,			\
+				    uint64_t bus_dev_func,		\
+				    uint64_t offset, type data)		\
+{									\
+	struct phb *phb = pci_get_phb(phb_id);				\
+	int64_t rc;							\
+									\
+	if (!phb)							\
+		return OPAL_PARAMETER;					\
+	phb->ops->lock(phb);						\
+	rc = phb->ops->cfg_##cb(phb, bus_dev_func, offset, data);	\
+	phb->ops->unlock(phb);						\
+	pci_put_phb(phb);						\
+									\
+	return rc;							\
 }
+
+OPAL_PCICFG_ACCESS(read_byte,		read8, uint8_t *)
+OPAL_PCICFG_ACCESS(read_half_word,	read16, uint16_t *)
+OPAL_PCICFG_ACCESS(read_word,		read32, uint32_t *)
+OPAL_PCICFG_ACCESS(write_byte,		write8, uint8_t)
+OPAL_PCICFG_ACCESS(write_half_word,	write16, uint16_t)
+OPAL_PCICFG_ACCESS(write_word,		write32, uint32_t)
+
 opal_call(OPAL_PCI_CONFIG_READ_BYTE, opal_pci_config_read_byte);
-
-static int64_t opal_pci_config_read_half_word(uint64_t phb_id,
-					      uint64_t bus_dev_func,
-					      uint64_t offset, uint16_t *data)
-{
-	struct phb *phb = pci_get_phb(phb_id);
-	int64_t rc;
-
-	if (!phb)
-		return OPAL_PARAMETER;
-	phb->ops->lock(phb);
-	rc = phb->ops->cfg_read16(phb, bus_dev_func, offset, data);
-	phb->ops->unlock(phb);
-	pci_put_phb(phb);
-
-	return rc;
-}
 opal_call(OPAL_PCI_CONFIG_READ_HALF_WORD, opal_pci_config_read_half_word);
-
-static int64_t opal_pci_config_read_word(uint64_t phb_id,
-					 uint64_t bus_dev_func,
-					 uint64_t offset, uint32_t *data)
-{
-	struct phb *phb = pci_get_phb(phb_id);
-	int64_t rc;
-
-	if (!phb)
-		return OPAL_PARAMETER;
-	phb->ops->lock(phb);
-	rc = phb->ops->cfg_read32(phb, bus_dev_func, offset, data);
-	phb->ops->unlock(phb);
-	pci_put_phb(phb);
-
-	return rc;
-}
 opal_call(OPAL_PCI_CONFIG_READ_WORD, opal_pci_config_read_word);
-
-static int64_t opal_pci_config_write_byte(uint64_t phb_id,
-					  uint64_t bus_dev_func,
-					  uint64_t offset, uint8_t data)
-{
-	struct phb *phb = pci_get_phb(phb_id);
-	int64_t rc;
-
-	if (!phb)
-		return OPAL_PARAMETER;
-	phb->ops->lock(phb);
-	rc = phb->ops->cfg_write8(phb, bus_dev_func, offset, data);
-	phb->ops->unlock(phb);
-	pci_put_phb(phb);
-
-	return rc;
-}
 opal_call(OPAL_PCI_CONFIG_WRITE_BYTE, opal_pci_config_write_byte);
-
-static int64_t opal_pci_config_write_half_word(uint64_t phb_id,
-					       uint64_t bus_dev_func,
-					       uint64_t offset, uint16_t data)
-{
-	struct phb *phb = pci_get_phb(phb_id);
-	int64_t rc;
-
-	if (!phb)
-		return OPAL_PARAMETER;
-	phb->ops->lock(phb);
-	rc = phb->ops->cfg_write16(phb, bus_dev_func, offset, data);
-	phb->ops->unlock(phb);
-	pci_put_phb(phb);
-
-	return rc;
-}
 opal_call(OPAL_PCI_CONFIG_WRITE_HALF_WORD, opal_pci_config_write_half_word);
-
-static int64_t opal_pci_config_write_word(uint64_t phb_id,
-					  uint64_t bus_dev_func,
-					  uint64_t offset, uint32_t data)
-{
-	struct phb *phb = pci_get_phb(phb_id);
-	int64_t rc;
-
-	if (!phb)
-		return OPAL_PARAMETER;
-	phb->ops->lock(phb);
-	rc = phb->ops->cfg_write32(phb, bus_dev_func, offset, data);
-	phb->ops->unlock(phb);
-	pci_put_phb(phb);
-
-	return rc;
-}
 opal_call(OPAL_PCI_CONFIG_WRITE_WORD, opal_pci_config_write_word);
 
 static int64_t opal_pci_eeh_freeze_status(uint64_t phb_id, uint64_t pe_number,
