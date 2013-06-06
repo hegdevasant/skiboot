@@ -780,6 +780,7 @@ static int64_t p7ioc_poll(struct phb *phb)
 static void p7ioc_eeh_read_phb_status(struct p7ioc_phb *p,
 				      struct OpalIoP7IOCPhbErrorData *stat)
 {
+	bool locked;
 	uint16_t tmp16;
 	unsigned int i;
 
@@ -796,6 +797,10 @@ static void p7ioc_eeh_read_phb_status(struct p7ioc_phb *p,
 	 * (which they really are, but they use the top 32-bit of a 64-bit
 	 * register so we need to be a bit careful).
 	 */
+
+	/* Use ASB to access PCICFG if the PHB has been fenced */
+	locked = lock_recursive(&p->lock);
+	p->use_asb = 1;
 
 	/* Grab RC bridge control, make it 32-bit */
 	p7ioc_pcicfg_read16(&p->phb, 0, PCI_CFG_BRCTL, &tmp16);
@@ -848,6 +853,13 @@ static void p7ioc_eeh_read_phb_status(struct p7ioc_phb *p,
 	p7ioc_pcicfg_read32(&p->phb, 0, p->aercap + PCIECAP_AER_SRCID,
 			    &stat->sourceId);
 
+	/* Restore to AIB */
+	p->use_asb = 0;
+	if (locked) {
+		unlock(&p->lock);
+		pci_put_phb(&p->phb);
+	}
+
 	/*
 	 * No idea what that that is supposed to be, opal.h says
 	 * "Record data about the call to allocate a buffer."
@@ -884,10 +896,10 @@ static void p7ioc_eeh_read_phb_status(struct p7ioc_phb *p,
 	/* Grab PESTA & B content */
 	p7ioc_phb_ioda_sel(p, IODA_TBL_PESTA, 0, true);
 	for (i = 0; i < OPAL_P7IOC_NUM_PEST_REGS; i++)
-		stat->pestA[i] = in_be64(p->regs + PHB_IODA_DATA0);
+		stat->pestA[i] = in_be64(p->regs_asb + PHB_IODA_DATA0);
 	p7ioc_phb_ioda_sel(p, IODA_TBL_PESTB, 0, true);
 	for (i = 0; i < OPAL_P7IOC_NUM_PEST_REGS; i++)
-		stat->pestB[i] = in_be64(p->regs + PHB_IODA_DATA0);
+		stat->pestB[i] = in_be64(p->regs_asb + PHB_IODA_DATA0);
 }
 
 static int64_t p7ioc_eeh_freeze_status(struct phb *phb, uint64_t pe_number,
