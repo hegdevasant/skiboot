@@ -635,7 +635,7 @@ static uint64_t allocated_length(const struct mem_region *r)
 
 	/* No allocations at all? */
 	if (r->free_list.n.next == NULL)
-		return r->len;
+		return 0;
 
 	/* Find last free block. */
 	list_for_each(&r->free_list, f, list)
