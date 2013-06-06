@@ -18,5 +18,10 @@ extern void sysvpd_parse(void);
 extern struct dt_node *find_xscom_for_chip(uint32_t chip_id);
 extern uint32_t pcid_to_chip_id(uint32_t proc_chip_id);
 
+extern struct dt_node *add_core_common(struct dt_node *cpus,
+				       const struct sppaca_cpu_cache *cache,
+				       const struct sppaca_cpu_timebase *tb,
+				       uint32_t int_server, bool okay);
+
 #endif /* __HDATA_H */
 

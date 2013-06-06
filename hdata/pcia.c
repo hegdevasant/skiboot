@@ -86,21 +86,11 @@ static struct dt_node *add_core_node(struct dt_node *cpus,
 				     const struct sppcia_core_unique *id,
 				     bool okay)
 {
-	/* Page size encodings appear to be the same for P7 and P8 */
-	static const uint32_t p7_sps[] = {
-		0x0c, 0x000, 1, 0x0c, 0x0000,
-		0x18, 0x100, 1,	0x18, 0x0000,
-		0x14, 0x111, 1, 0x14, 0x0002,
-		0x22, 0x120, 1, 0x22, 0x0003,
-	};
-	static const uint32_t p7_pss[] = {
-		0x1c, 0x28, 0xffffffff, 0xffffffff
-	};
 	const struct sppcia_cpu_thread *t;
 	const struct sppcia_cpu_timebase *timebase;
 	const struct sppcia_cpu_cache *cache;
 	struct dt_node *cpu;
-	const char *name, *icp_compat;
+	const char *icp_compat;
 	u32 i, size, threads;
 	u32 iserv[PCIA_MAX_THREADS];
 
@@ -136,63 +126,14 @@ static struct dt_node *add_core_node(struct dt_node *cpus,
 		return NULL;
 	}
 
-	printf("    Cache: I=%u D=%u/%u/%u/%u\n",
-	       cache->icache_size_kb,
-	       cache->l1_dcache_size_kb,
-	       cache->l2_dcache_size_kb,
-	       cache->l3_dcache_size_kb,
-	       cache->l35_dcache_size_kb);
+	cpu = add_core_common(cpus, cache, timebase, t->proc_int_line, okay);
 
-	/* Use the boot CPU PVR to make up a CPU name in the device-tree
-	 * since the HDAT doesn't seem to tell....
-	 */
-	switch(PVR_TYPE(mfspr(SPR_PVR))) {
-	case PVR_TYPE_P7:
-		name = "PowerPC,POWER7";
+	if (proc_gen == proc_gen_p7)
 		icp_compat = "IBM,power7-icp";
-		break;
-	case PVR_TYPE_P7P:
-		name = "PowerPC,POWER7+";
-		icp_compat = "IBM,power7-icp";
-		break;
-	case PVR_TYPE_P8:
-		name = "PowerPC,POWER8";
+	else
 		icp_compat = "IBM,power8-icp";
-		break;
-	default:
-		name = "PowerPC,Unknown";
-		icp_compat = NULL;
-	}
-
-	cpu = dt_new_addr(cpus, name, t->proc_int_line);
-	dt_add_property_string(cpu, "device_type", "cpu");
-	dt_add_property_string(cpu, "status", okay ? "okay" : "bad");
-	dt_add_property_cells(cpu, "reg", t->proc_int_line);
-	dt_add_property(cpu, "ibm,segment-page-sizes", p7_sps, sizeof(p7_sps));
-	dt_add_property(cpu, "ibm,processor-segment-sizes",
-			p7_pss, sizeof(p7_pss));
-	dt_add_property_cells(cpu, "ibm,slb-size", 0x20);
-	dt_add_property_cells(cpu, "ibm,vmx", 0x2);
-
-	dt_add_property_cells(cpu, "d-cache-block-size", cache->dcache_block_size);
-	dt_add_property_cells(cpu, "i-cache-block-size", cache->icache_block_size);
-	dt_add_property_cells(cpu, "d-cache-size", cache->l1_dcache_size_kb*1024);
-	dt_add_property_cells(cpu, "i-cache-size", cache->icache_size_kb*1024);
-
-	if (cache->icache_line_size != cache->icache_block_size)
-		dt_add_property_cells(cpu, "i-cache-line-size",
-				  cache->icache_line_size);
-	if (cache->l1_dcache_line_size != cache->dcache_block_size)
-		dt_add_property_cells(cpu, "d-cache-line-size",
-				  cache->l1_dcache_line_size);
-	dt_add_property_cells(cpu, "clock-frequency",
-			  timebase->actual_clock_speed * 1000000);
-
-	/* FIXME: Hardcoding is bad. */
-	dt_add_property_cells(cpu, "timebase-frequency", 512000000);
 
 	dt_add_property_cells(cpu, "ibm,pir", t->pir);
-
 	dt_add_property_cells(cpu, "ibm,chip-id",
 			      pcid_to_chip_id(id->proc_chip_id));
 
