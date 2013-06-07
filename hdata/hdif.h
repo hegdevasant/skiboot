@@ -8,36 +8,37 @@
 #define __HDIF_H
 
 #include <skiboot.h>
+#include <types.h>
 
 struct HDIF_common_hdr {
-	u16	d1f0;		/* 0xd1f0 */
+	__be16	d1f0;		/* 0xd1f0 */
 	char	id[6];		/* eye catcher string */
-	u16	instnum;	/* instance number */
-	u16	version;	/* version */
-	u32	total_len;	/* total structure length */
-	u32	hdr_len;	/* header length (currently 0x20) */
-	u32	idptr_off;	/* offset to idata pointers */
-	u16	idptr_count;	/* number of idata pointers */
-	u16	child_count;	/* number of child structures */
-	u32	child_off;	/* offset to child structures array */
+	__be16	instnum;	/* instance number */
+	__be16	version;	/* version */
+	__be32	total_len;	/* total structure length */
+	__be32	hdr_len;	/* header length (currently 0x20) */
+	__be32	idptr_off;	/* offset to idata pointers */
+	__be16	idptr_count;	/* number of idata pointers */
+	__be16	child_count;	/* number of child structures */
+	__be32	child_off;	/* offset to child structures array */
 } __packed __align(0x10);
 
 struct HDIF_idata_ptr {
-	u32	offset;
-	u32	size;
+	__be32	offset;
+	__be32	size;
 } __packed __align(0x8);
 
 struct HDIF_array_hdr {
-	u32	offset;
-	u32	ecnt;
-	u32	esize;
-	u32	eactsz;
+	__be32	offset;
+	__be32	ecnt;
+	__be32	esize;
+	__be32	eactsz;
 } __packed __align(0x10);
 
 struct HDIF_child_ptr {
-	uint32_t	offset;
-	uint32_t	size;
-	uint32_t	count;
+	__be32	offset;
+	__be32	size;
+	__be32	count;
 } __packed;
 
 #define HDIF_HDR_LEN		(sizeof(struct HDIF_common_hdr))
