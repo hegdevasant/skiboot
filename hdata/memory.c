@@ -10,19 +10,20 @@
 #include <device.h>
 #include <ccan/str/str.h>
 #include <libfdt/libfdt.h>
+#include <types.h>
 
 #include "spira.h"
 #include "hdata.h"
 
 struct HDIF_ram_area_id {
-	uint16_t id;
+	__be16 id;
 #define RAM_AREA_INSTALLED	0x8000
 #define RAM_AREA_FUNCTIONAL	0x4000
-	uint16_t flags;
+	__be16 flags;
 };
 
 struct HDIF_ram_area_size {
-	uint64_t mb;
+	__be64 mb;
 };
 
 struct ram_area {
@@ -31,21 +32,21 @@ struct ram_area {
 };
 
 struct HDIF_ms_area_address_range {
-	uint64_t start;
-	uint64_t end;
-	uint32_t chip;
-	uint32_t mirror_attr;
-	uint64_t mirror_start;
+	__be64 start;
+	__be64 end;
+	__be32 chip;
+	__be32 mirror_attr;
+	__be64 mirror_start;
 };
 
 struct HDIF_ms_area_id {
-	uint16_t id;
-	uint16_t parent_type;
+	__be16 id;
+	__be16 parent_type;
 #define MS_AREA_INSTALLED	0x8000
 #define MS_AREA_FUNCTIONAL	0x4000
 #define MS_AREA_SHARED		0x2000
-	uint16_t flags;
-	uint16_t share_id;
+	__be16 flags;
+	__be16 share_id;
 };
 
 static struct dt_node *find_shared(struct dt_node *root, u16 id, u64 start, u64 len)
@@ -53,7 +54,7 @@ static struct dt_node *find_shared(struct dt_node *root, u16 id, u64 start, u64 
 	struct dt_node *i;
 
 	for (i = dt_first(root); i; i = dt_next(root, i)) {
-		u64 reg[2];
+		__be64 reg[2];
 		const struct dt_property *shared, *type;
 
 		type = dt_find_property(i, "device_type");
@@ -65,7 +66,7 @@ static struct dt_node *find_shared(struct dt_node *root, u16 id, u64 start, u64 
 			continue;
 
 		memcpy(reg, dt_find_property(i, "reg")->prop, sizeof(reg));
-		if (reg[0] == start && reg[1] == len)
+		if (be64_to_cpu(reg[0]) == start && be64_to_cpu(reg[1]) == len)
 			break;
 	}
 	return i;
@@ -84,21 +85,23 @@ static bool add_address_range(struct dt_node *root,
 	       arange->mirror_attr);
 
 	/* reg contains start and length */
-	reg[0] = cleanup_addr(arange->start);
-	reg[1] = cleanup_addr(arange->end) - reg[0];
+	reg[0] = cleanup_addr(be64_to_cpu(arange->start));
+	reg[1] = cleanup_addr(be64_to_cpu(arange->end)) - reg[0];
 
-	if (id->flags & MS_AREA_SHARED) {
+	if (be16_to_cpu(id->flags) & MS_AREA_SHARED) {
 		/* Only enter shared nodes once. */ 
-		if (find_shared(root, id->share_id, reg[0], reg[1]))
+		if (find_shared(root, be16_to_cpu(id->share_id), reg[0], reg[1]))
 			return true;
 	}
 	sprintf(name, "memory@%llx", reg[0]);
 
 	mem = dt_new(root, name);
 	dt_add_property_string(mem, "device_type", "memory");
-	dt_add_property(mem, "reg", reg, sizeof(reg));
-	if (id->flags & MS_AREA_SHARED)
-		dt_add_property_cells(mem, DT_PRIVATE "share-id", id->share_id);
+
+	dt_add_property_u64s(mem, "reg", reg[0], reg[1]);
+	if (be16_to_cpu(id->flags) & MS_AREA_SHARED)
+		dt_add_property_cells(mem, DT_PRIVATE "share-id",
+				      be16_to_cpu(id->share_id));
 
 	/* FIXME: Do numa using arange->chip vs id->processor_chip_id */
 	return true;
@@ -117,7 +120,7 @@ static void get_msareas(struct dt_node *root,
 		return;
 	}
 
-	for (i = 0; i < msptr->count; i++) {
+	for (i = 0; i < be32_to_cpu(msptr->count); i++) {
 		const struct HDIF_common_hdr *msarea;
 		const struct HDIF_array_hdr *arr;
 		const struct HDIF_ms_area_address_range *arange;
@@ -125,6 +128,7 @@ static void get_msareas(struct dt_node *root,
 		const struct HDIF_child_ptr *ramptr;
 		const void *fruid;
 		unsigned int size, j;
+		u16 flags;
 
 		msarea = HDIF_child(ms_vpd, msptr, i, "MSAREA");
 		if (!CHECK_SPPTR(msarea))
@@ -139,16 +143,17 @@ static void get_msareas(struct dt_node *root,
 			return;
 		}
 
+		flags = be16_to_cpu(id->flags);
 		printf("MS VPD: %p, area %i: %s %s %s\n",
 		       ms_vpd, i,
-		       id->flags & MS_AREA_INSTALLED ?
+		       flags & MS_AREA_INSTALLED ?
 		       "installed" : "not installed",
-		       id->flags & MS_AREA_FUNCTIONAL ?
+		       flags & MS_AREA_FUNCTIONAL ?
 		       "functional" : "not functional",
-		       id->flags & MS_AREA_SHARED ?
+		       flags & MS_AREA_SHARED ?
 		       "shared" : "not shared");
 
-		if ((id->flags & (MS_AREA_INSTALLED|MS_AREA_FUNCTIONAL))
+		if ((flags & (MS_AREA_INSTALLED|MS_AREA_FUNCTIONAL))
 		    != (MS_AREA_INSTALLED|MS_AREA_FUNCTIONAL))
 			continue;
 
@@ -162,7 +167,7 @@ static void get_msareas(struct dt_node *root,
 			return;
 		}
 
-		if (arr->eactsz < sizeof(*arange)) {
+		if (be32_to_cpu(arr->eactsz) < sizeof(*arange)) {
 			prerror("MS VPD: %p msarea #%i arange size too small!\n",
 				ms_vpd, i);
 			return;
@@ -177,11 +182,11 @@ static void get_msareas(struct dt_node *root,
 			return;
 
 		/* This offset is from the arr, not the header! */
-		arange = (void *)arr + arr->offset;
-		for (j = 0; j < arr->ecnt; j++) {
+		arange = (void *)arr + be32_to_cpu(arr->offset);
+		for (j = 0; j < be32_to_cpu(arr->ecnt); j++) {
 			if (!add_address_range(root, id, arange))
 				return;
-			arange = (void *)arange + arr->esize;
+			arange = (void *)arange + be32_to_cpu(arr->esize);
 		}
 	}
 }
@@ -199,9 +204,9 @@ bool __memory_parse(struct dt_node *root)
 		op_display(OP_FATAL, OP_MOD_MEM, 0x0000);
 		return false;
 	}
-	if (spira.ntuples.ms_vpd.act_len < sizeof(*ms_vpd)) {
+	if (be32_to_cpu(spira.ntuples.ms_vpd.act_len) < sizeof(*ms_vpd)) {
 		prerror("MS VPD: invalid size %u\n",
-			spira.ntuples.ms_vpd.act_len);
+			be32_to_cpu(spira.ntuples.ms_vpd.act_len));
 		op_display(OP_FATAL, OP_MOD_MEM, 0x0001);
 		return false;
 	}
@@ -217,7 +222,7 @@ bool __memory_parse(struct dt_node *root)
 	printf("MS VPD: MSAC is at %p\n", msac);
 
 	dt_add_property_u64(dt_root, DT_PRIVATE "maxmem",
-			    msac->max_configured_ms_address);
+			    be64_to_cpu(msac->max_configured_ms_address));
 
 	tcms = HDIF_get_idata(ms_vpd, MSVPD_IDATA_TOTAL_CONFIG_MS, &size);
 	if (!CHECK_SPPTR(tcms) || size < sizeof(*tcms)) {
@@ -228,13 +233,14 @@ bool __memory_parse(struct dt_node *root)
 	printf("MS VPD: TCMS is at %p\n", tcms);
 
 	printf("MS VPD: Maximum configured address: 0x%llx\n",
-	       msac->max_configured_ms_address);
+	       be64_to_cpu(msac->max_configured_ms_address));
 	printf("MS VPD: Maximum possible address: 0x%llx\n",
-	       msac->max_possible_ms_address);
+	       be64_to_cpu(msac->max_possible_ms_address));
 
 	get_msareas(root, ms_vpd);
 
-	printf("MS VPD: Total MB of RAM: 0x%llx\n", tcms->total_in_mb);
+	printf("MS VPD: Total MB of RAM: 0x%llx\n",
+	       be64_to_cpu(tcms->total_in_mb));
 
 	return true;
 }
