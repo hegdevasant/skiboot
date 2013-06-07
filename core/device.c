@@ -359,6 +359,7 @@ struct dt_property *__dt_add_property_strings(struct dt_node *node,
 void dt_del_property(struct dt_node *node, struct dt_property *prop)
 {
 	list_del_from(&node->properties, &prop->list);
+	free_name(prop->name);
 	free(prop);
 }
 
