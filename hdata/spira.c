@@ -96,7 +96,7 @@ static void add_xscom_node(uint64_t base, uint32_t id)
 	uint64_t addr, size;
 
 	addr = base | ((uint64_t)id << PPC_BITLSHIFT(28));
-	size = 1ul << PPC_BITLSHIFT(28);
+	size = (u64)1 << PPC_BITLSHIFT(28);
 
 	printf("XSCOM: Found gcid 0x%x, address: 0x%llx\n", id, addr);
 
