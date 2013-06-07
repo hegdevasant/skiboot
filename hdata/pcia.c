@@ -17,8 +17,8 @@
 #define PCIA_MAX_THREADS	8
 
 #define for_each_pcia(p)						\
-	for (p = spira.ntuples.pcia.addr;				\
-	     (void *)p < spira.ntuples.pcia.addr			\
+	for (p = ntuple_addr(&spira.ntuples.pcia);			\
+	     (void *)p < ntuple_addr(&spira.ntuples.pcia)		\
 	     + (spira.ntuples.pcia.act_cnt				\
 		* spira.ntuples.pcia.alloc_len);			\
 	     p = (void *)p + spira.ntuples.pcia.alloc_len)

@@ -89,10 +89,15 @@ extern struct HDIF_common_hdr *__get_hdif(struct spira_ntuple *n,
 
 #define for_each_ntuple(_ntuples, _p, _id)				\
 	for (_p = get_hdif((_ntuples), _id "");				\
-	     _p && (void *)_p < (_ntuples)->addr			\
+	     _p && (void *)_p < ntuple_addr(_ntuples)			\
 		     + ((_ntuples)->act_cnt * (_ntuples)->alloc_len);	\
 	     _p = (void *)_p + (_ntuples)->alloc_len)
 
+
+/* We override this for testing. */
+#ifndef ntuple_addr
+#define ntuple_addr(_ntuples) ((void *)(_ntuples)->addr)
+#endif
 
 extern bool spira_check_ptr(const void *ptr, const char *file,
 			    unsigned int line);

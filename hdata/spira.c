@@ -81,7 +81,7 @@ bool spira_check_ptr(const void *ptr, const char *file, unsigned int line)
 struct HDIF_common_hdr *__get_hdif(struct spira_ntuple *n, const char id[],
 				   const char *file, int line)
 {
-	struct HDIF_common_hdr *h = n->addr;
+	struct HDIF_common_hdr *h = ntuple_addr(n);
 	if (!spira_check_ptr(h, file, line))
 		return NULL;
 

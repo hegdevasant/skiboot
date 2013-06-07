@@ -163,7 +163,8 @@ static bool __paca_parse(void)
 
 	paca = get_hdif(&spira.ntuples.paca, PACA_HDIF_SIG);
 	if (!paca) {
-		prerror("Invalid PACA (PCIA = %p)\n", spira.ntuples.pcia.addr);
+		prerror("Invalid PACA (PCIA = %p)\n", 
+			ntuple_addr(&spira.ntuples.pcia));
 		return false;
 	}
 
