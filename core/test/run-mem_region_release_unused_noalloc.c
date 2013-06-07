@@ -75,7 +75,7 @@ static void add_mem_node(uint64_t start, uint64_t len)
 int main(void)
 {
 	uint64_t i;
-	struct mem_region *r, *other = NULL;
+	struct mem_region *r;
 
 	/* Use malloc for the heap, so valgrind can find issues. */
 	skiboot_heap.start = (unsigned long)malloc(TEST_HEAP_SIZE);
