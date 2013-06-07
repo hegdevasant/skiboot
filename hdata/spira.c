@@ -27,41 +27,38 @@ static int cpu_type;
 
 __section(".procin.data") struct proc_init_data proc_init_data = {
 	.hdr = HDIF_SIMPLE_HDR("PROCIN", 1, struct proc_init_data),
-	.regs_ptr = {
-		.offset	= offsetof(struct proc_init_data, regs),
-		.size	= 0x10,
-	},
+	.regs_ptr = HDIF_IDATA_PTR(offsetof(struct proc_init_data, regs), 0x10),
 	.regs = {
-		.nia	= 0x180,
-		.msr  	= 0x9000000000000000, /* SF | HV */
+		.nia = CPU_TO_BE64(0x180),
+		.msr = CPU_TO_BE64(0x9000000000000000ULL), /* SF | HV */
 	},
 };
 
 /* SP Interface Root Array, aka SPIRA */
 __section(".spira.data") struct spira spira = {
 	.hdr = HDIF_SIMPLE_HDR("SPIRA ", SPIRA_VERSION, struct spira),
-	.ntuples_ptr = {
-		.offset			= offsetof(struct spira, ntuples),
-		.size			= sizeof(struct spira_ntuples),
-	},
+	.ntuples_ptr = HDIF_IDATA_PTR(offsetof(struct spira, ntuples),
+				      sizeof(struct spira_ntuples)),
 	.ntuples = {
 		.array_hdr = {
-			.offset		= HDIF_ARRAY_OFFSET,
-			.ecnt		= SPIRA_NTUPLES_COUNT,
-			.esize		= sizeof(struct spira_ntuple),
-			.eactsz		= 0x18,
+			.offset		= CPU_TO_BE32(HDIF_ARRAY_OFFSET),
+			.ecnt		= CPU_TO_BE32(SPIRA_NTUPLES_COUNT),
+			.esize
+				= CPU_TO_BE32(sizeof(struct spira_ntuple)),
+			.eactsz		= CPU_TO_BE32(0x18),
 		},
 		/* We only populate some n-tuples */
 		.proc_init = {
-			.addr  		= PROCIN_OFF,
-			.alloc_cnt	= 1,
-			.act_cnt	= 1,
-			.alloc_len	= sizeof(struct proc_init_data),
+			.addr  		= CPU_TO_BE64(PROCIN_OFF),
+			.alloc_cnt	= CPU_TO_BE16(1),
+			.act_cnt	= CPU_TO_BE16(1),
+			.alloc_len
+			= CPU_TO_BE32(sizeof(struct proc_init_data)),
 		},
 		.heap = {
-			.addr		= SPIRA_HEAP_BASE,
-			.alloc_cnt	= 1,
-			.alloc_len	= SPIRA_HEAP_SIZE,
+			.addr		= CPU_TO_BE64(SPIRA_HEAP_BASE),
+			.alloc_cnt	= CPU_TO_BE16(1),
+			.alloc_len	= CPU_TO_BE32(SPIRA_HEAP_SIZE),
 		},
 	},
 };

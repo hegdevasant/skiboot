@@ -9,6 +9,7 @@
 
 #include <skiboot.h>
 #include <types.h>
+#include <ccan/endian/endian.h>
 
 struct HDIF_common_hdr {
 	__be16	d1f0;		/* 0xd1f0 */
@@ -44,26 +45,33 @@ struct HDIF_child_ptr {
 #define HDIF_HDR_LEN		(sizeof(struct HDIF_common_hdr))
 #define HDIF_ARRAY_OFFSET	(sizeof(struct HDIF_array_hdr))
 
-#define HDIF_ID(_id)		.d1f0 = 0xd1f0, .id = _id
+#define HDIF_ID(_id)		.d1f0 = CPU_TO_BE16(0xd1f0), .id = _id
 
-#define HDIF_SIMPLE_HDR(id, vers, type)				\
-{								\
-	HDIF_ID(id),						\
-	.instnum	= 0,					\
-	.version	= vers,					\
-	.total_len	= sizeof(type),				\
-	.hdr_len	= HDIF_HDR_LEN,				\
-	.idptr_off	= HDIF_HDR_LEN,				\
-	.idptr_count	= 1,					\
-	.child_count	= 0,					\
-	.child_off	= 0,					\
+#define HDIF_SIMPLE_HDR(id, vers, type)			\
+{							\
+	HDIF_ID(id),					\
+	.instnum	= CPU_TO_BE16(0),		\
+	.version	= CPU_TO_BE16(vers),		\
+	.total_len	= CPU_TO_BE32(sizeof(type)),	\
+	.hdr_len	= CPU_TO_BE32(HDIF_HDR_LEN),	\
+	.idptr_off	= CPU_TO_BE32(HDIF_HDR_LEN),	\
+	.idptr_count	= CPU_TO_BE16(1),		\
+	.child_count	= CPU_TO_BE16(0),		\
+	.child_off	= CPU_TO_BE32(0),		\
+}
+
+#define HDIF_IDATA_PTR(_offset, _size)			\
+{							\
+	.offset	= CPU_TO_BE32(_offset),			\
+	.size	= _size,				\
 }
 
 static inline bool HDIF_check(const void *hdif, const char id[])
 {
 	const struct HDIF_common_hdr *hdr = hdif;
 
-	return hdr->d1f0 == 0xd1f0 && memcmp(hdr->id, id, sizeof(hdr->id)) == 0;
+	return hdr->d1f0 == CPU_TO_BE16(0xd1f0) &&
+		memcmp(hdr->id, id, sizeof(hdr->id)) == 0;
 }
 
 /* HDIF_get_idata - Get a pointer to internal data block
