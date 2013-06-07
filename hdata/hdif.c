@@ -12,23 +12,23 @@ const void *HDIF_get_idata(const struct HDIF_common_hdr *hdif, unsigned int di,
 	const struct HDIF_common_hdr *hdr = hdif;
 	const struct HDIF_idata_ptr *iptr;
 
-	if (hdr->d1f0 != 0xd1f0) {
+	if (hdr->d1f0 != BE16_TO_CPU(0xd1f0)) {
 		prerror("HDIF: Bad header format !\n");
 		return NULL;
 	}
 
-	if (di >= hdr->idptr_count) {
+	if (di >= be16_to_cpu(hdr->idptr_count)) {
 		prerror("HDIF: idata index out of range !\n");
 		return NULL;
 	}
 
-	iptr = (void *)hdif + (hdr->idptr_off)
+	iptr = (void *)hdif + be32_to_cpu(hdr->idptr_off)
 		+ di * sizeof(struct HDIF_idata_ptr);
 
 	if (size)
-		*size = iptr->size;
+		*size = be32_to_cpu(iptr->size);
 
-	return (void *)hdif + iptr->offset;
+	return (void *)hdif + be32_to_cpu(iptr->offset);
 }
 
 const void *HDIF_get_iarray_item(const struct HDIF_common_hdr *hdif,
@@ -50,15 +50,15 @@ const void *HDIF_get_iarray_item(const struct HDIF_common_hdr *hdif,
 
 	ahdr = arr;
 
-	if (ai >= ahdr->ecnt) {
+	if (ai >= be32_to_cpu(ahdr->ecnt)) {
 		prerror("HDIF: idata array index out of range !\n");
 		return NULL;
 	}
 
 	if (size)
-		*size = ahdr->eactsz;
+		*size = be32_to_cpu(ahdr->eactsz);
 
-	return arr + ahdr->offset + ai * ahdr->esize;
+	return arr + be32_to_cpu(ahdr->offset) + ai * be32_to_cpu(ahdr->esize);
 }
 
 int HDIF_get_iarray_size(const struct HDIF_common_hdr *hdif, unsigned int di)
@@ -77,15 +77,17 @@ int HDIF_get_iarray_size(const struct HDIF_common_hdr *hdif, unsigned int di)
 	}
 
 	ahdr = arr;
-	return ahdr->ecnt;
+	return be32_to_cpu(ahdr->ecnt);
 }
 
 struct HDIF_child_ptr *
 HDIF_child_arr(const struct HDIF_common_hdr *hdif, unsigned int idx)
 {
-	struct HDIF_child_ptr *children = (void *)hdif + hdif->child_off;
+	struct HDIF_child_ptr *children;
 
-	if (idx >= hdif->child_count) {
+	children = (void *)hdif + be32_to_cpu(hdif->child_off);
+
+	if (idx >= be16_to_cpu(hdif->child_count)) {
 		prerror("HDIF: child array idx out of range!\n");
 		return NULL;
 	}
@@ -103,20 +105,21 @@ struct HDIF_common_hdr *HDIF_child(const struct HDIF_common_hdr *hdif,
 	long child_off;
 
 	/* child must be in hdif's child array */
-	child_off = (void *)child - (base + hdif->child_off);
+	child_off = (void *)child - (base + be32_to_cpu(hdif->child_off));
 	assert(child_off % sizeof(struct HDIF_child_ptr) == 0);
 	assert(child_off / sizeof(struct HDIF_child_ptr)
-	       < hdif->child_count);
+	       < be16_to_cpu(hdif->child_count));
 
-	assert(idx < child->count);
+	assert(idx < be32_to_cpu(child->count));
 
-	if (child->size < sizeof(struct HDIF_common_hdr)) {
+	if (be32_to_cpu(child->size) < sizeof(struct HDIF_common_hdr)) {
 		prerror("HDIF: %s child #%i too small: %u\n",
-			eyecatcher, idx, child->size);
+			eyecatcher, idx, be32_to_cpu(child->size));
 		return NULL;
 	}
 
-	ret = base + child->offset + child->size * idx;
+	ret = base + be32_to_cpu(child->offset)
+		+ be32_to_cpu(child->size) * idx;
 	if (!HDIF_check(ret, eyecatcher)) {
 		prerror("HDIF: %s child #%i bad type\n",
 			eyecatcher, idx);
