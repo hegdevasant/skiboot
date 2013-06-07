@@ -16,12 +16,7 @@
 
 #define PCIA_MAX_THREADS	8
 
-#define for_each_pcia(p)						\
-	for (p = ntuple_addr(&spira.ntuples.pcia);			\
-	     (void *)p < ntuple_addr(&spira.ntuples.pcia)		\
-	     + (spira.ntuples.pcia.act_cnt				\
-		* spira.ntuples.pcia.alloc_len);			\
-	     p = (void *)p + spira.ntuples.pcia.alloc_len)
+#define for_each_pcia(p) for_each_ntuple(&spira.ntuples.pcia, p, "SPPCIA")
 
 static unsigned int pcia_index(const void *pcia)
 {
@@ -44,7 +39,7 @@ static const struct sppcia_cpu_thread *find_tada(const void *pcia,
 					 i, &size);
 		if (!t || size < sizeof(*t))
 			continue;
-		if (t->phys_thread_id == thread)
+		if (be32_to_cpu(t->phys_thread_id) == thread)
 			return t;
 	}
 	return NULL;
@@ -54,25 +49,28 @@ static void add_icp(const void *pcia, u32 tcount, const char *compat)
 {
 	const struct sppcia_cpu_thread *t;
 	struct dt_node *icp;
-	u64 reg[tcount * 2];
+	__be64 reg[tcount * 2];
 	u32 i, irange[2];
 
+	/* Suppresses uninitialized warning from gcc */
+	irange[0] = 0;
 	for (i = 0; i < tcount; i++) {
 		t = find_tada(pcia, i);
 		assert(t);
 		if (i == 0)
-			irange[0] = t->proc_int_line;
-		reg[i * 2] = cleanup_addr(t->ibase);
-		reg[i * 2 + 1] = 0x1000;
+			irange[0] = be32_to_cpu(t->proc_int_line);
+		reg[i * 2] = cpu_to_be64(cleanup_addr(be64_to_cpu(t->ibase)));
+		reg[i * 2 + 1] = cpu_to_be64(0x1000);
 	}
 	irange[1] = tcount;
 
-	icp = dt_new_addr(dt_root, "interrupt-controller", reg[0]);
+	icp = dt_new_addr(dt_root, "interrupt-controller", be64_to_cpu(reg[0]));
 	if (compat)
 		dt_add_property_strings(icp, "compatible", "IBM,ppc-xicp", compat);
 	else
 		dt_add_property_strings(icp, "compatible", "IBM,ppc-xicp");
-	dt_add_property(icp, "ibm,interrupt-server-ranges", irange, sizeof(irange));
+	dt_add_property_cells(icp, "ibm,interrupt-server-ranges",
+			      irange[0], irange[1]);
 	dt_add_property(icp, "interrupt-controller", NULL, 0);
 	dt_add_property(icp, "reg", reg, sizeof(reg));
 	dt_add_property_cells(icp, "#address-cells", 0);
@@ -91,8 +89,8 @@ static struct dt_node *add_core_node(struct dt_node *cpus,
 	const struct sppcia_cpu_cache *cache;
 	struct dt_node *cpu;
 	const char *icp_compat;
-	u32 i, size, threads;
-	u32 iserv[PCIA_MAX_THREADS];
+	u32 i, size, threads, ve_flags;
+	__be32 iserv[PCIA_MAX_THREADS];
 
 	/* Look for thread 0 */
 	t = find_tada(pcia, 0);
@@ -102,15 +100,16 @@ static struct dt_node *add_core_node(struct dt_node *cpus,
 		return NULL;
 	}
 
-	threads = ((id->verif_exist_flags & CPU_ID_NUM_SECONDARY_THREAD_MASK)
+	ve_flags = be32_to_cpu(id->verif_exist_flags);
+	threads = ((ve_flags & CPU_ID_NUM_SECONDARY_THREAD_MASK)
 		   >> CPU_ID_NUM_SECONDARY_THREAD_SHIFT) + 1;
 	assert(threads <= PCIA_MAX_THREADS);
 
 	printf("CORE[%i]: PIR=%i RES=%i %s %s(%u threads)\n",
 	       pcia_index(pcia), t->pir, t->proc_int_line,
-	       id->verif_exist_flags & CPU_ID_PACA_RESERVED
-	       ? "**RESERVED**" : cpu_state(id->verif_exist_flags),
-	       t->pir == boot_cpu->pir ? "[boot] " : "", threads);
+	       ve_flags & CPU_ID_PACA_RESERVED
+	       ? "**RESERVED**" : cpu_state(ve_flags),
+	       be32_to_cpu(t->pir) == boot_cpu->pir ? "[boot] " : "", threads);
 
 	timebase = HDIF_get_idata(pcia, SPPCIA_IDATA_TIMEBASE, &size);
 	if (!timebase || size < sizeof(*timebase)) {
@@ -126,19 +125,21 @@ static struct dt_node *add_core_node(struct dt_node *cpus,
 		return NULL;
 	}
 
-	cpu = add_core_common(cpus, cache, timebase, t->proc_int_line, okay);
+	cpu = add_core_common(cpus, cache, timebase,
+			      be32_to_cpu(t->proc_int_line), okay);
 
 	if (proc_gen == proc_gen_p7)
 		icp_compat = "IBM,power7-icp";
 	else
 		icp_compat = "IBM,power8-icp";
 
-	dt_add_property_cells(cpu, "ibm,pir", t->pir);
+	dt_add_property_cells(cpu, "ibm,pir", be32_to_cpu(t->pir));
 	dt_add_property_cells(cpu, "ibm,chip-id",
-			      pcid_to_chip_id(id->proc_chip_id));
+			      pcid_to_chip_id(be32_to_cpu(id->proc_chip_id)));
 
 	/* Add private "ibase" property used by other bits of skiboot */
-	dt_add_property_u64(cpu, DT_PRIVATE "ibase", cleanup_addr(t->ibase));
+	dt_add_property_u64(cpu, DT_PRIVATE "ibase",
+			    cleanup_addr(be64_to_cpu(t->ibase)));
 
 	/* Build ibm,ppc-interrupt-server#s with all threads */
 	for (i = 0; i < threads; i++) {
@@ -180,7 +181,7 @@ bool pcia_parse(void)
 
 	for_each_pcia(pcia) {
 		const struct sppcia_core_unique *id;
-		u32 size;
+		u32 size, ve_flags;
 		bool okay;
 
 		id = HDIF_get_idata(pcia, SPPCIA_IDATA_CORE_UNIQUE, &size);
@@ -189,8 +190,10 @@ bool pcia_parse(void)
 				pcia_index(pcia), size, id);
 			return false;
 		}
-		switch ((id->verif_exist_flags & CPU_ID_VERIFY_MASK) >>
-			CPU_ID_VERIFY_SHIFT) {
+		ve_flags = be32_to_cpu(id->verif_exist_flags);
+
+		switch ((ve_flags & CPU_ID_VERIFY_MASK)
+			>> CPU_ID_VERIFY_SHIFT) {
 		case CPU_ID_VERIFY_USABLE_NO_FAILURES:
 		case CPU_ID_VERIFY_USABLE_FAILURES:
 			okay = true;
@@ -200,12 +203,13 @@ bool pcia_parse(void)
 		}
 
 		printf("CORE[%i]: HW_PROC_ID=%i PROC_CHIP_ID=%i EC=0x%x %s\n",
-		       pcia_index(pcia), id->hw_proc_id,
-		       id->proc_chip_id, id->chip_ec_level,
+		       pcia_index(pcia), be32_to_cpu(id->hw_proc_id),
+		       be32_to_cpu(id->proc_chip_id),
+		       be32_to_cpu(id->chip_ec_level),
 		       okay ? "OK" : "UNAVAILABLE");
 
 		/* Secondary threads don't get their own node. */
-		if (id->verif_exist_flags & CPU_ID_SECONDARY_THREAD)
+		if (ve_flags & CPU_ID_SECONDARY_THREAD)
 			continue;
 
 		if (!add_core_node(cpus, pcia, id, okay))
@@ -213,4 +217,3 @@ bool pcia_parse(void)
 	}
 	return got_pcia;
 }
-
