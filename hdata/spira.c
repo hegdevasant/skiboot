@@ -119,8 +119,7 @@ static void add_xscom_node(uint64_t base, uint32_t id)
 	default:
 		dt_add_property_strings(node, "compatible", "ibm,xscom");
 	}
-	dt_add_property_cells(node, "reg", hi32(addr), lo32(addr),
-					   hi32(size), lo32(size));
+	dt_add_property_u64s(node, "reg", addr, size);
 }
 
 struct dt_node *find_xscom_for_chip(uint32_t chip_id)
@@ -157,12 +156,12 @@ static void add_xscom(void)
 		return;
 	}
 
-	if (!(pmbs->flags & MSVPD_PMS_FLAG_XSCOMBASE_VALID)) {
+	if (!(be32_to_cpu(pmbs->flags) & MSVPD_PMS_FLAG_XSCOMBASE_VALID)) {
 		prerror("XSCOM: No XSCOM base in PMBS, using default\n");
 		return;
 	}
 
-	xscom_base = pmbs->xscom_addr;
+	xscom_base = be64_to_cpu(pmbs->xscom_addr);
 
 	/* Some FSP (on P7) give me a crap base address for XSCOM (it has
 	 * spurious bits set as far as I can tell). Since only 5 bits 18:22 can
@@ -187,13 +186,13 @@ static void add_xscom(void)
 			continue;
 		}
 
-		ve = cinfo->verif_exist_flags & CHIP_VERIFY_MASK;
+		ve = be32_to_cpu(cinfo->verif_exist_flags) & CHIP_VERIFY_MASK;
 		ve >>= CHIP_VERIFY_SHIFT;
 		if (ve == CHIP_VERIFY_NOT_INSTALLED ||
 		    ve == CHIP_VERIFY_UNUSABLE)
 			continue;
 
-		add_xscom_node(xscom_base, cinfo->xscom_id);
+		add_xscom_node(xscom_base, be32_to_cpu(cinfo->xscom_id));
 	}
 
 	if (i > 0)
@@ -215,14 +214,14 @@ static void add_xscom(void)
 			continue;
 		}
 
-		ve = (id->verify_exists_flags & CPU_ID_VERIFY_MASK);
+		ve = be32_to_cpu(id->verify_exists_flags) & CPU_ID_VERIFY_MASK;
 		ve >>= CPU_ID_VERIFY_SHIFT;
 		if (ve == CPU_ID_VERIFY_NOT_INSTALLED ||
 		    ve == CPU_ID_VERIFY_UNUSABLE)
 			continue;
 
 		/* Convert to HW chip ID */
-		chip_id = P7_PIR2GCID(id->pir);
+		chip_id = P7_PIR2GCID(be32_to_cpu(id->pir));
 
 		/* do we already have an XSCOM for this chip? */
 		if (find_xscom_for_chip(chip_id))
@@ -296,7 +295,8 @@ static void add_chiptod_old(void)
 			continue;
 		}
 
-		add_chiptod_node(pcid_to_chip_id(id->chip_id), id->flags);
+		add_chiptod_node(pcid_to_chip_id(be32_to_cpu(id->chip_id)),
+				 be32_to_cpu(id->flags));
 	}
 }
 
@@ -328,7 +328,7 @@ static void add_chiptod_new(uint32_t master_cpu)
 			continue;
 		}
 
-		ve = cinfo->verif_exist_flags & CHIP_VERIFY_MASK;
+		ve = be32_to_cpu(cinfo->verif_exist_flags) & CHIP_VERIFY_MASK;
 		ve >>= CHIP_VERIFY_SHIFT;
 		if (ve == CHIP_VERIFY_NOT_INSTALLED ||
 		    ve == CHIP_VERIFY_UNUSABLE)
@@ -340,7 +340,7 @@ static void add_chiptod_new(uint32_t master_cpu)
 			continue;
 		}
 
-		flags = tinfo->flags;
+		flags = be32_to_cpu(tinfo->flags);
 
 		/* The FSP may strip the chiptod info from HDAT; if we find
 		 * a zero-ed out entry, assume that the chiptod is
@@ -350,11 +350,11 @@ static void add_chiptod_new(uint32_t master_cpu)
 		 */
 		if (!size) {
 			flags = CHIPTOD_ID_FLAGS_STATUS_OK;
-			if (cinfo->xscom_id == master_chip)
+			if (be32_to_cpu(cinfo->xscom_id) == master_chip)
 				flags |= CHIPTOD_ID_FLAGS_PRIMARY;
 		}
 
-		add_chiptod_node(cinfo->xscom_id, flags);
+		add_chiptod_node(be32_to_cpu(cinfo->xscom_id), flags);
 	}
 }
 
@@ -422,14 +422,16 @@ static void add_iplparams_serials(const void *iplp, struct dt_node *node)
 	dt_add_property_cells(node, "#size-cells", 0);
 
 	for (i = 0; i < count; i++) {
+		u16 rsrc_id;
 		ipser = HDIF_get_iarray_item(iplp, IPLPARMS_IDATA_SERIAL,
 					     i, NULL);
 		if (!CHECK_SPPTR(ipser))
 			continue;
+		rsrc_id = be16_to_cpu(ipser->rsrc_id);
 		printf("IPLPARAMS: Serial %d rsrc: %04x loc: %s\n",
-		       i, ipser->rsrc_id, ipser->loc_code);
-		ser_node = dt_new_addr(node, "serial", ipser->rsrc_id);
-		dt_add_property_cells(ser_node, "reg", ipser->rsrc_id);
+		       i, rsrc_id, ipser->loc_code);
+		ser_node = dt_new_addr(node, "serial", rsrc_id);
+		dt_add_property_cells(ser_node, "reg", rsrc_id);
 		dt_add_property_nstr(ser_node, "ibm,loc-code",
 				     ipser->loc_code, 80);
 		dt_add_property_string(ser_node, "compatible",
@@ -484,8 +486,8 @@ uint32_t pcid_to_chip_id(uint32_t proc_chip_id)
 			prerror("XSCOM: Bad ChipID data %d\n", i);
 			continue;
 		}
-		if (proc_chip_id == cinfo->proc_chip_id)
-			return cinfo->xscom_id;
+		if (proc_chip_id == be32_to_cpu(cinfo->proc_chip_id))
+			return be32_to_cpu(cinfo->xscom_id);
 	}
 
 	/* Otherwise, check the old-style PACA, looking for unique chips */
@@ -502,8 +504,8 @@ uint32_t pcid_to_chip_id(uint32_t proc_chip_id)
 			continue;
 		}
 
-		if (proc_chip_id == id->processor_chip_id)
-			return P7_PIR2GCID(id->pir);
+		if (proc_chip_id == be32_to_cpu(id->processor_chip_id))
+			return P7_PIR2GCID(be32_to_cpu(id->pir));
 	}
 
 	/* Not found, what to do ? Assert ? For now return a number
