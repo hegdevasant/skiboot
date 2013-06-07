@@ -95,13 +95,15 @@ extern struct HDIF_common_hdr *__get_hdif(struct spira_ntuple *n,
 	     _p = (void *)_p + be32_to_cpu((_ntuples)->alloc_len))
 
 
-/* We override this for testing. */
+/* We override these for testing. */
 #ifndef ntuple_addr
 #define ntuple_addr(_ntuples) ((void *)BE64_TO_CPU((_ntuples)->addr))
 #endif
 
+#ifndef spira_check_ptr
 extern bool spira_check_ptr(const void *ptr, const char *file,
 			    unsigned int line);
+#endif
 
 struct proc_init_data {
 	struct HDIF_common_hdr	hdr;

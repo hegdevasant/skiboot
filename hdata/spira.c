@@ -63,6 +63,8 @@ __section(".spira.data") struct spira spira = {
 	},
 };
 
+/* Overridden for testing. */
+#ifndef spira_check_ptr
 bool spira_check_ptr(const void *ptr, const char *file, unsigned int line)
 {
 	if (!ptr)
@@ -74,6 +76,7 @@ bool spira_check_ptr(const void *ptr, const char *file, unsigned int line)
 	prerror("SPIRA: Bad pointer %p at %s line %d\n", ptr, file, line);
 	return false;
 }
+#endif
 
 struct HDIF_common_hdr *__get_hdif(struct spira_ntuple *n, const char id[],
 				   const char *file, int line)

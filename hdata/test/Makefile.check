@@ -1,0 +1,19 @@
+# -*-Makefile-*-
+
+check: hdata-check 
+
+hdata-check: hdata/test/hdata_to_dt
+	$(VALGRIND) hdata/test/hdata_to_dt -q hdata/test/old-spira.bin hdata/test/old-ntuples.bin
+	$(VALGRIND) hdata/test/hdata_to_dt -q hdata/test/vpl3-spira@29200.bin hdata/test/vpl3-ntuples@31400000.bin
+	$(VALGRIND) hdata/test/hdata_to_dt -q hdata/test/tul28fp-spira@2ca00.bin hdata/test/tul28fp-ntuples@31400000.bin
+
+hdata/test/stubs.o: hdata/test/stubs.c
+	$(HOSTCC) $(HOSTCFLAGS) -g -c -o $@ $<
+
+hdata/test/hdata_to_dt: hdata/test/hdata_to_dt.c hdata/test/stubs.o
+	$(HOSTCC) $(HOSTCFLAGS) -O0 -g -I hdata -I include -I . -I libfdt -o $@ $< hdata/test/stubs.o
+
+clean: hdata-test-clean
+
+hdata-test-clean:
+	$(RM) hdata/test/*.o hdata/test/hdata_to_dt
