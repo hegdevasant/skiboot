@@ -92,6 +92,15 @@ struct dt_property *__dt_add_property_cells(struct dt_node *node,
 					    const char *name,
 					    int count, ...);
 
+#define dt_add_property_u64s(node, name, ...)				\
+	__dt_add_property_u64s((node), ((name)),			\
+			       sizeof((u64[]) { __VA_ARGS__ })/sizeof(u64), \
+			       __VA_ARGS__)
+
+struct dt_property *__dt_add_property_u64s(struct dt_node *node,
+					   const char *name,
+					   int count, ...);
+
 static inline struct dt_property *dt_add_property_u64(struct dt_node *node,
 						      const char *name, u64 val)
 {

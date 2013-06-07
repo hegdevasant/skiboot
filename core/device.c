@@ -311,6 +311,24 @@ struct dt_property *__dt_add_property_cells(struct dt_node *node,
 	return p;
 }
 
+struct dt_property *__dt_add_property_u64s(struct dt_node *node,
+					   const char *name,
+					   int count, ...)
+{
+	struct dt_property *p;
+	u64 *val;
+	unsigned int i;
+	va_list args;
+
+	p = new_property(node, name, count * sizeof(u64));
+	val = (u64 *)p->prop;
+	va_start(args, count);
+	for (i = 0; i < count; i++)
+		val[i] = cpu_to_fdt64(va_arg(args, u64));
+	va_end(args);
+	return p;
+}
+
 struct dt_property *__dt_add_property_strings(struct dt_node *node,
 					      const char *name,
 					      int count, ...)
