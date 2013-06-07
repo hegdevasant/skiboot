@@ -11,6 +11,7 @@
 #include <opal.h>
 #include <ccan/str/str.h>
 #include <device.h>
+#include <types.h>
 
 #include "hdata.h"
 
@@ -21,7 +22,8 @@
 static unsigned int paca_index(const struct HDIF_common_hdr *paca)
 {
 	void *start = get_hdif(&spira.ntuples.paca, PACA_HDIF_SIG);
-	return ((void *)paca - start) / spira.ntuples.paca.alloc_len;
+	return ((void *)paca - start)
+		/ be32_to_cpu(spira.ntuples.paca.alloc_len);
 }
 
 static struct dt_node *add_cpu_node(struct dt_node *cpus,
@@ -32,20 +34,20 @@ static struct dt_node *add_cpu_node(struct dt_node *cpus,
 	const struct sppaca_cpu_timebase *timebase;
 	const struct sppaca_cpu_cache *cache;
 	struct dt_node *cpu;
-	u32 no, size;
+	u32 no, size, ve_flags;
 
 	/* We use the process_interrupt_line as the res id */
-	no = id->process_interrupt_line;
+	no = be32_to_cpu(id->process_interrupt_line);
 
+	ve_flags = be32_to_cpu(id->verify_exists_flags);
 	printf("CPU[%i]: PIR=%i RES=%i %s %s(%u threads)\n",
-	       paca_index(paca), id->pir, no,
-	       id->verify_exists_flags & CPU_ID_PACA_RESERVED
-	       ? "**RESERVED**" : cpu_state(id->verify_exists_flags),
-	       id->verify_exists_flags & CPU_ID_SECONDARY_THREAD
+	       paca_index(paca), be32_to_cpu(id->pir), no,
+	       ve_flags & CPU_ID_PACA_RESERVED
+	       ? "**RESERVED**" : cpu_state(ve_flags),
+	       ve_flags & CPU_ID_SECONDARY_THREAD
 	       ? "[secondary] " : 
-	       (id->pir == boot_cpu->pir ? "[boot] " : ""),
-	       ((id->verify_exists_flags
-		 & CPU_ID_NUM_SECONDARY_THREAD_MASK)
+	       (be32_to_cpu(id->pir) == boot_cpu->pir ? "[boot] " : ""),
+	       ((ve_flags & CPU_ID_NUM_SECONDARY_THREAD_MASK)
 		>> CPU_ID_NUM_SECONDARY_THREAD_SHIFT) + 1);
 
 	timebase = HDIF_get_idata(paca, SPPACA_IDATA_TIMEBASE, &size);
@@ -68,11 +70,12 @@ static struct dt_node *add_cpu_node(struct dt_node *cpus,
 	dt_add_property_cells(cpu, "ibm,ppc-interrupt-server#s", no);
 
 	dt_add_property_cells(cpu, DT_PRIVATE "hw_proc_id",
-			     id->hardware_proc_id);
-	dt_add_property_u64(cpu, DT_PRIVATE "ibase", cleanup_addr(id->ibase));
-	dt_add_property_cells(cpu, "ibm,pir", id->pir);
+			      be32_to_cpu(id->hardware_proc_id));
+	dt_add_property_u64(cpu, DT_PRIVATE "ibase",
+			    cleanup_addr(be64_to_cpu(id->ibase)));
+	dt_add_property_cells(cpu, "ibm,pir", be32_to_cpu(id->pir));
 	dt_add_property_cells(cpu, "ibm,chip-id",
-			      pcid_to_chip_id(id->processor_chip_id));
+			   pcid_to_chip_id(be32_to_cpu(id->processor_chip_id)));
 	return cpu;
 }
 
@@ -88,21 +91,21 @@ static struct dt_node *find_cpu_by_hardware_proc_id(struct dt_node *root,
 			continue;
 
 		prop = dt_find_property(i, DT_PRIVATE "hw_proc_id");
-		if (*(u32 *)prop->prop == hw_proc_id)
+		if (be32_to_cpu(*(u32 *)prop->prop) == hw_proc_id)
 			return i;
 	}
 	return NULL;
 }
 
 /* Note that numbers are small. */
-static void add_u32_sorted(u32 arr[], u32 new, unsigned num)
+static void add_be32_sorted(__be32 arr[], __be32 new, unsigned num)
 {
 	unsigned int i;
 
 	/* Walk until we find where we belong (insertion sort). */
 	for (i = 0; i < num; i++) {
-		if (new < arr[i]) {
-			u32 tmp = arr[i];
+		if (be32_to_cpu(new) < be32_to_cpu(arr[i])) {
+			__be32 tmp = arr[i];
 			arr[i] = new;
 			new = tmp;
 		}
@@ -168,9 +171,9 @@ static bool __paca_parse(void)
 		return false;
 	}
 
-	if (spira.ntuples.paca.act_len < sizeof(*paca)) {
+	if (be32_to_cpu(spira.ntuples.paca.act_len) < sizeof(*paca)) {
 		prerror("PACA: invalid size %u\n",
-			spira.ntuples.paca.act_len);
+			be32_to_cpu(spira.ntuples.paca.act_len));
 		return false;
 	}
 
@@ -180,7 +183,7 @@ static bool __paca_parse(void)
 
 	for_each_paca(paca) {
 		const struct sppaca_cpu_id *id;
-		u32 size;
+		u32 size, ve_flags;
 		bool okay;
 
 		id = HDIF_get_idata(paca, SPPACA_IDATA_CPU_ID, &size);
@@ -194,8 +197,9 @@ static bool __paca_parse(void)
 				paca_index(paca), size, id);
 			return false;
 		}
-		switch ((id->verify_exists_flags & CPU_ID_VERIFY_MASK) >>
-			CPU_ID_VERIFY_SHIFT) {
+
+		ve_flags = be32_to_cpu(id->verify_exists_flags);
+		switch ((ve_flags&CPU_ID_VERIFY_MASK) >> CPU_ID_VERIFY_SHIFT) {
 		case CPU_ID_VERIFY_USABLE_NO_FAILURES:
 		case CPU_ID_VERIFY_USABLE_FAILURES:
 			okay = true;
@@ -205,11 +209,12 @@ static bool __paca_parse(void)
 		}
 
 		printf("CPU[%i]: PIR=%i RES=%i %s\n",
-		       paca_index(paca), id->pir, id->process_interrupt_line,
+		       paca_index(paca), be32_to_cpu(id->pir),
+		       be32_to_cpu(id->process_interrupt_line),
 		       okay ? "OK" : "UNAVAILABLE");
 
 		/* Secondary threads don't get their own node. */
-		if (id->verify_exists_flags & CPU_ID_SECONDARY_THREAD)
+		if (ve_flags & CPU_ID_SECONDARY_THREAD)
 			continue;
 
 		if (!add_cpu_node(cpus, paca, id, okay))
@@ -220,13 +225,13 @@ static bool __paca_parse(void)
 	for_each_paca(paca) {
 		const struct dt_property *prop;
 		const struct sppaca_cpu_id *id;
-		u32 size, state, num;
+		u32 size, state, num, ve_flags;
 		struct dt_node *cpu;
-		u32 *new_prop;
+		__be32 *new_prop;
 
 		id = HDIF_get_idata(paca, 2, &size);
-		state = (id->verify_exists_flags & CPU_ID_VERIFY_MASK) >>
-			CPU_ID_VERIFY_SHIFT;
+		ve_flags = be32_to_cpu(id->verify_exists_flags);
+		state = (ve_flags & CPU_ID_VERIFY_MASK) >> CPU_ID_VERIFY_SHIFT;
 		switch (state) {
 		case CPU_ID_VERIFY_USABLE_NO_FAILURES:
 		case CPU_ID_VERIFY_USABLE_FAILURES:
@@ -236,14 +241,15 @@ static bool __paca_parse(void)
 		}
 
 		/* Only interested in secondary threads. */
-		if (!(id->verify_exists_flags & CPU_ID_SECONDARY_THREAD))
+		if (!(ve_flags & CPU_ID_SECONDARY_THREAD))
 			continue;
 
 		cpu = find_cpu_by_hardware_proc_id(cpus,
-						   id->hardware_proc_id);
+				   be32_to_cpu(id->hardware_proc_id));
 		if (!cpu) {
 			prerror("CPU[%i]: could not find primary hwid %i\n",
-				paca_index(paca), id->hardware_proc_id);
+				paca_index(paca),
+				be32_to_cpu(id->hardware_proc_id));
 			return false;
 		}
 
@@ -257,10 +263,10 @@ static bool __paca_parse(void)
 			return false;
 		}
 		memcpy(new_prop, prop->prop, prop->len);
-		add_u32_sorted(new_prop, id->process_interrupt_line, num);
+		add_be32_sorted(new_prop, id->process_interrupt_line, num);
 		dt_del_property(cpu, (struct dt_property *)prop);
 		dt_add_property(cpu, "ibm,ppc-interrupt-server#s",
-				new_prop, (num + 1) * sizeof(u32));
+				new_prop, (num + 1) * sizeof(__be32));
 		free(new_prop);
 	}
 
