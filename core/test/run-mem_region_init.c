@@ -94,6 +94,7 @@ int main(void)
 	/* Use malloc for the heap, so valgrind can find issues. */
 	skiboot_heap.start = (unsigned long)heap;
 	skiboot_heap.len = TEST_HEAP_SIZE;
+	skiboot_os_reserve.len = (unsigned long)heap;
 
 	dt_root = dt_new_root("");
 	dt_add_property_cells(dt_root, "#address-cells", 2);
@@ -133,13 +134,14 @@ int main(void)
 		if (r == &skiboot_code_and_text ||
 		    r == &skiboot_heap ||
 		    r == &skiboot_after_heap ||
-		    r == &skiboot_cpu_stacks)
+		    r == &skiboot_cpu_stacks ||
+		    r == &skiboot_os_reserve)
 			builtins++;
 		else
 			assert(r->type == REGION_SKIBOOT_HEAP);
 		assert(mem_check(r));
 	}
-	assert(builtins == 4);
+	assert(builtins == 5);
 
 	dt_free(dt_root);
 
@@ -148,6 +150,7 @@ int main(void)
 		if (r != &skiboot_code_and_text &&
 		    r != &skiboot_heap &&
 		    r != &skiboot_after_heap &&
+		    r != &skiboot_os_reserve &&
 		    r != &skiboot_cpu_stacks) {
 			free(r);
 		}

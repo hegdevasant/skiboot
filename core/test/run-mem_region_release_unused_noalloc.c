@@ -76,7 +76,6 @@ int main(void)
 {
 	uint64_t i;
 	struct mem_region *r, *other = NULL;
-	void *other_mem;
 
 	/* Use malloc for the heap, so valgrind can find issues. */
 	skiboot_heap.start = (unsigned long)malloc(TEST_HEAP_SIZE);
@@ -87,23 +86,11 @@ int main(void)
 	dt_add_property_cells(dt_root, "#address-cells", 2);
 	dt_add_property_cells(dt_root, "#size-cells", 2);
 
-	other_mem = malloc(1024*1024);
-	add_mem_node((unsigned long)other_mem, 1024*1024);
+	add_mem_node(0, 0x100000000ULL);
+	add_mem_node(0x100000000ULL, 0x100000000ULL);
 
-	/* Now convert. */
 	mem_region_init();
 
-	/* Find our node to allocate from */
-	list_for_each(&regions, r, list) {
-		if (region_start(r) == other_mem)
-			other = r;
-	}
-	/* This could happen if skiboot addresses clashed with our alloc. */
-	assert(other);
-	assert(mem_check(other));
-
-	/* Allocate 1k from other region. */
-	mem_alloc(other, 1024, 1, "1k");
 	mem_region_release_unused();
 
 	assert(mem_check(&skiboot_heap));
@@ -123,19 +110,13 @@ int main(void)
 			continue;
 		if (r == &skiboot_cpu_stacks)
 			continue;
-		if (r == other) {
-			assert(r->type == REGION_SKIBOOT_HEAP);
-			assert(r->len < 1024 * 1024);
-		} else {
-			assert(r->type == REGION_OS);
-			assert(r->start == other->start + other->len);
-			assert(r->start + r->len == other->start + 1024*1024);
-		}
+
+		/* the memory nodes should all be available to the OS now */
+		assert(r->type == REGION_OS);
 	}
-	assert(i == 7);
+	assert(i == 9);
 
 	dt_free(dt_root);
 	free((void *)(long)skiboot_heap.start);
-	free(other_mem);
 	return 0;
 }
