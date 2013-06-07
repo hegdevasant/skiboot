@@ -53,13 +53,13 @@ __section(".spira.data") struct spira spira = {
 		},
 		/* We only populate some n-tuples */
 		.proc_init = {
-			.addr  		= &proc_init_data,
+			.addr  		= PROCIN_OFF,
 			.alloc_cnt	= 1,
 			.act_cnt	= 1,
 			.alloc_len	= sizeof(struct proc_init_data),
 		},
 		.heap = {
-			.addr		= (void *)SPIRA_HEAP_BASE,
+			.addr		= SPIRA_HEAP_BASE,
 			.alloc_cnt	= 1,
 			.alloc_len	= SPIRA_HEAP_SIZE,
 		},

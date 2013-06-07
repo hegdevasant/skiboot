@@ -21,7 +21,7 @@
 #define SPIRA_VERSION		0x20	/* Like 730 ? */
 
 struct spira_ntuple {
-	void		*addr;
+	u64		addr;
 	u16		alloc_cnt;
 	u16		act_cnt;
 	u32		alloc_len;
