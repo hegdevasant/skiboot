@@ -58,6 +58,18 @@
  */
 #define SKIBOOT_BASE		0x30000000
 
+/* The NACA and other stuff in head.S need to be at the start: we
+ * give it 64k before placing the SPIRA and related data.
+ */
+#define SPIRA_OFF		0x00010000
+
+/* SPIRA is 2k, then follow with for proc_init_data (aka PROCIN).
+ * These need to be at fixed addresses in case we're ever little
+ * endian: linker can't endian reverse a pointer for us.  Text, data
+ * et. al. follows this.
+ */
+#define PROCIN_OFF		(SPIRA_OFF + 2048)
+
 /* We keep a gap of 4M for skiboot text & bss for now, then
  * we have our heap which goes up to base + 16M (so 12M for
  * now, though we can certainly reduce that a lot)

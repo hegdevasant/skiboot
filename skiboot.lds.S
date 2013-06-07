@@ -4,10 +4,26 @@
  * confidentiality governed by the Parties’ Mutual Nondisclosure Agreement
  * number V032404DR, executed by the parties on November 6, 2007, and
  * Supplement V032404DR-3 dated August 16, 2012 (the “NDA”). */
+#include <config.h>
+
 ENTRY(boot_entry);
 SECTIONS
 {
 	. = 0;
+
+	.head : {
+		*(.head)
+	}
+
+	. = SPIRA_OFF;
+	.spira : {
+		*(.spira.data)
+	}
+
+	. = PROCIN_OFF;
+	.procin.data : {
+		*(.procin.data)
+	}
 
  	.text : {
 		*(.head)

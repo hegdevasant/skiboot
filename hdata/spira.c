@@ -25,7 +25,7 @@
 
 static int cpu_type;
 
-static struct proc_init_data proc_init_data = {
+__section(".procin.data") struct proc_init_data proc_init_data = {
 	.hdr = HDIF_SIMPLE_HDR("PROCIN", 1, struct proc_init_data),
 	.regs_ptr = {
 		.offset	= offsetof(struct proc_init_data, regs),
@@ -38,7 +38,7 @@ static struct proc_init_data proc_init_data = {
 };
 
 /* SP Interface Root Array, aka SPIRA */
-struct spira spira = {
+__section(".spira.data") struct spira spira = {
 	.hdr = HDIF_SIMPLE_HDR("SPIRA ", SPIRA_VERSION, struct spira),
 	.ntuples_ptr = {
 		.offset			= offsetof(struct spira, ntuples),
