@@ -6,6 +6,12 @@
  * Supplement V032404DR-3 dated August 16, 2012 (the “NDA”). */
 #ifndef __TYPES_H
 #define __TYPES_H
+#include <ccan/short_types/short_types.h>
+
+/* These are currently just for clarity, but we could apply sparse. */
+typedef u16 __be16;
+typedef u32 __be32;
+typedef u64 __be64;
 
 #endif /* __TYPES_H */
 
