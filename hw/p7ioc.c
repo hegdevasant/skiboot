@@ -579,9 +579,11 @@ static bool p7ioc_check_GEM(struct p7ioc *ioc)
 	return false;
 }
 
-static void p7ioc_rgc_interrupt(void *data, uint32_t isn __unused)
+static void p7ioc_rgc_interrupt(void *data, uint32_t isn)
 {
 	struct p7ioc *ioc = data;
+
+	printf("Got RGC interrupt 0x%04x\n", isn);
 
 	/* We will notify OS while getting error from GEM */
 	if (p7ioc_check_GEM(ioc))

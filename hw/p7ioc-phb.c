@@ -586,6 +586,8 @@ static int64_t p7ioc_slot_power_on(struct phb *phb)
 static int64_t p7ioc_complete_reset(struct phb *phb, uint8_t assert)
 {
 	struct p7ioc_phb *p = phb_to_p7ioc_phb(phb);
+	struct p7ioc *ioc = p->ioc;
+	uint64_t val64;
 
 	if (assert == OPAL_ASSERT_RESET) {
 		if (p->state != P7IOC_PHB_STATE_FUNCTIONAL &&
@@ -593,6 +595,27 @@ static int64_t p7ioc_complete_reset(struct phb *phb, uint8_t assert)
 			return OPAL_HARDWARE;
 
 		p7ioc_phb_reset(phb);
+
+		/*
+		 * According to the experiment, we probably still have
+		 * the fenced state with the corresponding PHB in the Fence
+		 * WOF and we need clear that explicitly. Besides, the RGC
+		 * might already have informational error and we should clear
+		 * that explicitly as well. Otherwise, RGC XIVE#0 won't issue
+		 * interrupt any more.
+		 */
+		val64 = in_be64(ioc->regs + P7IOC_CHIP_FENCE_WOF);
+		val64 &= ~PPC_BIT(15 + p->index * 4);
+		out_be64(ioc->regs + P7IOC_CHIP_FENCE_WOF, val64);
+
+		/* Clear informational error from RGC */
+		val64 = in_be64(ioc->regs + P7IOC_RGC_LEM_BASE + P7IOC_LEM_WOF_OFFSET);
+		val64 &= ~PPC_BIT(18);
+		out_be64(ioc->regs + P7IOC_RGC_LEM_BASE + P7IOC_LEM_WOF_OFFSET, val64);
+		val64 = in_be64(ioc->regs + P7IOC_RGC_LEM_BASE + P7IOC_LEM_FIR_OFFSET);
+		val64 &= ~PPC_BIT(18);
+		out_be64(ioc->regs + P7IOC_RGC_LEM_BASE + P7IOC_LEM_FIR_OFFSET, val64);
+
 		return p7ioc_sm_slot_power_off(p);
 	} else {
 		if (p->state != P7IOC_PHB_STATE_FUNCTIONAL)
