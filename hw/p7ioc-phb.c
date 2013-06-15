@@ -809,6 +809,12 @@ static void p7ioc_eeh_read_phb_status(struct p7ioc_phb *p,
 
 	memset(stat, 0, sizeof(struct OpalIoP7IOCPhbErrorData));
 
+
+	/* Error data common part */
+	stat->common.version = OPAL_PHB_ERROR_DATA_VERSION_1;
+	stat->common.ioType  = OPAL_PHB_ERROR_DATA_TYPE_P7IOC;
+	stat->common.len     = sizeof(struct OpalIoP7IOCPhbErrorData);
+
 	/*
 	 * We read some registers using config space through AIB.
 	 *
@@ -1257,19 +1263,13 @@ static int64_t p7ioc_get_diag_data(struct phb *phb, void *diag_buffer,
 				   uint64_t diag_buffer_len)
 {
 	struct p7ioc_phb *p = phb_to_p7ioc_phb(phb);
-	struct OpalIoPhbErrorCommon *common = diag_buffer;
-	struct OpalIoP7IOCPhbErrorData *data = diag_buffer;
+	struct OpalIoP7IOCPhbErrorData *diag = diag_buffer;
 
 	if (diag_buffer_len < sizeof(struct OpalIoP7IOCPhbErrorData))
 		return OPAL_PARAMETER;
 
-	/* Error data common part */
-	common->version = OPAL_PHB_ERROR_DATA_VERSION_1;
-	common->ioType  = OPAL_PHB_ERROR_DATA_TYPE_P7IOC;
-	common->len	= sizeof(struct OpalIoP7IOCPhbErrorData);
-
 	/* Specific error data */
-	p7ioc_eeh_read_phb_status(p, data);
+	p7ioc_eeh_read_phb_status(p, diag);
 
 	/*
 	 * We're running to here probably because of errors (MAL
