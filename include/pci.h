@@ -129,7 +129,8 @@ struct phb_ops {
 
 	int64_t (*get_diag_data)(struct phb *phb, void *diag_buffer,
 				 uint64_t diag_buffer_len);
-
+	int64_t (*get_diag_data2)(struct phb *phb, void *diag_buffer,
+				  uint64_t diag_buffer_len);
 	int64_t (*next_error)(struct phb *phb, uint64_t *first_frozen_pe,
 			      uint16_t *pci_error_type, uint16_t *severity);
 

@@ -74,6 +74,17 @@ static  void p7ioc_phb_unlock(struct phb *phb)
 	unlock(&p->lock);
 }
 
+static bool p7ioc_phb_fenced(struct p7ioc_phb *p)
+{
+	struct p7ioc *ioc = p->ioc;
+	uint64_t fence, fbits;
+
+	fbits = 0x0003000000000000 >> (p->index * 4);
+	fence = in_be64(ioc->regs + P7IOC_CHIP_FENCE_SHADOW);
+
+	return (fence & fbits) != 0;
+}
+
 /*
  * Configuration space access
  *
@@ -109,6 +120,7 @@ static int64_t p7ioc_pcicfg_read##size(struct phb *phb, uint32_t bdfn,	\
 {									\
 	struct p7ioc_phb *p = phb_to_p7ioc_phb(phb);			\
 	uint64_t addr;							\
+	void *base = p->regs;						\
 	int64_t rc;							\
 									\
 	/* Initialize data in case of error */				\
@@ -118,10 +130,17 @@ static int64_t p7ioc_pcicfg_read##size(struct phb *phb, uint32_t bdfn,	\
 	if (rc)								\
 		return rc;						\
 									\
+	if (p7ioc_phb_fenced(p)) {					\
+		if (!p->use_asb)					\
+			return OPAL_HARDWARE;				\
+									\
+		base = p->regs_asb;					\
+	}								\
+									\
 	addr = PHB_CA_ENABLE | ((uint64_t)bdfn << PHB_CA_FUNC_LSH);	\
 	addr = SETFIELD(PHB_CA_REG, addr, offset);			\
-	out_be64(p->regs + PHB_CONFIG_ADDRESS, addr);			\
-	*data = in_le##size(p->regs + PHB_CONFIG_DATA +			\
+	out_be64(base + PHB_CONFIG_ADDRESS, addr);			\
+	*data = in_le##size(base + PHB_CONFIG_DATA +			\
 		     (offset & (4 - sizeof(type))));			\
 									\
 	return OPAL_SUCCESS;						\
@@ -132,6 +151,7 @@ static int64_t p7ioc_pcicfg_write##size(struct phb *phb, uint32_t bdfn,	\
 					uint32_t offset, type data)	\
 {									\
 	struct p7ioc_phb *p = phb_to_p7ioc_phb(phb);			\
+	void *base = p->regs;						\
 	uint64_t addr;							\
 	int64_t rc;							\
 									\
@@ -139,10 +159,17 @@ static int64_t p7ioc_pcicfg_write##size(struct phb *phb, uint32_t bdfn,	\
 	if (rc)								\
 		return rc;						\
 									\
+	if (p7ioc_phb_fenced(p)) {					\
+		if (!p->use_asb)					\
+			return OPAL_HARDWARE;				\
+									\
+		base = p->regs_asb;					\
+	}								\
+									\
 	addr = PHB_CA_ENABLE | ((uint64_t)bdfn << PHB_CA_FUNC_LSH);	\
 	addr = SETFIELD(PHB_CA_REG, addr, offset);			\
-	out_be64(p->regs + PHB_CONFIG_ADDRESS, addr);			\
-	out_le##size(p->regs + PHB_CONFIG_DATA +			\
+	out_be64(base + PHB_CONFIG_ADDRESS, addr);			\
+	out_le##size(base + PHB_CONFIG_DATA +				\
 		     (offset & (4 - sizeof(type))), data);		\
 									\
 	return OPAL_SUCCESS;						\
@@ -559,6 +586,8 @@ static int64_t p7ioc_slot_power_on(struct phb *phb)
 static int64_t p7ioc_complete_reset(struct phb *phb, uint8_t assert)
 {
 	struct p7ioc_phb *p = phb_to_p7ioc_phb(phb);
+	struct p7ioc *ioc = p->ioc;
+	uint64_t val64;
 
 	if (assert == OPAL_ASSERT_RESET) {
 		if (p->state != P7IOC_PHB_STATE_FUNCTIONAL &&
@@ -566,6 +595,27 @@ static int64_t p7ioc_complete_reset(struct phb *phb, uint8_t assert)
 			return OPAL_HARDWARE;
 
 		p7ioc_phb_reset(phb);
+
+		/*
+		 * According to the experiment, we probably still have
+		 * the fenced state with the corresponding PHB in the Fence
+		 * WOF and we need clear that explicitly. Besides, the RGC
+		 * might already have informational error and we should clear
+		 * that explicitly as well. Otherwise, RGC XIVE#0 won't issue
+		 * interrupt any more.
+		 */
+		val64 = in_be64(ioc->regs + P7IOC_CHIP_FENCE_WOF);
+		val64 &= ~PPC_BIT(15 + p->index * 4);
+		out_be64(ioc->regs + P7IOC_CHIP_FENCE_WOF, val64);
+
+		/* Clear informational error from RGC */
+		val64 = in_be64(ioc->regs + P7IOC_RGC_LEM_BASE + P7IOC_LEM_WOF_OFFSET);
+		val64 &= ~PPC_BIT(18);
+		out_be64(ioc->regs + P7IOC_RGC_LEM_BASE + P7IOC_LEM_WOF_OFFSET, val64);
+		val64 = in_be64(ioc->regs + P7IOC_RGC_LEM_BASE + P7IOC_LEM_FIR_OFFSET);
+		val64 &= ~PPC_BIT(18);
+		out_be64(ioc->regs + P7IOC_RGC_LEM_BASE + P7IOC_LEM_FIR_OFFSET, val64);
+
 		return p7ioc_sm_slot_power_off(p);
 	} else {
 		if (p->state != P7IOC_PHB_STATE_FUNCTIONAL)
@@ -753,10 +803,17 @@ static int64_t p7ioc_poll(struct phb *phb)
 static void p7ioc_eeh_read_phb_status(struct p7ioc_phb *p,
 				      struct OpalIoP7IOCPhbErrorData *stat)
 {
+	bool locked;
 	uint16_t tmp16;
 	unsigned int i;
 
 	memset(stat, 0, sizeof(struct OpalIoP7IOCPhbErrorData));
+
+
+	/* Error data common part */
+	stat->common.version = OPAL_PHB_ERROR_DATA_VERSION_1;
+	stat->common.ioType  = OPAL_PHB_ERROR_DATA_TYPE_P7IOC;
+	stat->common.len     = sizeof(struct OpalIoP7IOCPhbErrorData);
 
 	/*
 	 * We read some registers using config space through AIB.
@@ -769,6 +826,10 @@ static void p7ioc_eeh_read_phb_status(struct p7ioc_phb *p,
 	 * (which they really are, but they use the top 32-bit of a 64-bit
 	 * register so we need to be a bit careful).
 	 */
+
+	/* Use ASB to access PCICFG if the PHB has been fenced */
+	locked = lock_recursive(&p->lock);
+	p->use_asb = 1;
 
 	/* Grab RC bridge control, make it 32-bit */
 	p7ioc_pcicfg_read16(&p->phb, 0, PCI_CFG_BRCTL, &tmp16);
@@ -821,6 +882,13 @@ static void p7ioc_eeh_read_phb_status(struct p7ioc_phb *p,
 	p7ioc_pcicfg_read32(&p->phb, 0, p->aercap + PCIECAP_AER_SRCID,
 			    &stat->sourceId);
 
+	/* Restore to AIB */
+	p->use_asb = 0;
+	if (locked) {
+		unlock(&p->lock);
+		pci_put_phb(&p->phb);
+	}
+
 	/*
 	 * No idea what that that is supposed to be, opal.h says
 	 * "Record data about the call to allocate a buffer."
@@ -857,21 +925,10 @@ static void p7ioc_eeh_read_phb_status(struct p7ioc_phb *p,
 	/* Grab PESTA & B content */
 	p7ioc_phb_ioda_sel(p, IODA_TBL_PESTA, 0, true);
 	for (i = 0; i < OPAL_P7IOC_NUM_PEST_REGS; i++)
-		stat->pestA[i] = in_be64(p->regs + PHB_IODA_DATA0);
+		stat->pestA[i] = in_be64(p->regs_asb + PHB_IODA_DATA0);
 	p7ioc_phb_ioda_sel(p, IODA_TBL_PESTB, 0, true);
 	for (i = 0; i < OPAL_P7IOC_NUM_PEST_REGS; i++)
-		stat->pestB[i] = in_be64(p->regs + PHB_IODA_DATA0);
-}
-
-static bool p7ioc_phb_fenced(struct p7ioc_phb *p)
-{
-	struct p7ioc *ioc = p->ioc;
-	uint64_t fence, fbits;
-
-	fbits = 0x0003000000000000 >> (p->index * 4);
-	fence = in_be64(ioc->regs + P7IOC_CHIP_FENCE_SHADOW);
-
-	return (fence & fbits) != 0;
+		stat->pestB[i] = in_be64(p->regs_asb + PHB_IODA_DATA0);
 }
 
 static int64_t p7ioc_eeh_freeze_status(struct phb *phb, uint64_t pe_number,
@@ -1206,12 +1263,13 @@ static int64_t p7ioc_get_diag_data(struct phb *phb, void *diag_buffer,
 				   uint64_t diag_buffer_len)
 {
 	struct p7ioc_phb *p = phb_to_p7ioc_phb(phb);
-	struct OpalIoP7IOCPhbErrorData *data = diag_buffer;
+	struct OpalIoP7IOCPhbErrorData *diag = diag_buffer;
 
 	if (diag_buffer_len < sizeof(struct OpalIoP7IOCPhbErrorData))
 		return OPAL_PARAMETER;
 
-	p7ioc_eeh_read_phb_status(p, data);
+	/* Specific error data */
+	p7ioc_eeh_read_phb_status(p, diag);
 
 	/*
 	 * We're running to here probably because of errors (MAL
@@ -1863,7 +1921,8 @@ static const struct phb_ops p7ioc_phb_ops = {
 	.choose_bus		= p7ioc_choose_bus,
 	.eeh_freeze_status	= p7ioc_eeh_freeze_status,
 	.eeh_freeze_clear	= p7ioc_eeh_freeze_clear,
-	.get_diag_data		= p7ioc_get_diag_data,
+	.get_diag_data		= NULL,
+	.get_diag_data2		= p7ioc_get_diag_data,
 	.next_error		= p7ioc_eeh_next_error,
 	.phb_mmio_enable	= p7ioc_phb_mmio_enable,
 	.set_phb_mem_window	= p7ioc_set_phb_mem_window,
