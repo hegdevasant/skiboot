@@ -57,6 +57,7 @@ struct spira_ntuples {
 	struct spira_ntuple	heap;			/* 0x2c0 */
 	struct spira_ntuple	pcia;			/* 0x2e0 */
 	struct spira_ntuple	proc_chip;		/* 0x300 */
+	struct spira_ntuple	hs_data;		/* 0x320 */
 };
 
 struct spira {
@@ -64,7 +65,7 @@ struct spira {
 	struct HDIF_idata_ptr	ntuples_ptr;
 	__be64			pad;
 	struct spira_ntuples	ntuples;
-	u8			reserved[0x4e0];
+	u8			reserved[0x4c0];
 } __packed __align(0x100);
 
 extern struct spira spira;
