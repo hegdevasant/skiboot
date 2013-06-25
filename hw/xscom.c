@@ -82,7 +82,7 @@ int xscom_read(uint32_t gcid, uint32_t pcb_addr, uint64_t *val)
 
 	if (!xscom_gcid_ok(gcid)) {
 		prerror("%s: invalid XSCOM gcid 0x%x\n", __func__, gcid);
-		return -1;
+		return OPAL_PARAMETER;
 	}
 
 	for (;;) {
@@ -103,10 +103,12 @@ int xscom_read(uint32_t gcid, uint32_t pcb_addr, uint64_t *val)
 
 		/* Handle error and eventually retry */
 		if (!xscom_handle_error(hmer, gcid, pcb_addr, false))
-			return -1;
+			return OPAL_HARDWARE;
 	}
 	return 0;
 }
+opal_call(OPAL_XSCOM_READ, xscom_read);
+
 
 int xscom_write(uint32_t gcid, uint32_t pcb_addr, uint64_t val)
 {
@@ -114,7 +116,7 @@ int xscom_write(uint32_t gcid, uint32_t pcb_addr, uint64_t val)
 
 	if (!xscom_gcid_ok(gcid)) {
 		prerror("%s: invalid XSCOM gcid 0x%x\n", __func__, gcid);
-		return -1;
+		return OPAL_PARAMETER;
 	}
 
 	for (;;) {
@@ -135,10 +137,11 @@ int xscom_write(uint32_t gcid, uint32_t pcb_addr, uint64_t val)
 
 		/* Handle error and eventually retry */
 		if (!xscom_handle_error(hmer, gcid, pcb_addr, true))
-			return -1;
+			return OPAL_HARDWARE;
 	}
 	return 0;
 }
+opal_call(OPAL_XSCOM_WRITE, xscom_write);
 
 int xscom_readme(uint32_t pcb_addr, uint64_t *val)
 {

@@ -89,7 +89,9 @@
 #define OPAL_PCI_POLL				62
 #define OPAL_PCI_MSI_EOI			63
 #define OPAL_PCI_GET_PHB_DIAG_DATA2		64
-#define OPAL_LAST				64
+#define OPAL_XSCOM_READ				65
+#define OPAL_XSCOM_WRITE			66
+#define OPAL_LAST				66
 
 #ifndef __ASSEMBLY__
 
