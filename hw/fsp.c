@@ -1438,12 +1438,49 @@ static bool fsp_init_one(char *compat)
 	return inited;
 }
 
+static int64_t fsp_opal_cec_power_down(uint64_t request)
+{
+	/* Request is:
+	 *
+	 * 0 = normal
+	 * 1 = immediate
+	 * (we do not allow 2 for "pci cfg reset" just yet)
+	 */
+
+	if (request !=0 && request != 1)
+		return OPAL_PARAMETER;
+
+	if (fsp_queue_msg(fsp_mkmsg(FSP_CMD_POWERDOWN_NORM, 1, request),
+			  fsp_freemsg))
+		return OPAL_INTERNAL_ERROR;
+
+	return OPAL_SUCCESS;
+}
+
+static int64_t fsp_opal_cec_reboot(void)
+{
+#ifdef ENABLE_FAST_RESET
+	/* Try a fast reset first */
+	fast_reset();
+#endif
+
+	/* If that failed, talk to the FSP */
+	if (fsp_queue_msg(fsp_mkmsg(FSP_CMD_REBOOT, 0), fsp_freemsg))
+		return OPAL_INTERNAL_ERROR;
+
+	return OPAL_SUCCESS;
+}
+
 void fsp_init(void)
 {
 	printf("FSP: Looking for FSP...\n");
 
-	if (!fsp_init_one("ibm,fsp1") && !fsp_init_one("ibm,fsp2"))
+	if (!fsp_init_one("ibm,fsp1") && !fsp_init_one("ibm,fsp2")) {
 		printf("FSP: No FSP on this machine\n");
+		return;
+	}
+	opal_register(OPAL_CEC_POWER_DOWN, fsp_opal_cec_power_down);
+	opal_register(OPAL_CEC_REBOOT, fsp_opal_cec_reboot);
 }
 
 bool fsp_present(void)
