@@ -307,11 +307,13 @@ void init_boot_cpu(void)
 		cpu_thread_count = 4;
 		cpu_max_pir = SPR_PIR_P7_MASK;
 		proc_gen = proc_gen_p7;
+		printf("CPU: P7 generation processor\n");
 		break;
 	case PVR_TYPE_P8:
 		cpu_thread_count = 8;
 		cpu_max_pir = SPR_PIR_P8_MASK;
 		proc_gen = proc_gen_p8;
+		printf("CPU: P8 generation processor\n");
 		break;
 	default:
 		prerror("CPU: Unknown PVR, assuming 1 thread\n");
