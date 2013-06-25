@@ -303,8 +303,8 @@ static void encode_cached_tod(uint32_t *year_month_day,
 	tm_to_datetime(&tm, year_month_day, hour_minute_second_millisecond);
 }
 
-static int64_t opal_rtc_read(uint32_t *year_month_day,
-			     uint64_t *hour_minute_second_millisecond)
+static int64_t fsp_opal_rtc_read(uint32_t *year_month_day,
+				 uint64_t *hour_minute_second_millisecond)
 {
 	struct fsp_msg *msg;
 	int64_t rc;
@@ -362,10 +362,9 @@ out:
 	unlock(&rtc_lock);
 	return rc;
 }
-opal_call(OPAL_RTC_READ, opal_rtc_read);
 
-static int64_t opal_rtc_write(uint32_t year_month_day __unused,
-			      uint64_t hour_minute_second_millisecond __unused)
+static int64_t fsp_opal_rtc_write(uint32_t year_month_day,
+				  uint64_t hour_minute_second_millisecond)
 {
 	struct fsp_msg *msg;
 	uint32_t w0, w1, w2;
@@ -436,15 +435,21 @@ static int64_t opal_rtc_write(uint32_t year_month_day __unused,
 		fsp_freemsg(msg);
 	return rc;
 }
-opal_call(OPAL_RTC_WRITE, opal_rtc_write);
 
 void fsp_rtc_init(void)
 {
 	struct fsp_msg msg, resp;
 	int rc;
 
-	msg.resp = &resp;
+	if (!fsp_present()) {
+		rtc_tod_state = RTC_TOD_PERMANENT_ERROR;
+		return;
+	}
 
+	opal_register(OPAL_RTC_READ, fsp_opal_rtc_read);
+	opal_register(OPAL_RTC_WRITE, fsp_opal_rtc_write);
+
+	msg.resp = &resp;
 	fsp_fillmsg(&msg, FSP_CMD_READ_TOD, 0);
 
 	DBG("Getting initial RTC TOD\n");
