@@ -53,7 +53,7 @@ int __lpc_write(uint32_t chip_id, uint32_t addr, uint32_t data, unsigned int sz)
 	uint64_t data_reg;
 
 	if (!chip || !chip->lpc_xbase)
-		return -ENODEV;
+		return OPAL_PARAMETER;
 
 	switch(sz) {
 	case 1:
@@ -67,7 +67,7 @@ int __lpc_write(uint32_t chip_id, uint32_t addr, uint32_t data, unsigned int sz)
 		break;
 	default:
 		prerror("LPC: Invalid data size %d\n", sz);
-		return -EINVAL;
+		return OPAL_PARAMETER;
 	}
 
 	do_unlock = lock_recursive(&chip->lpc_lock);
@@ -95,24 +95,25 @@ int __lpc_write(uint32_t chip_id, uint32_t addr, uint32_t data, unsigned int sz)
 		if (stat & ECCB_STAT_OP_DONE) {
 			if (stat & ECCB_STAT_ERR_MASK) {
 				prerror("LPC: Error status: 0x%llx\n", stat);
-				rc = -EIO;
+				rc = OPAL_HARDWARE;
 				goto bail;
 			}
 			goto bail;
 		}
 	}
 	prerror("LPC: Write timeout !\n");
-	rc = -EIO;
+	rc = OPAL_HARDWARE;
  bail:
 	if (do_unlock)
 		unlock(&chip->lpc_lock);
 	return rc;
 }
+opal_call(OPAL_LPC_WRITE, __lpc_write);
 
 int lpc_write(uint32_t addr, uint32_t data, unsigned int sz)
 {
 	if (lpc_default_chip_id < 0)
-		return -ENODEV;
+		return OPAL_PARAMETER;
 	return __lpc_write(lpc_default_chip_id, addr, data, sz);
 }
 
@@ -124,11 +125,11 @@ int __lpc_read(uint32_t chip_id, uint32_t addr, void *data, unsigned int sz)
 	bool do_unlock;
 
 	if (!chip || !chip->lpc_xbase)
-		return -ENODEV;
+		return OPAL_PARAMETER;
 
 	if (sz != 1 && sz != 2 && sz != 4) {
 		prerror("LPC: Invalid data size %d\n", sz);
-		return -EINVAL;
+		return OPAL_PARAMETER;
 	}
 
 	do_unlock = lock_recursive(&chip->lpc_lock);
@@ -151,7 +152,7 @@ int __lpc_read(uint32_t chip_id, uint32_t addr, void *data, unsigned int sz)
 			uint32_t rdata = GETFIELD(ECCB_STAT_RD_DATA, stat);
 			if (stat & ECCB_STAT_ERR_MASK) {
 				prerror("LPC: Error status: 0x%llx\n", stat);
-				rc = -EIO;
+				rc = OPAL_HARDWARE;
 				goto bail;
 			}
 			switch(sz) {
@@ -169,17 +170,18 @@ int __lpc_read(uint32_t chip_id, uint32_t addr, void *data, unsigned int sz)
 		}
 	}
 	prerror("LPC: Read timeout !\n");
-	rc = -EIO;
+	rc = OPAL_HARDWARE;
  bail:
 	if (do_unlock)
 		unlock(&chip->lpc_lock);
 	return rc;
 }
+opal_call(OPAL_LPC_READ, __lpc_read);
 
 int lpc_read(uint32_t addr, uint32_t *data, unsigned int sz)
 {
 	if (lpc_default_chip_id < 0)
-		return -ENODEV;
+		return OPAL_PARAMETER;
 	return __lpc_read(lpc_default_chip_id, addr, data, sz);
 }
 

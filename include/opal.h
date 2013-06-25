@@ -91,6 +91,8 @@
 #define OPAL_PCI_GET_PHB_DIAG_DATA2		64
 #define OPAL_XSCOM_READ				65
 #define OPAL_XSCOM_WRITE			66
+#define OPAL_LPC_READ				67
+#define OPAL_LPC_WRITE				68
 #define OPAL_LAST				66
 
 #ifndef __ASSEMBLY__
