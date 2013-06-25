@@ -642,7 +642,7 @@ u64 dt_get_address(const struct dt_node *node, unsigned int index,
 	return dt_get_number(p->prop + pos, na);
 }
 
-u32 dt_get_chip_id(const struct dt_node *node)
+static u32 __dt_get_chip_id(const struct dt_node *node)
 {
 	const struct dt_property *prop;
 
@@ -651,8 +651,31 @@ u32 dt_get_chip_id(const struct dt_node *node)
 		if (prop)
 			return dt_property_get_cell(prop, 0);
 	}
+	return 0xffffffff;
+}
 
-	assert(false);
+u32 dt_get_chip_id(const struct dt_node *node)
+{
+	u32 id = __dt_get_chip_id(node);\
+	assert(id != 0xffffffff);
+	return id;
+}
+
+struct dt_node *dt_find_compatible_node_on_chip(struct dt_node *root,
+						struct dt_node *prev,
+						const char *compat,
+						uint32_t chip_id)
+{
+	struct dt_node *node;
+
+	node = prev ? dt_next(root, prev) : root;
+	for (; node; node = dt_next(root, node)) {
+		u32 cid = __dt_get_chip_id(node);
+		if (cid == chip_id &&
+		    dt_node_is_compatible(node, compat))
+			return node;
+	}
+	return NULL;
 }
 
 unsigned int dt_count_addresses(const struct dt_node *node)
@@ -682,4 +705,3 @@ void dt_init_misc(void)
 		dt_chosen = dt_new(dt_root, "chosen");
 	assert(dt_chosen);
 }
-

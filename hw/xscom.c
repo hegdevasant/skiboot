@@ -16,14 +16,13 @@
 			   SPR_HMER_XSCOM_DONE | \
 			   SPR_HMER_XSCOM_STATUS_MASK))
 
-static uint64_t *xscoms;
-static int max_gcid;
-
 static inline void *xscom_addr(uint32_t gcid, uint32_t pcb_addr)
 {
+	struct proc_chip *chip = get_chip(gcid);
 	uint64_t addr;
 
-	addr  = xscoms[gcid];
+	assert(chip);
+	addr  = chip->xscom_base;
 	addr |= ((uint64_t)pcb_addr << 4) & ~0xfful;
 	addr |= (pcb_addr << 3) & 0x78;
 
@@ -74,7 +73,7 @@ static uint64_t xscom_wait_done(void)
 
 bool xscom_gcid_ok(uint32_t gcid)
 {
-	return gcid <= max_gcid && xscoms[gcid];
+	return get_chip(gcid) != NULL;
 }
 
 int xscom_read(uint32_t gcid, uint32_t pcb_addr, uint64_t *val)
@@ -153,41 +152,24 @@ int xscom_writeme(uint32_t pcb_addr, uint64_t val)
 
 void xscom_init(void)
 {
-	const struct dt_property *reg;
 	struct dt_node *xn;
-	bool found;
-	int gcid;
-
-	max_gcid = 0;
 
 	dt_for_each_compatible(dt_root, xn, "ibm,xscom") {
-		gcid = dt_get_chip_id(xn);
+		uint32_t gcid = dt_get_chip_id(xn);
+		const struct dt_property *reg;
+		struct proc_chip *chip;
 
-		if (gcid > max_gcid)
-			max_gcid = gcid;
-
-		found = true;
-	}
-
-	if (!found) {
-		prerror("XSCOM: No XSCOM nodes in device-tree\n");
-		return;
-	}
-
-	xscoms = zalloc((max_gcid + 1) * sizeof(*xscoms));
-
-	dt_for_each_compatible(dt_root, xn, "ibm,xscom") {
-		gcid = dt_get_chip_id(xn);
+		chip = get_chip(gcid);
+		assert(chip);
 
 		/* XXX We need a proper address parsing. For now, we just
 		 * "know" that we are looking at a u64
 		 */
 		reg = dt_find_property(xn, "reg");
 		assert(reg);
-		xscoms[gcid] = dt_translate_address(xn, 0, NULL);
 
-		printf("XSCOM: %s mode at 0x%llx\n",
-		       dt_node_is_compatible(xn, "ibm,power8-xscom") ? "P8" : "P7",
-		       xscoms[gcid]);
+		chip->xscom_base = dt_translate_address(xn, 0, NULL);
+
+		printf("XSCOM: chip %d at 0x%llx\n", gcid, chip->xscom_base);
 	}
 }

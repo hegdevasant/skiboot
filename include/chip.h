@@ -56,7 +56,29 @@
  */
 #define P8_PIR2GCID(pir) (((pir) >> 7) & 0x3f)
 
+/*
+ * For each chip in the system, we maintain this structure
+ *
+ * This contains fields used by different modules including
+ * modules in hw/ but is handy to keep per-chip data
+ */
+struct proc_chip {
+	uint32_t	id;		/* HW Chip ID (GCID) */
+
+	/* Used by hw/xscom.c */
+	uint64_t	xscom_base;
+};
+
 extern uint32_t pir_to_chip_id(uint32_t pir);
+
+extern struct proc_chip *next_chip(struct proc_chip *chip);
+
+#define for_each_chip(__c) for (__c=next_chip(NULL); __c; __c=next_chip(__c))
+
+extern struct proc_chip *get_chip(uint32_t chip_id);
+
+extern void init_chips(void);
+
 
 #endif /* __CHIP_H */
 

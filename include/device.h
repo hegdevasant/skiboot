@@ -136,6 +136,16 @@ struct dt_node *dt_find_compatible_node(struct dt_node *root,
 	for (node = NULL; 			        \
 	     (node = dt_find_compatible_node(root, node, compat)) != NULL;)
 
+struct dt_node *dt_find_compatible_node_on_chip(struct dt_node *root,
+						struct dt_node *prev,
+						const char *compat,
+						uint32_t chip_id);
+
+#define dt_for_each_compatible_on_chip(root, node, compat, chip_id)	\
+	for (node = NULL; 			        \
+	     (node = dt_find_compatible_node_on_chip(root, node,\
+						     compat, chip_id)) != NULL;)
+
 /* Build the full path for a node. Return a new block of memory, caller
  * shall free() it
  */

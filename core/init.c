@@ -18,6 +18,7 @@
 #include <device.h>
 #include <pci.h>
 #include <lpc.h>
+#include <chip.h>
 #include <interrupts.h>
 #include <mem_region.h>
 #include <libfdt/libfdt.h>
@@ -284,6 +285,9 @@ void main_cpu_entry(const void *fdt, u32 master_cpu)
 
 	/* Put various bits & pieces in device-tree */
 	dt_init_misc();
+
+	/* Get out list of chips and allocate per-chip data */
+	init_chips();
 
 	/* Initialize the rest of the cpu thread structs */
 	init_all_cpus();
