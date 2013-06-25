@@ -5,10 +5,10 @@
  * number V032404DR, executed by the parties on November 6, 2007, and
  * Supplement V032404DR-3 dated August 16, 2012 (the “NDA”). */
 #include <skiboot.h>
-#include <bitutils.h>
 #include <xscom.h>
 #include <io.h>
 #include <lock.h>
+#include <chip.h>
 
 #define ECCB_CTL	0 /* b0020 -> b00200 */
 #define ECCB_STAT	2 /* b0022 -> b00210 */
@@ -41,19 +41,18 @@
 
 #define ECCB_TIMEOUT	100000
 
-/* We assume as single LPC bus in use in the system for now */
-static uint32_t lpc_chip_id;
-static uint32_t lpc_base;
-static struct lock lpc_lock = LOCK_UNLOCKED;
+/* Default LPC bus */
+static int32_t lpc_default_chip_id = -1;
 
-int lpc_write(uint32_t addr, uint32_t data, unsigned int sz)
+int __lpc_write(uint32_t chip_id, uint32_t addr, uint32_t data, unsigned int sz)
 {
+	struct proc_chip *chip = get_chip(chip_id);
 	uint64_t ctl = ECCB_CTL_MAGIC, stat;
 	int rc, tout;
 	bool do_unlock;
 	uint64_t data_reg;
 
-	if (!lpc_base)
+	if (!chip || !chip->lpc_xbase)
 		return -ENODEV;
 
 	switch(sz) {
@@ -71,8 +70,8 @@ int lpc_write(uint32_t addr, uint32_t data, unsigned int sz)
 		return -EINVAL;
 	}
 
-	do_unlock = lock_recursive(&lpc_lock);
-	rc = xscom_write(lpc_chip_id, lpc_base + ECCB_DATA, data_reg);
+	do_unlock = lock_recursive(&chip->lpc_lock);
+	rc = xscom_write(chip->id, chip->lpc_xbase + ECCB_DATA, data_reg);
 	if (rc) {
 		prerror("LPC: XSCOM write to ECCB DATA error %d\n", rc);
 		goto bail;
@@ -81,14 +80,14 @@ int lpc_write(uint32_t addr, uint32_t data, unsigned int sz)
 	ctl = SETFIELD(ECCB_CTL_DATASZ, ctl, sz);
 	ctl = SETFIELD(ECCB_CTL_ADDRLEN, ctl, ECCB_ADDRLEN_4B);
 	ctl = SETFIELD(ECCB_CTL_ADDR, ctl, addr);
-	rc = xscom_write(lpc_chip_id, lpc_base + ECCB_CTL, ctl);
+	rc = xscom_write(chip->id, chip->lpc_xbase + ECCB_CTL, ctl);
 	if (rc) {
 		prerror("LPC: XSCOM write to ECCB CTL error %d\n", rc);
 		goto bail;
 	}
 
 	for (tout = 0; tout < ECCB_TIMEOUT; tout++) {
-		rc = xscom_read(lpc_chip_id, lpc_base + ECCB_STAT, &stat);
+		rc = xscom_read(chip->id, chip->lpc_xbase + ECCB_STAT, &stat);
 		if (rc) {
 			prerror("LPC: XSCOM read from ECCB STAT err %d\n", rc);
 			goto bail;
@@ -106,17 +105,25 @@ int lpc_write(uint32_t addr, uint32_t data, unsigned int sz)
 	rc = -EIO;
  bail:
 	if (do_unlock)
-		unlock(&lpc_lock);
+		unlock(&chip->lpc_lock);
 	return rc;
 }
 
-int lpc_read(uint32_t addr, uint32_t *data, unsigned int sz)
+int lpc_write(uint32_t addr, uint32_t data, unsigned int sz)
 {
+	if (lpc_default_chip_id < 0)
+		return -ENODEV;
+	return __lpc_write(lpc_default_chip_id, addr, data, sz);
+}
+
+int __lpc_read(uint32_t chip_id, uint32_t addr, void *data, unsigned int sz)
+{
+	struct proc_chip *chip = get_chip(chip_id);
 	uint64_t ctl = ECCB_CTL_MAGIC | ECCB_CTL_READ, stat;
 	int rc, tout;
 	bool do_unlock;
 
-	if (!lpc_base)
+	if (!chip || !chip->lpc_xbase)
 		return -ENODEV;
 
 	if (sz != 1 && sz != 2 && sz != 4) {
@@ -124,18 +131,18 @@ int lpc_read(uint32_t addr, uint32_t *data, unsigned int sz)
 		return -EINVAL;
 	}
 
-	do_unlock = lock_recursive(&lpc_lock);
+	do_unlock = lock_recursive(&chip->lpc_lock);
 	ctl = SETFIELD(ECCB_CTL_DATASZ, ctl, sz);
 	ctl = SETFIELD(ECCB_CTL_ADDRLEN, ctl, ECCB_ADDRLEN_4B);
 	ctl = SETFIELD(ECCB_CTL_ADDR, ctl, addr);
-	rc = xscom_write(lpc_chip_id, lpc_base + ECCB_CTL, ctl);
+	rc = xscom_write(chip->id, chip->lpc_xbase + ECCB_CTL, ctl);
 	if (rc) {
 		prerror("LPC: XSCOM write to ECCB CTL error %d\n", rc);
 		goto bail;
 	}
 
 	for (tout = 0; tout < ECCB_TIMEOUT; tout++) {
-		rc = xscom_read(lpc_chip_id, lpc_base + ECCB_STAT, &stat);
+		rc = xscom_read(chip->id, chip->lpc_xbase + ECCB_STAT, &stat);
 		if (rc) {
 			prerror("LPC: XSCOM read from ECCB STAT err %d\n", rc);
 			goto bail;
@@ -155,7 +162,7 @@ int lpc_read(uint32_t addr, uint32_t *data, unsigned int sz)
 				*(uint16_t *)data = rdata >> 16;
 				break;
 			case 4:
-				*data = rdata;
+				*(uint32_t *)data = rdata;
 				break;
 			}
 			goto bail;
@@ -165,30 +172,44 @@ int lpc_read(uint32_t addr, uint32_t *data, unsigned int sz)
 	rc = -EIO;
  bail:
 	if (do_unlock)
-		unlock(&lpc_lock);
+		unlock(&chip->lpc_lock);
 	return rc;
+}
+
+int lpc_read(uint32_t addr, uint32_t *data, unsigned int sz)
+{
+	if (lpc_default_chip_id < 0)
+		return -ENODEV;
+	return __lpc_read(lpc_default_chip_id, addr, data, sz);
 }
 
 bool lpc_present(void)
 {
-	return lpc_base != 0;
+	return lpc_default_chip_id >= 0;
 }
 
 void lpc_init(void)
 {
 	struct dt_node *xn;
 
-	/* Assume only one LPC in device-tree for now ... */
-	xn = dt_find_compatible_node(dt_root, NULL, "ibm,power8-lpc");
-	if (!xn) {
-		prerror("LPC: No LPC node in device-tree\n");
-		return;
+	dt_for_each_compatible(dt_root, xn, "ibm,power8-lpc") {
+		uint32_t gcid = dt_get_chip_id(xn);
+		struct proc_chip *chip;
+		const char *tstr = "Secondary";
+
+		chip = get_chip(gcid);
+		assert(chip);
+
+		chip->lpc_xbase = dt_get_address(xn, 0, NULL);
+		init_lock(&chip->lpc_lock);
+
+		if (lpc_default_chip_id < 0) {
+			lpc_default_chip_id = chip->id;
+			tstr = "Default";
+		}
+
+		printf("LPC: %s bus on chip %d PCB_Addr=0x%x\n",
+		       tstr, chip->id, chip->lpc_xbase);
 	}
-
-	/* XSCOM addresses have two cells: GCID and PCB address */
-	lpc_base = dt_get_address(xn, 0, NULL);
-	lpc_chip_id = dt_get_chip_id(xn);
-
-	printf("LPC: Found, Chip=0x%x PCB_Addr=0x%x\n", lpc_chip_id, lpc_base);
 }
 

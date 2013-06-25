@@ -8,6 +8,7 @@
 #define __CHIP_H
 
 #include <stdint.h>
+#include <lock.h>
 
 /*
  * Note on chip IDs:
@@ -67,6 +68,10 @@ struct proc_chip {
 
 	/* Used by hw/xscom.c */
 	uint64_t	xscom_base;
+
+	/* Used by hw/lpc.c */
+	uint32_t	lpc_xbase;
+	struct lock	lpc_lock;
 };
 
 extern uint32_t pir_to_chip_id(uint32_t pir);

@@ -11,8 +11,14 @@
 
 extern void lpc_init(void);
 
+/* Specific bus accessors */
+int __lpc_write(uint32_t chip_id, uint32_t addr, uint32_t data, unsigned int sz);
+int __lpc_read(uint32_t chip_id, uint32_t addr, void *data, unsigned int sz);
+
+/* Check for a default bus */
 extern bool lpc_present(void);
 
+/* Default bus accessors */
 extern int lpc_write(uint32_t addr, uint32_t data, unsigned int sz);
 extern int lpc_read(uint32_t addr, uint32_t *data, unsigned int sz);
 
