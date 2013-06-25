@@ -249,7 +249,7 @@ static void nvram_send_open(void)
 	nvram_state = NVRAM_STATE_CLOSED;
 }
 
-static int64_t opal_nvram_check_state(void)
+static int64_t nvram_check_state(void)
 {
 	switch(nvram_state) {
 	case NVRAM_STATE_BROKEN:
@@ -268,7 +268,8 @@ static int64_t opal_nvram_check_state(void)
 	return OPAL_SUCCESS;
 }
 
-static int64_t opal_read_nvram(uint64_t buffer, uint64_t size, uint64_t offset)
+static int64_t fsp_opal_read_nvram(uint64_t buffer, uint64_t size,
+				   uint64_t offset)
 {
 	int64_t rc;
 
@@ -278,16 +279,16 @@ static int64_t opal_read_nvram(uint64_t buffer, uint64_t size, uint64_t offset)
 		return OPAL_PARAMETER;
 
 	lock(&nvram_lock);
-	rc = opal_nvram_check_state();
+	rc = nvram_check_state();
 	if (!rc)
 		memcpy((void *)buffer, nvram_image + offset, size);
 	unlock(&nvram_lock);
 
 	return rc;
 }
-opal_call(OPAL_READ_NVRAM, opal_read_nvram);
 
-static int64_t opal_write_nvram(uint64_t buffer, uint64_t size, uint64_t offset)
+static int64_t fsp_opal_write_nvram(uint64_t buffer, uint64_t size,
+				    uint64_t offset)
 {
 	int64_t rc;
 
@@ -297,7 +298,7 @@ static int64_t opal_write_nvram(uint64_t buffer, uint64_t size, uint64_t offset)
 		return OPAL_PARAMETER;
 
 	lock(&nvram_lock);
-	rc = opal_nvram_check_state();
+	rc = nvram_check_state();
 	if (!rc) {
 		memcpy(nvram_image + offset, (void *)buffer, size);
 		nvram_mark_dirty(offset, size);
@@ -306,7 +307,6 @@ static int64_t opal_write_nvram(uint64_t buffer, uint64_t size, uint64_t offset)
 
 	return rc;
 }
-opal_call(OPAL_WRITE_NVRAM, opal_write_nvram);
 
 static bool nvram_get_size(void)
 {
@@ -351,6 +351,10 @@ void fsp_nvram_init(void)
 	/* Fetch the nvram size */
 	if (!nvram_get_size())
 		return;
+
+	/* Add the OPAL calls */
+	opal_register(OPAL_READ_NVRAM, fsp_opal_read_nvram);
+	opal_register(OPAL_WRITE_NVRAM, fsp_opal_write_nvram);
 
 	/* Start the opening sequence */
 	lock(&nvram_lock);
