@@ -548,6 +548,19 @@ static bool add_region(struct mem_region *region)
 	return true;
 }
 
+void mem_reserve(const char *name, uint64_t start, uint64_t len)
+{
+	struct mem_region *region;
+	bool added;
+
+	lock(&mem_region_lock);
+	region = new_region(name, start, len, NULL, REGION_RESERVED);
+	assert(region);
+	added = add_region(region);
+	assert(added);
+	unlock(&mem_region_lock);
+}
+
 /* Trawl through device tree, create memory regions from nodes. */
 void mem_region_init(void)
 {
@@ -736,6 +749,7 @@ void mem_region_add_dt_reserved(void)
 	name = names;
 	range = ranges;
 
+	printf("Reserved regions:\n");
 	/* Second pass: populate property data */
 	list_for_each(&regions, region, list) {
 		if (!region_is_reserved(region))
@@ -743,6 +757,10 @@ void mem_region_add_dt_reserved(void)
 		len = strlen(region->name) + 1;
 		memcpy(name, region->name, len);
 		name += len;
+
+		printf("  0x%012llx..%012llx : %s\n",
+		       region->start, region->start + region->len - 1,
+		       region->name);
 
 		range[0] = cpu_to_fdt64(region->start);
 		range[1] = cpu_to_fdt64(region->len);
