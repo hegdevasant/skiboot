@@ -9,6 +9,7 @@
 #include <lock.h>
 #include <opal.h>
 #include <device.h>
+#include <processor.h>
 
 static struct fsp_msg op_msg_resp;
 static struct fsp_msg op_msg = {

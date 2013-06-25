@@ -15,10 +15,12 @@
 #include <stdio.h>
 #include <assert.h>
 #include <errno.h>
+#include <bitutils.h>
 
 #include <ccan/container_of/container_of.h>
 #include <ccan/list/list.h>
 #include <ccan/short_types/short_types.h>
+#include <ccan/build_assert/build_assert.h>
 
 #include <op-panel.h>
 

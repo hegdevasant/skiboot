@@ -9,7 +9,6 @@
 #include <opal.h>
 #include <processor.h>
 #include <cpu.h>
-#include <ccan/build_assert/build_assert.h>
 
 static uint64_t client_mc_address;
 

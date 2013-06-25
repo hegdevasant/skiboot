@@ -7,6 +7,7 @@
 #include <skiboot.h>
 #include <lock.h>
 #include <assert.h>
+#include <processor.h>
 #include <cpu.h>
 
 /* Set to bust locks. Note, this is initialized to true because our

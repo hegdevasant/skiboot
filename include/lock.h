@@ -8,9 +8,6 @@
 #define __LOCK_H
 
 #include <stdbool.h>
-#include <assert.h>
-#include <processor.h>
-#include <lock.h>
 
 struct lock {
 	/* Lock value has bit 63 as lock bit and the PIR of the owner
