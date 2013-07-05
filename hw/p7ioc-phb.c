@@ -131,10 +131,12 @@ static int64_t p7ioc_pcicfg_read##size(struct phb *phb, uint32_t bdfn,	\
 		return rc;						\
 									\
 	if (p7ioc_phb_fenced(p)) {					\
-		if (!p->use_asb)					\
+		if (!(p->flags & P7IOC_PHB_CFG_USE_ASB))		\
 			return OPAL_HARDWARE;				\
 									\
 		base = p->regs_asb;					\
+	} else if ((p->flags & P7IOC_PHB_CFG_BLOCKED) && bdfn != 0) {	\
+		return OPAL_HARDWARE;					\
 	}								\
 									\
 	addr = PHB_CA_ENABLE | ((uint64_t)bdfn << PHB_CA_FUNC_LSH);	\
@@ -160,10 +162,12 @@ static int64_t p7ioc_pcicfg_write##size(struct phb *phb, uint32_t bdfn,	\
 		return rc;						\
 									\
 	if (p7ioc_phb_fenced(p)) {					\
-		if (!p->use_asb)					\
+		if (!(p->flags & P7IOC_PHB_CFG_USE_ASB))		\
 			return OPAL_HARDWARE;				\
 									\
 		base = p->regs_asb;					\
+	} else if ((p->flags & P7IOC_PHB_CFG_BLOCKED) && bdfn != 0) {	\
+		return OPAL_HARDWARE;					\
 	}								\
 									\
 	addr = PHB_CA_ENABLE | ((uint64_t)bdfn << PHB_CA_FUNC_LSH);	\
@@ -333,6 +337,7 @@ static int64_t p7ioc_sm_freset(struct p7ioc_phb *p)
 			PHBDBG(p, "Slot freset: link up!\n");
 
 			p->state = P7IOC_PHB_STATE_FUNCTIONAL;
+			p->flags &= ~P7IOC_PHB_CFG_BLOCKED;
 			return OPAL_SUCCESS;
 		}
 
@@ -358,6 +363,7 @@ static int64_t p7ioc_freset(struct phb *phb)
 	if (p->state != P7IOC_PHB_STATE_FUNCTIONAL)
 		return OPAL_HARDWARE;
 
+	p->flags |= P7IOC_PHB_CFG_BLOCKED;
 	return p7ioc_sm_freset(p);
 }
 
@@ -594,6 +600,7 @@ static int64_t p7ioc_complete_reset(struct phb *phb, uint8_t assert)
 		    p->state != P7IOC_PHB_STATE_FENCED)
 			return OPAL_HARDWARE;
 
+		p->flags |= P7IOC_PHB_CFG_BLOCKED;
 		p7ioc_phb_reset(phb);
 
 		/*
@@ -728,6 +735,7 @@ static int64_t p7ioc_sm_hot_reset(struct p7ioc_phb *p)
 			PHBDBG(p, "Slot hot reset: link up!\n");
 
 			p->state = P7IOC_PHB_STATE_FUNCTIONAL;
+			p->flags &= ~P7IOC_PHB_CFG_BLOCKED;
 			return OPAL_SUCCESS;
 		}
 
@@ -754,6 +762,7 @@ static int64_t p7ioc_hot_reset(struct phb *phb)
 	if (p->state != P7IOC_PHB_STATE_FUNCTIONAL)
 		return OPAL_HARDWARE;
 
+	p->flags |= P7IOC_PHB_CFG_BLOCKED;
 	return p7ioc_sm_hot_reset(p);
 }
 
@@ -829,7 +838,7 @@ static void p7ioc_eeh_read_phb_status(struct p7ioc_phb *p,
 
 	/* Use ASB to access PCICFG if the PHB has been fenced */
 	locked = lock_recursive(&p->lock);
-	p->use_asb = 1;
+	p->flags |= P7IOC_PHB_CFG_USE_ASB;
 
 	/* Grab RC bridge control, make it 32-bit */
 	p7ioc_pcicfg_read16(&p->phb, 0, PCI_CFG_BRCTL, &tmp16);
@@ -883,7 +892,7 @@ static void p7ioc_eeh_read_phb_status(struct p7ioc_phb *p,
 			    &stat->sourceId);
 
 	/* Restore to AIB */
-	p->use_asb = 0;
+	p->flags &= ~P7IOC_PHB_CFG_USE_ASB;
 	if (locked) {
 		unlock(&p->lock);
 		pci_put_phb(&p->phb);
