@@ -51,6 +51,8 @@ static inline struct cpu_thread *next_cpu(struct cpu_thread *cpu)
 	return cpu;
 }
 
+#define first_cpu() next_cpu(NULL)
+
 static unsigned long timestamp;
 static unsigned long mftb(void)
 {
@@ -62,6 +64,10 @@ static unsigned long mftb(void)
 #define rmb() lwsync()
 
 #include "../external/trace.c"
+#include "../device.c"
+
+char __rodata_start[1], __rodata_end[1];
+struct dt_node *dt_root;
 
 void lock(struct lock *l)
 {

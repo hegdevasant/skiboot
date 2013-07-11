@@ -10,6 +10,8 @@
 #include <string.h>
 #include <stdlib.h>
 #include <cpu.h>
+#include <device.h>
+#include <libfdt.h>
 
 #define MAX_SIZE sizeof(union trace)
 
@@ -23,12 +25,17 @@ void init_boot_tracebuf(struct cpu_thread *boot_cpu)
 	boot_cpu->tracebuf = &boot_tracebuf.tracebuf;
 }
 
+static size_t tracebuf_size(void)
+{
+	/* We make room for the largest possible record */
+	return sizeof(struct tracebuf) + TBUF_SZ + MAX_SIZE;
+}
+
 struct tracebuf *trace_newbuf(void)
 {
 	struct tracebuf *tb;
 
-	/* We make room for the largest possible record */
-	tb = zalloc(sizeof(*tb) + TBUF_SZ + MAX_SIZE);
+	tb = zalloc(tracebuf_size());
 	tb->mask = TBUF_SZ - 1;
 	tb->max_size = MAX_SIZE;
 	return tb;
@@ -119,4 +126,32 @@ void trace_add(union trace *trace)
 		lwsync(); /* write barrier: write entry before exposing */
 		tb->end += trace->hdr.len_div_8 * 8;
 	}
+}
+
+void trace_add_node(void)
+{
+	struct dt_node *trace;
+	struct cpu_thread *cpu;
+	unsigned int i;
+	u64 *prop;
+
+	/* Count CPUs. */
+	for (cpu = first_cpu(), i = 0; cpu; cpu = next_cpu(cpu)) {
+		if (cpu->tracebuf)
+			i++;
+	}
+	prop = malloc(sizeof(u64) * 2 * i);
+
+	/* Now fill in start, len */
+	for (cpu = first_cpu(), i = 0; cpu; cpu = next_cpu(cpu)) {
+		if (cpu->tracebuf) {
+			prop[i*2] = cpu_to_fdt64((unsigned long)cpu->tracebuf);
+			prop[i*2+1] = cpu_to_fdt64(tracebuf_size());
+			i++;
+		}
+	}
+
+	trace = dt_new(dt_root, "ibm,trace");
+	dt_add_property(trace, "reg", prop, sizeof(u64) * 2 * i);
+	free(prop);
 }

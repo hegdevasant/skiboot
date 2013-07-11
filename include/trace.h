@@ -23,4 +23,6 @@ struct tracebuf *trace_newbuf(void);
 /* This will fill in timestamp and cpu; you must do type and len. */
 void trace_add(union trace *trace);
 
+/* Put trace node into dt. */
+void trace_add_node(void);
 #endif /* __TRACE_H */
