@@ -454,7 +454,7 @@ static void opal_start_thread_job(void *data)
 	start_kernel_secondary((uint64_t)data);
 }
 
-int64_t opal_start_cpu_thread(uint64_t server_no, uint64_t start_address)
+static int64_t opal_start_cpu_thread(uint64_t server_no, uint64_t start_address)
 {
 	struct cpu_thread *cpu;
 	struct cpu_job *job;
@@ -481,7 +481,7 @@ int64_t opal_start_cpu_thread(uint64_t server_no, uint64_t start_address)
 }
 opal_call(OPAL_START_CPU, opal_start_cpu_thread);
 
-int64_t opal_query_cpu_status(uint64_t server_no, uint8_t *thread_status)
+static int64_t opal_query_cpu_status(uint64_t server_no, uint8_t *thread_status)
 {
 	struct cpu_thread *cpu;
 
@@ -490,9 +490,6 @@ int64_t opal_query_cpu_status(uint64_t server_no, uint8_t *thread_status)
 		prerror("OPAL: Query invalid CPU 0x%04llx !\n", server_no);
 		return OPAL_PARAMETER;
 	}
-	printf("OPAL: Query CPU 0x%04llx (PIR 0x%04x) state...\n",
-	       server_no, cpu->pir);
-
 	if (cpu->state != cpu_state_active && cpu->state != cpu_state_os) {
 		prerror("OPAL: CPU not active in OPAL nor OS !\n");
 		return OPAL_PARAMETER;
