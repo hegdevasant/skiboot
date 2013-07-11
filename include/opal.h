@@ -93,7 +93,8 @@
 #define OPAL_XSCOM_WRITE			66
 #define OPAL_LPC_READ				67
 #define OPAL_LPC_WRITE				68
-#define OPAL_LAST				68
+#define OPAL_RETURN_CPU				69
+#define OPAL_LAST				69
 
 #ifndef __ASSEMBLY__
 

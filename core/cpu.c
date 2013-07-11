@@ -505,3 +505,13 @@ int64_t opal_query_cpu_status(uint64_t server_no, uint8_t *thread_status)
 	return OPAL_SUCCESS;
 }
 opal_call(OPAL_QUERY_CPU_STATUS, opal_query_cpu_status);
+
+static int64_t opal_return_cpu(void)
+{
+	printf("OPAL: Returning CPU 0x%04x\n", this_cpu()->pir);
+
+	__secondary_cpu_entry();
+
+	return OPAL_HARDWARE; /* Should not happen */
+}
+opal_call(OPAL_RETURN_CPU, opal_return_cpu);
