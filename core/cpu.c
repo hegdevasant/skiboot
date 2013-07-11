@@ -14,6 +14,7 @@
 #include <device.h>
 #include <opal.h>
 #include <stack.h>
+#include <trace.h>
 #include <ccan/str/str.h>
 #include <ccan/container_of/container_of.h>
 
@@ -333,6 +334,7 @@ void init_boot_cpu(void)
 	/* Setup boot CPU state */
 	boot_cpu = &cpu_stacks[pir].cpu;
 	init_cpu_thread(boot_cpu, cpu_state_active, pir);
+	init_boot_tracebuf(boot_cpu);
 	assert(this_cpu() == boot_cpu);
 }
 
@@ -376,8 +378,10 @@ void init_all_cpus(void)
 
 		/* Setup thread 0 */
 		t = pt = &cpu_stacks[pir].cpu;
-		if (t != boot_cpu)
+		if (t != boot_cpu) {
 			init_cpu_thread(t, state, pir);
+			t->tracebuf = trace_newbuf();
+		}
 		t->server_no = server_no;
 		t->primary = t;
 		t->node = cpu;
@@ -395,6 +399,7 @@ void init_all_cpus(void)
 			printf("CPU:   secondary thread %d found\n", thread);
 			t = &cpu_stacks[pir + thread].cpu;
 			init_cpu_thread(t, state, pir + thread);
+			t->tracebuf = trace_newbuf();
 			t->server_no = ((u32 *)p->prop)[thread];
 			t->is_secondary = true;
 			t->primary = pt;
