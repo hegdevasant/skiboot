@@ -52,30 +52,26 @@ long opal_bad_token(uint64_t token)
 void opal_trace_entry(struct stack_frame *eframe)
 {
 	union trace t;
+	unsigned nargs;
 
 	if (this_cpu()->pir != mfspr(SPR_PIR)) {
 		printf("CPU MISMATCH ! PIR=%04lx cpu @%p -> pir=%04x\n",
 		       mfspr(SPR_PIR), this_cpu(), this_cpu()->pir);
 		abort();
 	}
+	if (eframe->gpr[0] > OPAL_LAST)
+		nargs = 0;
+	else
+		nargs = opal_num_args[eframe->gpr[0]];
+
 	t.opal.timestamp = mftb();
 	t.opal.type = TRACE_OPAL;
-	t.opal.len_div_8 = sizeof(t.opal) / 8;
+	t.opal.len_div_8 = offsetof(struct trace_opal, r3_to_11[nargs]) / 8;
 	t.opal.cpu = this_cpu()->pir;
 	t.opal.token = eframe->gpr[0];
 	t.opal.lr = eframe->lr;
 	t.opal.sp = eframe->gpr[1];
-
-	/* FIXME: Only record args we need. */
-	t.opal.r3 = eframe->gpr[3];
-	t.opal.r4 = eframe->gpr[4];
-	t.opal.r5 = eframe->gpr[5];
-	t.opal.r6 = eframe->gpr[6];
-	t.opal.r7 = eframe->gpr[7];
-	t.opal.r8 = eframe->gpr[8];
-	t.opal.r9 = eframe->gpr[9];
-	t.opal.r10 = eframe->gpr[10];
-	t.opal.r11 = eframe->gpr[11];
+	memcpy(t.opal.r3_to_11, &eframe->gpr[3], nargs*sizeof(u64));
 
 	trace_add(&t);
 }

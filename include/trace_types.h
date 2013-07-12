@@ -60,7 +60,7 @@ struct trace_opal {
 	u8 len_div_8;
 	u16 cpu;
 	u8 unused[4];
-	u64 token, lr, sp, r3, r4, r5, r6, r7, r8, r9, r10, r11;
+	u64 token, lr, sp, r3_to_11[9];
 };
 
 union trace {
