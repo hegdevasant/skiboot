@@ -75,7 +75,7 @@ struct stack_frame {
 	uint64_t	cfar;
 	uint64_t	srr0;
 	uint64_t	srr1;
-};
+} __attribute__((aligned(16)));
 
 #endif /* __ASSEMBLY__ */
 #endif /* __STACKFRAME_H */
