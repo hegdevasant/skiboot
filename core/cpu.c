@@ -93,12 +93,6 @@ struct cpu_job *__cpu_queue_job(struct cpu_thread *cpu,
 	return job;
 }
 
-struct cpu_job *cpu_queue_job(struct cpu_thread *cpu,
-			      void (*func)(void *data), void *data)
-{
-	return __cpu_queue_job(cpu, func, data, false);
-}
-
 bool cpu_poll_job(struct cpu_job *job)
 {
 	lwsync();

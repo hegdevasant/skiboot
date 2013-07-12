@@ -124,12 +124,27 @@ static inline bool cpu_is_thread0(struct cpu_thread *cpu)
 	return cpu->primary == cpu;
 }
 
+static inline bool cpu_is_sibling(struct cpu_thread *cpu1,
+				  struct cpu_thread *cpu2)
+{
+	return cpu1->primary == cpu2->primary;
+}
+
 /* Called when some error condition requires disabling a core */
 void cpu_disable_all_threads(struct cpu_thread *cpu);
 
 /* Allocate & queue a job on target CPU */
-extern struct cpu_job *cpu_queue_job(struct cpu_thread *cpu,
-				     void (*func)(void *data), void *data);
+extern struct cpu_job *__cpu_queue_job(struct cpu_thread *cpu,
+				       void (*func)(void *data), void *data,
+				       bool no_return);
+
+static inline struct cpu_job *cpu_queue_job(struct cpu_thread *cpu,
+					    void (*func)(void *data),
+					    void *data)
+{
+	return __cpu_queue_job(cpu, func, data, false);
+}
+
 
 /* Poll job status, returns true if completed */
 extern bool cpu_poll_job(struct cpu_job *job);
