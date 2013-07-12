@@ -603,10 +603,10 @@ void fsp_console_init(void)
 	if (!fsp_present())
 		return;
 
-	opal_register(OPAL_CONSOLE_READ, fsp_console_read);
+	opal_register(OPAL_CONSOLE_READ, fsp_console_read, 3);
 	opal_register(OPAL_CONSOLE_WRITE_BUFFER_SPACE,
-		      fsp_console_write_buffer_space);
-	opal_register(OPAL_CONSOLE_WRITE, fsp_console_write);
+		      fsp_console_write_buffer_space, 2);
+	opal_register(OPAL_CONSOLE_WRITE, fsp_console_write, 3);
 
 	/* Wait until we got the intf query before moving on */
 	while (!got_intf_query)

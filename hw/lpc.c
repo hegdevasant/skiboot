@@ -108,7 +108,7 @@ int __lpc_write(uint32_t chip_id, uint32_t addr, uint32_t data, unsigned int sz)
 		unlock(&chip->lpc_lock);
 	return rc;
 }
-opal_call(OPAL_LPC_WRITE, __lpc_write);
+opal_call(OPAL_LPC_WRITE, __lpc_write, 4);
 
 int lpc_write(uint32_t addr, uint32_t data, unsigned int sz)
 {
@@ -176,7 +176,7 @@ int __lpc_read(uint32_t chip_id, uint32_t addr, void *data, unsigned int sz)
 		unlock(&chip->lpc_lock);
 	return rc;
 }
-opal_call(OPAL_LPC_READ, __lpc_read);
+opal_call(OPAL_LPC_READ, __lpc_read, 4);
 
 int lpc_read(uint32_t addr, uint32_t *data, unsigned int sz)
 {

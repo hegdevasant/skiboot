@@ -161,7 +161,7 @@ static int64_t dummy_console_write(int64_t term_number, int64_t *length,
 
 	return OPAL_SUCCESS;
 }
-opal_call(OPAL_CONSOLE_WRITE, dummy_console_write);
+opal_call(OPAL_CONSOLE_WRITE, dummy_console_write, 3);
 
 static int64_t dummy_console_write_buffer_space(int64_t term_number,
 						int64_t *length)
@@ -173,7 +173,7 @@ static int64_t dummy_console_write_buffer_space(int64_t term_number,
 
 	return OPAL_SUCCESS;
 }
-opal_call(OPAL_CONSOLE_WRITE_BUFFER_SPACE, dummy_console_write_buffer_space);
+opal_call(OPAL_CONSOLE_WRITE_BUFFER_SPACE, dummy_console_write_buffer_space, 2);
 
 static int64_t dummy_console_read(int64_t term_number, int64_t *length,
 				  uint8_t *buffer)
@@ -184,7 +184,7 @@ static int64_t dummy_console_read(int64_t term_number, int64_t *length,
 
 	return OPAL_SUCCESS;
 }
-opal_call(OPAL_CONSOLE_READ, dummy_console_read);
+opal_call(OPAL_CONSOLE_READ, dummy_console_read, 3);
 
 void dummy_console_add_nodes(struct dt_node *opal)
 {

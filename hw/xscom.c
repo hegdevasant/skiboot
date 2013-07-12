@@ -107,7 +107,7 @@ int xscom_read(uint32_t gcid, uint32_t pcb_addr, uint64_t *val)
 	}
 	return 0;
 }
-opal_call(OPAL_XSCOM_READ, xscom_read);
+opal_call(OPAL_XSCOM_READ, xscom_read, 3);
 
 
 int xscom_write(uint32_t gcid, uint32_t pcb_addr, uint64_t val)
@@ -141,7 +141,7 @@ int xscom_write(uint32_t gcid, uint32_t pcb_addr, uint64_t val)
 	}
 	return 0;
 }
-opal_call(OPAL_XSCOM_WRITE, xscom_write);
+opal_call(OPAL_XSCOM_WRITE, xscom_write, 3);
 
 int xscom_readme(uint32_t pcb_addr, uint64_t *val)
 {

@@ -129,7 +129,7 @@ static int64_t opal_write_oppanel(oppanel_line_t *lines, uint64_t num_lines)
 	unlock(&op_lock);
 	return rc;
 }
-opal_call(OPAL_WRITE_OPPANEL, opal_write_oppanel);
+opal_call(OPAL_WRITE_OPPANEL, opal_write_oppanel, 2);
 
 void add_opal_oppanel_node(struct dt_node *opal)
 {

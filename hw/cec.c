@@ -55,7 +55,7 @@ static int64_t opal_pci_set_hub_tce_memory(uint64_t hub_id,
 
 	return hub->ops->set_tce_mem(hub, tce_mem_addr, tce_mem_size);
 }
-opal_call(OPAL_PCI_SET_HUB_TCE_MEMORY, opal_pci_set_hub_tce_memory);
+opal_call(OPAL_PCI_SET_HUB_TCE_MEMORY, opal_pci_set_hub_tce_memory, 3);
 
 static int64_t opal_pci_get_hub_diag_data(uint64_t hub_id,
 					  void *diag_buffer,
@@ -71,4 +71,4 @@ static int64_t opal_pci_get_hub_diag_data(uint64_t hub_id,
 
 	return hub->ops->get_diag_data(hub, diag_buffer, diag_buffer_len);
 }
-opal_call(OPAL_PCI_GET_HUB_DIAG_DATA, opal_pci_get_hub_diag_data);
+opal_call(OPAL_PCI_GET_HUB_DIAG_DATA, opal_pci_get_hub_diag_data, 3);

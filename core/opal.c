@@ -23,16 +23,20 @@ uint64_t opal_pending_events;
 /* OPAL dispatch table defined in head.S */
 extern uint64_t opal_branch_table[];
 
+/* Number of args expected for each call. */
+static u8 opal_num_args[OPAL_LAST+1];
+
 void opal_table_init(void)
 {
-	struct opal_table_entry *s = &__opal_table_start;
-	struct opal_table_entry *e = &__opal_table_end;
+	struct opal_table_entry *s = __opal_table_start;
+	struct opal_table_entry *e = __opal_table_end;
 
 	printf("OPAL table: %p .. %p, branch table: %p\n",
 	       s, e, opal_branch_table);
 	while(s < e) {
 		uint64_t *func = s->func;
 		opal_branch_table[s->token] = *func;
+		opal_num_args[s->token] = s->nargs;
 		s++;
 	}
 }
@@ -76,13 +80,14 @@ void opal_trace_entry(struct stack_frame *eframe)
 	trace_add(&t);
 }
 
-void opal_register(uint64_t token, void *func)
+void __opal_register(uint64_t token, void *func, unsigned int nargs)
 {
 	uint64_t *opd = func;
 
 	assert(token <= OPAL_LAST);
 
 	opal_branch_table[token] = *opd;
+	opal_num_args[token] = nargs;
 }
 
 static void add_opal_firmware_node(struct dt_node *opal)
@@ -157,7 +162,7 @@ static uint64_t opal_test_func(uint64_t arg)
 
 	return 0xfeedf00d;
 }
-opal_call(OPAL_TEST, opal_test_func);
+opal_call(OPAL_TEST, opal_test_func, 1);
 
 struct opal_poll_entry {
 	struct list_node	link;
@@ -204,5 +209,5 @@ static int64_t opal_poll_events(uint64_t *outstanding_event_mask)
 
 	return OPAL_SUCCESS;
 }
-opal_call(OPAL_POLL_EVENTS, opal_poll_events);
+opal_call(OPAL_POLL_EVENTS, opal_poll_events, 1);
 

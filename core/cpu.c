@@ -484,7 +484,7 @@ int64_t opal_start_cpu_thread(uint64_t server_no, uint64_t start_address)
 	}
 	return OPAL_SUCCESS;
 }
-opal_call(OPAL_START_CPU, opal_start_cpu_thread);
+opal_call(OPAL_START_CPU, opal_start_cpu_thread, 2);
 
 int64_t opal_query_cpu_status(uint64_t server_no, uint8_t *thread_status)
 {
@@ -509,4 +509,4 @@ int64_t opal_query_cpu_status(uint64_t server_no, uint8_t *thread_status)
 
 	return OPAL_SUCCESS;
 }
-opal_call(OPAL_QUERY_CPU_STATUS, opal_query_cpu_status);
+opal_call(OPAL_QUERY_CPU_STATUS, opal_query_cpu_status, 2);

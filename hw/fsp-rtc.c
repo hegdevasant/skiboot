@@ -446,8 +446,8 @@ void fsp_rtc_init(void)
 		return;
 	}
 
-	opal_register(OPAL_RTC_READ, fsp_opal_rtc_read);
-	opal_register(OPAL_RTC_WRITE, fsp_opal_rtc_write);
+	opal_register(OPAL_RTC_READ, fsp_opal_rtc_read, 2);
+	opal_register(OPAL_RTC_WRITE, fsp_opal_rtc_write, 2);
 
 	msg.resp = &resp;
 	fsp_fillmsg(&msg, FSP_CMD_READ_TOD, 0);

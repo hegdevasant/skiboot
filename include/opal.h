@@ -506,22 +506,36 @@ typedef struct oppanel_line {
 struct opal_table_entry {
 	void		*func;
 	uint32_t	token;
-	uint32_t	reserved;
+	uint32_t	nargs;
 };
 
-#define opal_call(__tok, __func)					      \
+#define opal_call(__tok, __func, __nargs)				\
 static struct opal_table_entry __e_##__func __used __section(".opal_table") = \
-{ .func = __func, .token = __tok } 
+{ .func = __func, .token = __tok,					\
+  .nargs = __nargs + 0 * sizeof(__func( __test_args##__nargs )) }
 
-extern struct opal_table_entry __opal_table_start;
-extern struct opal_table_entry __opal_table_end;
+/* Make sure function takes args they claim.  Look away now... */
+#define __test_args0
+#define __test_args1 0
+#define __test_args2 0,0
+#define __test_args3 0,0,0
+#define __test_args4 0,0,0,0
+#define __test_args5 0,0,0,0,0
+#define __test_args6 0,0,0,0,0,0
+#define __test_args7 0,0,0,0,0,0,0
+
+extern struct opal_table_entry __opal_table_start[];
+extern struct opal_table_entry __opal_table_end[];
 
 extern uint64_t opal_pending_events;
 
 extern void opal_table_init(void);
 extern void opal_update_pending_evt(uint64_t evt_mask, uint64_t evt_values);
 extern void add_opal_nodes(void);
-extern void opal_register(uint64_t token, void *func);
+#define opal_register(token, func, nargs)				\
+	__opal_register((token) + 0*sizeof(func(__test_args##nargs)),	\
+			(func), (nargs))
+extern void __opal_register(uint64_t token, void *func, unsigned num_args);
 
 /* Warning: no locking at the moment, do at init time only
  *

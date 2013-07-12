@@ -1479,8 +1479,8 @@ void fsp_init(void)
 		printf("FSP: No FSP on this machine\n");
 		return;
 	}
-	opal_register(OPAL_CEC_POWER_DOWN, fsp_opal_cec_power_down);
-	opal_register(OPAL_CEC_REBOOT, fsp_opal_cec_reboot);
+	opal_register(OPAL_CEC_POWER_DOWN, fsp_opal_cec_power_down, 1);
+	opal_register(OPAL_CEC_REBOOT, fsp_opal_cec_reboot, 0);
 }
 
 bool fsp_present(void)
