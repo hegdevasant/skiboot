@@ -22,6 +22,9 @@
 #include <opal.h>
 #include <gx.h>
 #include <device.h>
+#include <trace.h>
+#include <timebase.h>
+#include <cpu.h>
 
 //#define DBG(fmt...)	printf(fmt)
 #define DBG(fmt...)	do { } while(0)
@@ -103,22 +106,24 @@ static struct fsp_cmdclass fsp_cmdclass[FSP_MCLASS_LAST - FSP_MCLASS_FIRST + 1]
 	DEF_CLASS(FSP_MCLASS_VIRTUAL_NVRAM,	16)
 };
 
-static void fsp_trace_msg(struct fsp_msg *msg __unused,
-			  const char *act __unused)
+static void fsp_trace_msg(struct fsp_msg *msg, u8 dir __unused)
 {
+	union trace fsp __unused;
 #ifdef FSP_TRACE
-	u32 csm;
-	int i;
+	size_t len = offsetof(struct trace_fsp, data[msg->dlen]);
 
-	csm =  (msg->word0 & 0xff) << 16;
-	csm |= (msg->word1 & 0xff) << 8;
-	csm |= (msg->word1 >> 8) & 0xff;
-
-	printf("FSP: %s msg %06x %d bytes", act, csm, msg->dlen);
-	for (i = 0; i < msg->dlen; i++)
-		printf(" %02x", msg->data.bytes[i]);
-	printf("\n");
+	fsp.fsp.timestamp = mftb();
+	fsp.fsp.type = TRACE_FSP;
+	fsp.fsp.len_div_8 = (len + 7) / 8; /* Round up! */
+	fsp.fsp.cpu = this_cpu()->pir;
+	fsp.fsp.dlen = msg->dlen;
+	fsp.fsp.word0 = msg->word0;
+	fsp.fsp.word1 = msg->word1;
+	fsp.fsp.dir = dir;
+	memcpy(fsp.fsp.data, msg->data.bytes, msg->dlen);
+	trace_add(&fsp);
 #endif
+	assert(msg->dlen <= sizeof(fsp.fsp.data));
 }
 
 struct fsp *fsp_get_active(void)
@@ -280,7 +285,7 @@ static bool fsp_post_msg(struct fsp *fsp, struct fsp_msg *msg)
 	/* We trace after setting the mailbox state so that if the
 	 * tracing recurses, it ends up just queuing the message up
 	 */
-	fsp_trace_msg(msg, "snd");
+	fsp_trace_msg(msg, TRACE_FSP_OUT);
 
 	/* Build the message in the mailbox */
 	reg = FSP_MBX1_HDATA_AREA;
@@ -618,7 +623,7 @@ static void __fsp_fill_incoming(struct fsp *fsp, struct fsp_msg *msg,
 		 FSP_MBX_CTL_HCSP_MASK |
 		 FSP_MBX_CTL_DCSP_MASK);
 
-	fsp_trace_msg(msg, "got");
+	fsp_trace_msg(msg, TRACE_FSP_IN);
 }
 
 static void __fsp_drop_incoming(struct fsp *fsp)
