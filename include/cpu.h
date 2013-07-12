@@ -54,7 +54,7 @@ extern unsigned long cpu_secondary_start;
 /* Max PIR in the system */
 extern unsigned int cpu_max_pir;
 
-/* Max # of core per thread */
+/* Max # of threads per core */
 extern unsigned int cpu_thread_count;
 
 /* Boot CPU. */
