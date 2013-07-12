@@ -4,6 +4,7 @@
 
 #define TRACE_REPEAT 1
 #define TRACE_OVERFLOW 2
+#define TRACE_OPAL 3
 
 /* One per cpu, plus one for NMIs */
 struct tracebuf {
@@ -53,11 +54,21 @@ struct trace_overflow {
 	u64 bytes_missed;
 };
 
+struct trace_opal {
+	u64 timestamp;
+	u8 type; /* == TRACE_OPAL */
+	u8 len_div_8;
+	u16 cpu;
+	u8 unused[4];
+	u64 token, lr, sp, r3, r4, r5, r6, r7, r8, r9, r10, r11;
+};
+
 union trace {
 	struct trace_hdr hdr;
 	/* Trace types go here... */
 	struct trace_repeat repeat;
 	struct trace_overflow overflow;
+	struct trace_opal opal;
 };
 
 #endif /* __TRACE_TYPES_H */

@@ -14,6 +14,8 @@
 #include <op-panel.h>
 #include <device.h>
 #include <console.h>
+#include <trace.h>
+#include <timebase.h>
 
 /* Pending events to signal via opal_poll_events */
 uint64_t opal_pending_events;
@@ -42,25 +44,36 @@ long opal_bad_token(uint64_t token)
 	return OPAL_PARAMETER;
 }
 
+/* FIXME: Do this in asm */ 
 void opal_trace_entry(struct stack_frame *eframe)
 {
+	union trace t;
+
 	if (this_cpu()->pir != mfspr(SPR_PIR)) {
 		printf("CPU MISMATCH ! PIR=%04lx cpu @%p -> pir=%04x\n",
 		       mfspr(SPR_PIR), this_cpu(), this_cpu()->pir);
 		abort();
 	}
-	printf("OPAL: Entry, token %lld args:\n", eframe->gpr[0]);
-	printf("OPAL:  r3=%016llx\n", eframe->gpr[3]);
-	printf("OPAL:  r4=%016llx\n", eframe->gpr[4]);
-	printf("OPAL:  r5=%016llx\n", eframe->gpr[5]);
-	printf("OPAL:  r6=%016llx\n", eframe->gpr[6]);
-	printf("OPAL:  r7=%016llx\n", eframe->gpr[7]);
-	printf("OPAL:  r8=%016llx\n", eframe->gpr[8]);
-	printf("OPAL:  r9=%016llx\n", eframe->gpr[9]);
-	printf("OPAL: r10=%016llx\n", eframe->gpr[10]);
-	printf("OPAL: r11=%016llx\n", eframe->gpr[11]);
-	printf("OPAL: caller LR: %016llx SP: %016llx\n",
-	       eframe->lr, eframe->gpr[1]);
+	t.opal.timestamp = mftb();
+	t.opal.type = TRACE_OPAL;
+	t.opal.len_div_8 = sizeof(t.opal) / 8;
+	t.opal.cpu = this_cpu()->pir;
+	t.opal.token = eframe->gpr[0];
+	t.opal.lr = eframe->lr;
+	t.opal.sp = eframe->gpr[1];
+
+	/* FIXME: Only record args we need. */
+	t.opal.r3 = eframe->gpr[3];
+	t.opal.r4 = eframe->gpr[4];
+	t.opal.r5 = eframe->gpr[5];
+	t.opal.r6 = eframe->gpr[6];
+	t.opal.r7 = eframe->gpr[7];
+	t.opal.r8 = eframe->gpr[8];
+	t.opal.r9 = eframe->gpr[9];
+	t.opal.r10 = eframe->gpr[10];
+	t.opal.r11 = eframe->gpr[11];
+
+	trace_add(&t);
 }
 
 void opal_register(uint64_t token, void *func)

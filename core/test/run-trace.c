@@ -265,19 +265,18 @@ int main(void)
 	 * Last power of 2, minus 8. */
 	for (i = 0; (1 << i) < sizeof(large); i++);
 	large.hdr.len_div_8 = (1 << (i-1)) / 8 - 1;
-	/* This only works once we have some larger entries! */
-	if (large.hdr.len_div_8 * 8 >= sizeof(trace.hdr)) {
-		for (i = 0; i < TBUF_SZ; i++) {
-			timestamp = i;
-			large.hdr.type = 100 + (i%2);
-			trace_add(&large);
-		}
-		assert(trace_get(&trace, my_fake_cpu->tracebuf));
-		assert(trace.hdr.len_div_8 == large.hdr.len_div_8);
-		i = trace.hdr.timestamp;
-		while (trace_get(&trace, my_fake_cpu->tracebuf))
-			assert(trace.hdr.timestamp == ++i);
+	for (i = 0; i < TBUF_SZ; i++) {
+		timestamp = i;
+		large.hdr.type = 100 + (i%2);
+		trace_add(&large);
 	}
+	assert(trace_get(&trace, my_fake_cpu->tracebuf));
+	assert(trace.hdr.type == TRACE_OVERFLOW);
+	assert(trace_get(&trace, my_fake_cpu->tracebuf));
+	assert(trace.hdr.len_div_8 == large.hdr.len_div_8);
+	i = trace.hdr.timestamp;
+	while (trace_get(&trace, my_fake_cpu->tracebuf))
+		assert(trace.hdr.timestamp == ++i);
 
 	/* Test repeats. */
 	for (i = 0; i < TBUF_SZ; i++) {
