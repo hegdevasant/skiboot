@@ -45,6 +45,10 @@ static void slw_init_chip(struct proc_chip *chip)
 
 	base = bar2 & 0x0ffffffffffffffful;
 	size = (mask2 | 0xfffff) + 1;
+	if (base == 0) {
+		printf("  No image\n");
+		return;
+	}
 	printf("  Image at 0x%llx size %lldMB\n", base, size / 0x100000);
 
 	mem_reserve("ibn,slw-image", base, size);
@@ -57,8 +61,11 @@ void slw_init(void)
 	if (proc_gen != proc_gen_p8)
 		return;
 
-	/* XXX This is temporary, on P8 we look for any configured
-	 * SLW BAR and reserve the memory
+	/*
+	 * XXX This is temporary, on P8 we look for any configured
+	 * SLW BAR and reserve the memory. Eventually, this will be
+	 * done via HostBoot using the device-tree "reserved-ranges"
+	 * or we'll load the SLW image ourselves using Host Services.
 	 */
 	for_each_chip(chip)
 		slw_init_chip(chip);
