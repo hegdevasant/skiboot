@@ -115,8 +115,10 @@ void add_opal_nodes(void)
 
 	if (fsp_present())
 		fsp_console_add_nodes(opal);
+#ifdef ENABLE_DUMMY_CONSOLE
 	else
 		dummy_console_add_nodes(opal);
+#endif
 
 	//add_opal_errlog_node();
 }

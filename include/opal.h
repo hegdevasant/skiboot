@@ -318,6 +318,17 @@ enum OpalEpowStatus {
 	OPAL_EPOW_OVER_INTERNAL_TEMP = 3
 };
 
+/*
+ * Address cycle types for LPC accesses. These also correspond
+ * to the content of the first cell of the "reg" property for
+ * device nodes on the LPC bus
+ */
+enum OpalLPCAddressType {
+	OPAL_LPC_MEM	= 0,
+	OPAL_LPC_IO	= 1,
+	OPAL_LPC_FW	= 2,
+};
+
 struct opal_machine_check_event {
 	enum OpalMCE_Version	version:8;	/* 0x00 */
 	uint8_t			in_use;		/* 0x01 */

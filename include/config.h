@@ -26,23 +26,30 @@
 //#define OPAL_DEBUG_CONSOLE_IO	1
 //#define OPAL_DEBUG_CONSOLE_POLL	1
 
-/* Stack size set to 16K, some of it will be used for
- * machine check (see stack.h)
- */
-#define STACK_SHIFT		14
-#define STACK_SIZE		(1 << STACK_SHIFT)
-
 /* Enable this for mambo console */
 //#define MAMBO_CONSOLE		1
-
-/* Enable this to make fast reboot clear memory */
-//#define FAST_REBOOT_CLEARS_MEMORY	1
 
 /* Enable this to hookup SkiBoot log to the DVS console */
 #define DVS_CONSOLE		1
 
+/* Enable this to add the simics emulated UART to device-tree */
+#define ADD_SIMICS_LPC_UART	1
+
+/* Enable this to expose the dummy console to the kernel
+ * (ie, an OPAL console that injects into skiboot own console)
+ *
+ * Note: This only gets enabled if there is no FSP console. If there
+ * is one it always takes over for now. This also cause the LPC UART
+ * node to be marked "reserved" so Linux doesn't instanciate a 8250
+ * driver for it.
+ */
+//#define ENABLE_DUMMY_CONSOLE	1
+
 /* Enable this to do fast resets. Currently unreliable... */
 //#define ENABLE_FAST_RESET	1
+
+/* Enable this to make fast reboot clear memory */
+//#define FAST_REBOOT_CLEARS_MEMORY	1
 
 /* Enable this to disable setting of the output pending event when
  * sending things on the console. The FSP is very slow to consume
@@ -51,6 +58,12 @@
  * API for the kernel to activate or deactivate that functionality
  */
 #define DISABLE_CON_PENDING_EVT	1
+
+/* Stack size set to 16K, some of it will be used for
+ * machine check (see stack.h)
+ */
+#define STACK_SHIFT		14
+#define STACK_SIZE		(1 << STACK_SHIFT)
 
 /* This is our main offset for relocation. All our buffers
  * are offset from that and our code relocates itself to

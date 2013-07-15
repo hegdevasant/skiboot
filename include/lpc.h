@@ -7,50 +7,62 @@
 #ifndef __LPC_H
 #define __LPC_H
 
+#include <opal.h>
+#include <ccan/endian/endian.h>
+
 /* Routines for accessing the LPC bus on Power8 */
 
 extern void lpc_init(void);
-
-/* Specific bus accessors */
-int __lpc_write(uint32_t chip_id, uint32_t addr, uint32_t data, unsigned int sz);
-int __lpc_read(uint32_t chip_id, uint32_t addr, void *data, unsigned int sz);
 
 /* Check for a default bus */
 extern bool lpc_present(void);
 
 /* Default bus accessors */
-extern int lpc_write(uint32_t addr, uint32_t data, unsigned int sz);
-extern int lpc_read(uint32_t addr, uint32_t *data, unsigned int sz);
+extern int64_t lpc_write(enum OpalLPCAddressType addr_type, uint32_t addr,
+			 uint32_t data, uint32_t sz);
+extern int64_t lpc_read(enum OpalLPCAddressType addr_type, uint32_t addr,
+			uint32_t *data, uint32_t sz);
 
-static inline int lpc_write8(uint32_t addr, uint8_t data)
+/*
+ * Simplified Little Endian IO space accessors
+ *
+ * Note: We do *NOT* handke unaligned accesses
+ */
+
+static inline void lpc_outb(uint8_t data, uint32_t addr)
 {
-	return lpc_write(addr, data, 1);
+	lpc_write(OPAL_LPC_IO, addr, data, 1);
 }
 
-static inline int lpc_read8(uint32_t addr, uint8_t *data)
+static inline uint8_t lpc_inb(uint32_t addr)
 {
-
-	return lpc_read(addr, (uint32_t *)(char *)data, 1);	
+	uint32_t d32;
+	int64_t rc = lpc_read(OPAL_LPC_IO, addr, &d32, 1);
+	return (rc == OPAL_SUCCESS) ? d32 : 0xff;
 }
 
-static inline int lpc_write16(uint32_t addr, uint16_t data)
+static inline void lpc_outw(uint16_t data, uint32_t addr)
 {
-	return lpc_write(addr, data, 2);
+	lpc_write(OPAL_LPC_IO, addr, cpu_to_le16(data), 2);
 }
 
-static inline int lpc_read16(uint32_t addr, uint16_t *data)
+static inline uint16_t lpc_inw(uint32_t addr)
 {
-	return lpc_read(addr, (uint32_t *)(char *)data, 2);	
+	uint32_t d32;
+	int64_t rc = lpc_read(OPAL_LPC_IO, addr, &d32, 2);
+	return (rc == OPAL_SUCCESS) ? le16_to_cpu(d32) : 0xffff;
 }
 
-static inline int lpc_write32(uint32_t addr, uint32_t data)
+static inline void lpc_outl(uint32_t data, uint32_t addr)
 {
-	return lpc_write(addr, data, 4);
+	lpc_write(OPAL_LPC_IO, addr, cpu_to_le32(data), 4);
 }
 
-static inline int lpc_read32(uint32_t addr, uint32_t *data)
+static inline uint32_t lpc_inl(uint32_t addr)
 {
-	return lpc_read(addr, data, 4);
+	uint32_t d32;
+	int64_t rc = lpc_read(OPAL_LPC_IO, addr, &d32, 4);
+	return (rc == OPAL_SUCCESS) ? le32_to_cpu(d32) : 0xffffffff;
 }
 
 #endif /* __LPC_H */

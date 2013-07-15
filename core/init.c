@@ -248,6 +248,73 @@ void load_and_boot_kernel(bool is_reboot)
 	start_kernel(kernel_entry, fdt, mem_top);
 }
 
+void dt_fixups(void)
+{
+	struct dt_node *n;
+	struct dt_node *primary_lpc = NULL;
+
+	/* lpc node missing #address/size cells. Also pick one as
+	 * primary for now (TBD: How to convey that from HB)
+	 */
+	dt_for_each_compatible(dt_root, n, "ibm,power8-lpc") {
+		if (!primary_lpc || dt_has_node_property(n, "primary", NULL))
+			primary_lpc = n;
+		if (dt_has_node_property(n, "#address-cells", NULL))
+			break;
+		dt_add_property_cells(n, "#address-cells", 2);
+		dt_add_property_cells(n, "#size-cells", 1);
+		dt_add_property_strings(n, "status", "ok");
+	}
+
+	/* Missing UART in simics. Assume first/only LPC */
+	if (primary_lpc) {
+		/* Check if the "primary" property is missing */
+		if (!dt_has_node_property(primary_lpc, "primary", NULL))
+			dt_add_property(primary_lpc, "primary", NULL, 0);
+	}
+
+#ifdef ADD_SIMICS_LPC_UART
+	if (primary_lpc) {
+		/*
+		 * The official OF ISA/LPC binding is a bit odd, it prefixes
+		 * the unit address for IO with "i". It uses 2 cells, the first
+		 * one indicating IO vs. Memory space (along with bits to
+		 * represent aliasing).
+		 *
+		 * We pickup that binding and add to it "2" as a indication
+		 * of FW space.
+		 *
+		 * TODO: Probe the UART instead ...
+		 */
+		struct dt_node *uart;
+		char namebuf[32];
+#define UART_IO_BASE	0x3f8
+#define UART_IO_COUNT	8
+
+		sprintf(namebuf, "serial@i%x", UART_IO_BASE);
+		uart = dt_new(primary_lpc, namebuf);
+
+		dt_add_property_cells(uart, "reg",
+				      1, /* IO space */
+				      UART_IO_BASE, UART_IO_COUNT);
+		dt_add_property_strings(uart, "compatible",
+					"ns16550",
+					"pnpPNP,501");
+		dt_add_property_cells(uart, "clock-frequency", 1843200);
+		dt_add_property_cells(uart, "current-speed", 115200);
+
+		/*
+		 * This is needed by Linux for some obscure reasons,
+		 * we'll eventually need to sanitize it but in the meantime
+		 * let's make sure it's there
+		 */
+		dt_add_property_strings(uart, "device_type", "serial");
+
+		/* XXX Add interrupt */
+	}
+#endif /* ADD_SIMICS_LPC_UART */
+}
+
 void main_cpu_entry(const void *fdt, u32 master_cpu)
 {
 	printf("SkiBoot %s starting...\n", gitid);
@@ -285,6 +352,9 @@ void main_cpu_entry(const void *fdt, u32 master_cpu)
 
 	/* Put various bits & pieces in device-tree */
 	dt_init_misc();
+
+	/* Fix missing bits from device-tree */
+	dt_fixups();
 
 	/* Get out list of chips and allocate per-chip data */
 	init_chips();

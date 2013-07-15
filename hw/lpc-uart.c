@@ -8,6 +8,7 @@
 #include <lpc.h>
 #include <console.h>
 #include <opal.h>
+#include <device.h>
 
 /* UART reg defs */
 #define REG_RBR		0
@@ -36,29 +37,14 @@
 
 static uint32_t uart_base;
 
-static uint8_t uart_read(unsigned int reg)
+static inline uint8_t uart_read(unsigned int reg)
 {
-	uint8_t val;
-	int rc;
-
-	rc = lpc_read8(uart_base + reg, &val);
-	if (rc) {
-		printf("UART: LPC Read error %d\n", rc);
-		/* XXX Disable UART ? */
-		return 0xff;
-	}
-	return val;
+	return lpc_inb(uart_base + reg);
 }
 
-static void uart_write(unsigned int reg, uint8_t val)
+static inline void uart_write(unsigned int reg, uint8_t val)
 {
-	int rc;
-
-	rc = lpc_write8(uart_base + reg, val);
-	if (rc) {
-		printf("UART: LPC Write error %d\n", rc);
-		/* XXX Disable UART ? */
-	}
+	lpc_outb(val, uart_base + reg);
 }
 
 static size_t uart_con_write(const char *buf, size_t len)
@@ -99,6 +85,7 @@ static struct con_ops uart_con_driver = {
 	.write = uart_con_write
 };
 
+#ifdef ENABLE_DUMMY_CONSOLE
 static void uart_console_poll(void *data __unused)
 {
 	uint8_t lsr = uart_read(REG_LSR);
@@ -109,7 +96,7 @@ static void uart_console_poll(void *data __unused)
 	else
 		opal_update_pending_evt(OPAL_EVENT_CONSOLE_INPUT, 0);
 }
-
+#endif /* ENABLE_DUMMY_CONSOLE */
 
 static void uart_init_hw(unsigned int speed, unsigned int clock)
 {
@@ -128,18 +115,53 @@ static void uart_init_hw(unsigned int speed, unsigned int clock)
 
 void uart_init(void)
 {
+	const struct dt_property *prop;
+	struct dt_node *n;
+	char *path __unused;
+
 	if (!lpc_present())
 		return;
 
-	/* XXX Assume UART is on LPC. Fix that when HB adds it
-	 * to the device-tree
-	 */
-	uart_base = 0xd0000000l;
+	/* We support only one */
+	n = dt_find_compatible_node(dt_root, NULL, "ns16550");
+	if (!n)
+		return;
 
-	uart_init_hw(9600, 1843200);
+	/* Get IO base */
+	prop = dt_find_property(n, "reg");
+	if (!prop) {
+		prerror("UART: Can't find reg property\n");
+		return;
+	}
+	if (dt_property_get_cell(prop, 0) != OPAL_LPC_IO) {
+		prerror("UART: Only supports IO addresses\n");
+		return;
+	}
+	uart_base = dt_property_get_cell(prop, 1);
+
+	uart_init_hw(dt_prop_get_u32(n, "current-speed"),
+		     dt_prop_get_u32(n, "clock-frequency"));
 
 	set_console(&uart_con_driver);
 
-	/* Register poller */
+#ifdef ENABLE_DUMMY_CONSOLE
+	/*
+	 * If the dummy console is enabled, we mark the UART as reserved
+	 * since we don't want the kernel to start using it with its own
+	 * 8250 driver
+	 */
+	dt_add_property_strings(n, "status", "reserved");
+
+	/*
+	 * We also need to register it as a poller in order to set the
+	 * event bits for inbound chars.
+	 */
 	opal_add_poller(uart_console_poll, NULL);
+#else
+	/* Else, we expose it as our chosen console */
+	dt_add_property_strings(n, "status", "ok");
+	path = dt_get_path(n);
+	dt_add_property_string(dt_chosen, "linux,stdout-path", path);
+	free(path);
+#endif
 }

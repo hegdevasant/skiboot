@@ -44,11 +44,21 @@
 /* Default LPC bus */
 static int32_t lpc_default_chip_id = -1;
 
-int __lpc_write(uint32_t chip_id, uint32_t addr, uint32_t data, unsigned int sz)
+/*
+ * These are expected to be the same on all chips and should probably
+ * be read (or configured) dynamically. This is how things are configured
+ * today on Tuletta.
+ */
+static uint32_t lpc_io_opb_base		= 0xd0010000;
+static uint32_t lpc_mem_opb_base 	= 0xe0000000;
+static uint32_t lpc_fw_opb_base 	= 0xf0000000;
+
+static int64_t opb_write(uint32_t chip_id, uint32_t addr, uint32_t data,
+			 uint32_t sz)
 {
 	struct proc_chip *chip = get_chip(chip_id);
 	uint64_t ctl = ECCB_CTL_MAGIC, stat;
-	int rc, tout;
+	int64_t rc, tout;
 	bool do_unlock;
 	uint64_t data_reg;
 
@@ -73,7 +83,7 @@ int __lpc_write(uint32_t chip_id, uint32_t addr, uint32_t data, unsigned int sz)
 	do_unlock = lock_recursive(&chip->lpc_lock);
 	rc = xscom_write(chip->id, chip->lpc_xbase + ECCB_DATA, data_reg);
 	if (rc) {
-		prerror("LPC: XSCOM write to ECCB DATA error %d\n", rc);
+		prerror("LPC: XSCOM write to ECCB DATA error %lld\n", rc);
 		goto bail;
 	}
 
@@ -82,14 +92,14 @@ int __lpc_write(uint32_t chip_id, uint32_t addr, uint32_t data, unsigned int sz)
 	ctl = SETFIELD(ECCB_CTL_ADDR, ctl, addr);
 	rc = xscom_write(chip->id, chip->lpc_xbase + ECCB_CTL, ctl);
 	if (rc) {
-		prerror("LPC: XSCOM write to ECCB CTL error %d\n", rc);
+		prerror("LPC: XSCOM write to ECCB CTL error %lld\n", rc);
 		goto bail;
 	}
 
 	for (tout = 0; tout < ECCB_TIMEOUT; tout++) {
 		rc = xscom_read(chip->id, chip->lpc_xbase + ECCB_STAT, &stat);
 		if (rc) {
-			prerror("LPC: XSCOM read from ECCB STAT err %d\n", rc);
+			prerror("LPC: XSCOM read from ECCB STAT err %lld\n",rc);
 			goto bail;
 		}
 		if (stat & ECCB_STAT_OP_DONE) {
@@ -108,20 +118,13 @@ int __lpc_write(uint32_t chip_id, uint32_t addr, uint32_t data, unsigned int sz)
 		unlock(&chip->lpc_lock);
 	return rc;
 }
-opal_call(OPAL_LPC_WRITE, __lpc_write);
 
-int lpc_write(uint32_t addr, uint32_t data, unsigned int sz)
-{
-	if (lpc_default_chip_id < 0)
-		return OPAL_PARAMETER;
-	return __lpc_write(lpc_default_chip_id, addr, data, sz);
-}
-
-int __lpc_read(uint32_t chip_id, uint32_t addr, void *data, unsigned int sz)
+static int64_t opb_read(uint32_t chip_id, uint32_t addr, uint32_t *data,
+		        uint32_t sz)
 {
 	struct proc_chip *chip = get_chip(chip_id);
 	uint64_t ctl = ECCB_CTL_MAGIC | ECCB_CTL_READ, stat;
-	int rc, tout;
+	int64_t rc, tout;
 	bool do_unlock;
 
 	if (!chip || !chip->lpc_xbase)
@@ -138,14 +141,14 @@ int __lpc_read(uint32_t chip_id, uint32_t addr, void *data, unsigned int sz)
 	ctl = SETFIELD(ECCB_CTL_ADDR, ctl, addr);
 	rc = xscom_write(chip->id, chip->lpc_xbase + ECCB_CTL, ctl);
 	if (rc) {
-		prerror("LPC: XSCOM write to ECCB CTL error %d\n", rc);
+		prerror("LPC: XSCOM write to ECCB CTL error %lld\n", rc);
 		goto bail;
 	}
 
 	for (tout = 0; tout < ECCB_TIMEOUT; tout++) {
 		rc = xscom_read(chip->id, chip->lpc_xbase + ECCB_STAT, &stat);
 		if (rc) {
-			prerror("LPC: XSCOM read from ECCB STAT err %d\n", rc);
+			prerror("LPC: XSCOM read from ECCB STAT err %lld\n",rc);
 			goto bail;
 		}
 		if (stat & ECCB_STAT_OP_DONE) {
@@ -157,13 +160,13 @@ int __lpc_read(uint32_t chip_id, uint32_t addr, void *data, unsigned int sz)
 			}
 			switch(sz) {
 			case 1:
-				*(uint8_t *)data = rdata >> 24;
+				*data = rdata >> 24;
 				break;
 			case 2:
-				*(uint16_t *)data = rdata >> 16;
+				*data = rdata >> 16;
 				break;
-			case 4:
-				*(uint32_t *)data = rdata;
+			default:
+				*data = rdata;
 				break;
 			}
 			goto bail;
@@ -176,13 +179,96 @@ int __lpc_read(uint32_t chip_id, uint32_t addr, void *data, unsigned int sz)
 		unlock(&chip->lpc_lock);
 	return rc;
 }
-opal_call(OPAL_LPC_READ, __lpc_read);
 
-int lpc_read(uint32_t addr, uint32_t *data, unsigned int sz)
+static int64_t lpc_get_opb_base(enum OpalLPCAddressType addr_type,
+				uint32_t addr, uint32_t sz,
+				uint32_t *opb_base)
+{
+	uint32_t top = addr + sz;
+
+	/* Address wraparound */
+	if (top < addr)
+		return OPAL_PARAMETER;
+
+	/*
+	 * Bound check access and get the OPB base address for
+	 * the window corresponding to the access type
+	 */
+	switch(addr_type) {
+	case OPAL_LPC_IO:
+		/* IO space is 64K */
+		if (top > 0x10000)
+			return OPAL_PARAMETER;
+		*opb_base = lpc_io_opb_base;
+		break;
+	case OPAL_LPC_MEM:
+		/* MEM space is 256M (XXX dbl check) */
+		if (top > 0x10000000)
+			return OPAL_PARAMETER;
+		*opb_base = lpc_mem_opb_base;
+		break;
+	case OPAL_LPC_FW:
+		/* FW space is 256M (XXX dbl check) */
+		if (top > 0x10000000)
+			return OPAL_PARAMETER;
+		*opb_base = lpc_fw_opb_base;
+		break;
+	default:
+		return OPAL_PARAMETER;
+	}
+	return OPAL_SUCCESS;
+}
+
+static int64_t __lpc_write(uint32_t chip_id, enum OpalLPCAddressType addr_type,
+			   uint32_t addr, uint32_t data, uint32_t sz)
+{
+	uint32_t opb_base;
+	int64_t rc;
+
+	/* Convert to an OPB access */
+	rc = lpc_get_opb_base(addr_type, addr, sz, &opb_base);
+	if (rc)
+		return rc;
+
+	/* Perform OPB access */
+	rc = opb_write(chip_id, opb_base + addr, data, sz);
+
+	/* XXX Add LPC error handling/recovery */
+	return rc;
+}
+
+int64_t lpc_write(enum OpalLPCAddressType addr_type, uint32_t addr,
+		  uint32_t data, uint32_t sz)
 {
 	if (lpc_default_chip_id < 0)
 		return OPAL_PARAMETER;
-	return __lpc_read(lpc_default_chip_id, addr, data, sz);
+	return __lpc_write(lpc_default_chip_id, addr_type, addr, data, sz);
+}
+
+static int64_t __lpc_read(uint32_t chip_id, enum OpalLPCAddressType addr_type,
+			  uint32_t addr, uint32_t *data, uint32_t sz)
+{
+	uint32_t opb_base;
+	int64_t rc;
+
+	/* Convert to an OPB access */
+	rc = lpc_get_opb_base(addr_type, addr, sz, &opb_base);
+	if (rc)
+		return rc;
+
+	/* Perform OPB access */
+	rc = opb_read(chip_id, opb_base + addr, data, sz);
+
+	/* XXX Add LPC error handling/recovery */
+	return rc;
+}
+
+int64_t lpc_read(enum OpalLPCAddressType addr_type, uint32_t addr,
+		 uint32_t *data, uint32_t sz)
+{
+	if (lpc_default_chip_id < 0)
+		return OPAL_PARAMETER;
+	return __lpc_read(lpc_default_chip_id, addr_type, addr, data, sz);
 }
 
 bool lpc_present(void)
@@ -193,11 +279,11 @@ bool lpc_present(void)
 void lpc_init(void)
 {
 	struct dt_node *xn;
+	bool has_lpc = false;
 
 	dt_for_each_compatible(dt_root, xn, "ibm,power8-lpc") {
 		uint32_t gcid = dt_get_chip_id(xn);
 		struct proc_chip *chip;
-		const char *tstr = "Secondary";
 
 		chip = get_chip(gcid);
 		assert(chip);
@@ -205,13 +291,22 @@ void lpc_init(void)
 		chip->lpc_xbase = dt_get_address(xn, 0, NULL);
 		init_lock(&chip->lpc_lock);
 
-		if (lpc_default_chip_id < 0) {
+		if (lpc_default_chip_id < 0 ||
+		    dt_has_node_property(xn, "primary", NULL)) {
 			lpc_default_chip_id = chip->id;
-			tstr = "Default";
 		}
 
-		printf("LPC: %s bus on chip %d PCB_Addr=0x%x\n",
-		       tstr, chip->id, chip->lpc_xbase);
+		printf("LPC: Bus on chip %d PCB_Addr=0x%x\n",
+		       chip->id, chip->lpc_xbase);
+
+		has_lpc = true;
+	}
+	if (lpc_default_chip_id >= 0)
+		printf("LPC: Default bus on chip %d\n", lpc_default_chip_id);
+
+	if (has_lpc) {
+		opal_register(OPAL_LPC_WRITE, __lpc_write);
+		opal_register(OPAL_LPC_READ, __lpc_read);
 	}
 }
 
