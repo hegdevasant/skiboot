@@ -165,21 +165,36 @@ static bool load_kernel(void)
 		ksize = KERNEL_STRADALE_SIZE;
 		printf("No lid-type property, assuming FSP-less setup\n");
 	} else {
-		load_base = KERNEL_LOAD_BASE;
-		ksize = KERNEL_LOAD_SIZE;
+		uint32_t sidemask = 0;
 
-		if (!strcmp(ltype, "opal"))
-			lid = KERNEL_LID_OPAL;
-		else
-			lid = KERNEL_LID_PHYP;
-
+		/* Get flash side */
 		iplp = dt_find_by_path(dt_root, "ipl-params/ipl-params");
 		if (iplp)
 			side = dt_prop_get_def(iplp, "cec-ipl-side", NULL);
 		if (!side || !strcmp(side, "temp"))
-			lid |= 0x8000;
-		fsp_fetch_data(0, FSP_DATASET_NONSP_LID, lid, 0,
-			       (void *)load_base, &ksize);
+			sidemask |= 0x8000;
+
+		load_base = KERNEL_LOAD_BASE;
+		ksize = KERNEL_LOAD_SIZE;
+
+		/* First try to load an OPAL secondary LID always */
+		lid = KERNEL_LID_OPAL | sidemask;
+		printf("Trying to load OPAL secondary LID...\n");
+		if (fsp_fetch_data(0, FSP_DATASET_NONSP_LID, lid, 0,
+				   (void *)load_base, &ksize) != 0) {	
+			if (!strcmp(ltype, "opal")) {
+				prerror("Failed to load in OPAL mode...\n");
+				return false;
+			}
+			printf("Trying to load as PHYP LID...\n");
+			lid = KERNEL_LID_PHYP | sidemask;
+			ksize = KERNEL_LOAD_SIZE;
+			if (fsp_fetch_data(0, FSP_DATASET_NONSP_LID, lid, 0,
+					   (void *)load_base, &ksize) != 0) {	
+				prerror("Failed to load kernel\n");
+				return false;
+			}
+		}
 	}
 
 	printf("INIT: Kernel loaded, size: %zu bytes\n", ksize);
