@@ -773,26 +773,40 @@ void fsp_console_add_nodes(struct dt_node *opal)
 
 void fsp_console_select_stdout(void)
 {
+	struct dt_node *iplp;
+	u32 ipl_mode = 0;
+
 	if (!fsp_present())
 		return;
 
-	/* If DVS is connected, use that as a console. Else, check for
-	 * available serial ports, and finally if nothing's connected,
-	 * leave the command line alone and let the kernel pick whatever
-	 * it wants
+	/*
+	 * We hijack the "os-ipl-mode" setting in iplparams to select
+	 * out output console. This is the "i5/OS partition mode boot"
+	 * setting in ASMI converted to an integer: 0=A, 1=B, ...
 	 */
-	if (fsp_serials[0].open) {
-		dt_add_property_string(dt_chosen, "linux,stdout-path",
-				       "/ibm,opal/consoles/serial@0");
-		printf("FSPCON: default console 0\n");
-	} else if (fsp_serials[1].open) {
+	iplp = dt_find_by_path(dt_root, "ipl-params/ipl-params");
+	if (iplp)
+		ipl_mode = dt_prop_get_u32_def(iplp, "os-ipl-mode", 0);
+
+	/*
+	 * Now, if ipl_mode is 1 or 2, we set the corresponding serial
+	 * port if it exists (ie, is opened) as the default console.
+	 *
+	 * In any other case, we set the default console to serial0
+	 * which is DVS or IPMI
+	 */
+	if (ipl_mode == 1 && fsp_serials[1].open) {
 		dt_add_property_string(dt_chosen, "linux,stdout-path",
 				       "/ibm,opal/consoles/serial@1");
 		printf("FSPCON: default console 1\n");
-	} else if (fsp_serials[2].open) {
+	} else if (ipl_mode == 2 && fsp_serials[2].open) {
 		dt_add_property_string(dt_chosen, "linux,stdout-path",
 				       "/ibm,opal/consoles/serial@2");
 		printf("FSPCON: default console 2\n");
+	} else {
+		dt_add_property_string(dt_chosen, "linux,stdout-path",
+				       "/ibm,opal/consoles/serial@0");
+		printf("FSPCON: default console 0\n");
 	}
 }
 
