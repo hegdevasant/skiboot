@@ -33,7 +33,7 @@
 #define DVS_CONSOLE		1
 
 /* Enable this to add the simics emulated UART to device-tree */
-#define ADD_SIMICS_LPC_UART	1
+//#define ADD_SIMICS_LPC_UART	1
 
 /* Enable this to expose the dummy console to the kernel
  * (ie, an OPAL console that injects into skiboot own console)
