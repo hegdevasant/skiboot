@@ -100,6 +100,13 @@ extern struct cpu_thread *next_available_cpu(struct cpu_thread *cpu);
 #define for_each_available_cpu(cpu)	\
 	for (cpu = first_available_cpu(); cpu; cpu = next_available_cpu(cpu))
 
+extern struct cpu_thread *first_available_core_in_chip(u32 chip_id);
+extern struct cpu_thread *next_available_core_in_chip(struct cpu_thread *cpu, u32 chip_id);
+
+#define for_each_available_core_in_chip(core, chip_id)	\
+	for (core = first_available_core_in_chip(chip_id); core; \
+		core = next_available_core_in_chip(core, chip_id))
+
 /* Return the caller CPU (only after init_cpu_threads) */
 register struct cpu_thread *__this_cpu asm("r13");
 static inline struct cpu_thread *this_cpu(void)

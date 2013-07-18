@@ -245,6 +245,22 @@ struct cpu_thread *first_available_cpu(void)
 	return next_available_cpu(NULL);
 }
 
+struct cpu_thread *next_available_core_in_chip(struct cpu_thread *core, u32 chip_id)
+{
+	do {
+		core = next_cpu(core);
+	} while(core && (core->state != cpu_state_active || \
+			 core->chip_id != chip_id || \
+			 core->is_secondary));
+
+	return core;
+}
+
+struct cpu_thread *first_available_core_in_chip(u32 chip_id)
+{
+	return next_available_core_in_chip(NULL, chip_id);
+}
+
 void cpu_remove_node(const struct cpu_thread *t)
 {
 	struct dt_node *i;
