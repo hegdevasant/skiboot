@@ -517,7 +517,7 @@ struct cechub_io_hub {
  * such as the identification keywords. I will list the ones
  * I manage to figure out without the doc separately.
  */
-#define SLCA_HDIF_SIG	"SLCA "
+#define SLCA_HDIF_SIG	"SLCA  "
 
 /* Idata index 0 : SLCA root pointer
  *
