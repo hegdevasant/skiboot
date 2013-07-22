@@ -33,7 +33,7 @@ static struct dt_node *fsp_create_node(const void *spss, int i,
 	       i, sp_impl->hw_version, sp_impl->sw_version,
 	       sp_impl->chip_version >> 4, sp_impl->chip_version & 0xf);
 	mask = SPSS_SP_IMPL_FLAGS_INSTALLED | SPSS_SP_IMPL_FLAGS_FUNCTIONAL;
-	if ((sp_impl->func_flags & mask) != mask) {
+	if ((be16_to_cpu(sp_impl->func_flags) & mask) != mask) {
 		prerror("FSP #%d: FSP not installed or not functional\n", i);
 		return NULL;
 	}
@@ -54,7 +54,7 @@ static struct dt_node *fsp_create_node(const void *spss, int i,
 	dt_add_property_cells(node, "hw-version", sp_impl->hw_version);
 	dt_add_property_cells(node, "sw-version", sp_impl->sw_version);
 
-	if (sp_impl->func_flags & SPSS_SP_IMPL_FLAGS_PRIMARY)
+	if (be16_to_cpu(sp_impl->func_flags) & SPSS_SP_IMPL_FLAGS_PRIMARY)
 		dt_add_property(node, "primary", NULL, 0);
 
 	return node;
