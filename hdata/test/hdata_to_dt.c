@@ -67,6 +67,7 @@ struct dt_node *add_ics_node(void)
 #include "../pcia.c"
 #include "../spira.c"
 #include "../vpd.c"
+#include "../slca.c"
 #include "../../hw/vpd.c"
 #include "../../core/device.c"
 #include "../../core/chip.c"
