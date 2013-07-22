@@ -208,10 +208,6 @@ bool pcia_parse(void)
 		       be32_to_cpu(id->chip_ec_level),
 		       okay ? "OK" : "UNAVAILABLE");
 
-		/* Secondary threads don't get their own node. */
-		if (ve_flags & CPU_ID_SECONDARY_THREAD)
-			continue;
-
 		if (!add_core_node(cpus, pcia, id, okay))
 			break;
 	}
