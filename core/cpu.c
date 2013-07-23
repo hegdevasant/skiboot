@@ -16,6 +16,7 @@
 #include <stack.h>
 #include <trace.h>
 #include <affinity.h>
+#include <chip.h>
 #include <ccan/str/str.h>
 #include <ccan/container_of/container_of.h>
 
@@ -259,6 +260,11 @@ struct cpu_thread *next_available_core_in_chip(struct cpu_thread *core, u32 chip
 struct cpu_thread *first_available_core_in_chip(u32 chip_id)
 {
 	return next_available_core_in_chip(NULL, chip_id);
+}
+
+uint32_t cpu_get_core_index(struct cpu_thread *cpu)
+{
+	return pir_to_core_id(cpu->pir);
 }
 
 void cpu_remove_node(const struct cpu_thread *t)

@@ -41,7 +41,9 @@
 	uint32_t _pir = pir;				\
 	((_pir >> 4) & 0x38) | ((_pir >> 5) & 0x3); })
 
-#define P7_PIR2COREID(pir) ((pir >> 2) & 0x7)
+#define P7_PIR2COREID(pir) (((pir) >> 2) & 0x7)
+
+#define P7_PIR2THREADID(pir) ((pir) & 0x3)
 
 /*
  * P8 GCID
@@ -60,6 +62,8 @@
 #define P8_PIR2GCID(pir) (((pir) >> 7) & 0x3f)
 
 #define P8_PIR2COREID(pir) (((pir) >> 3) & 0xf)
+
+#define P8_PIR2THREADID(pir) ((pir) & 0x7)
 
 struct dt_node;
 
@@ -87,6 +91,7 @@ struct proc_chip {
 
 extern uint32_t pir_to_chip_id(uint32_t pir);
 extern uint32_t pir_to_core_id(uint32_t pir);
+extern uint32_t pir_to_thread_id(uint32_t pir);
 
 extern struct proc_chip *next_chip(struct proc_chip *chip);
 

@@ -120,6 +120,9 @@ static inline uint32_t cpu_get_thread_index(struct cpu_thread *cpu)
 	return cpu->pir - cpu->primary->pir;
 }
 
+/* Get the core # of a cpu within the core */
+extern uint32_t cpu_get_core_index(struct cpu_thread *cpu);
+
 /* Get the PIR of thread 0 of the same core */
 static inline uint32_t cpu_get_thread0(struct cpu_thread *cpu)
 {
