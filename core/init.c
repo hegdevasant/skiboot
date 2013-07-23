@@ -17,6 +17,7 @@
 #include <device_tree.h>
 #include <opal.h>
 #include <elf.h>
+#include <io.h>
 #include <cec.h>
 #include <device.h>
 #include <pci.h>
@@ -41,12 +42,63 @@ static uint64_t kernel_top;
 static bool kernel_32bit;
 static void *fdt;
 
+static bool try_load_elf64_le(struct elf_hdr *header, size_t ksize)
+{
+	struct elf64_hdr *kh = (struct elf64_hdr *)header;
+	uint64_t load_base = (uint64_t)kh;
+	struct elf64_phdr *ph;
+	unsigned int i;
+
+	printf("INIT: 64-bit LE kernel discovered\n");
+
+	/* Look for a loadable program header that has our entry in it
+	 *
+	 * Note that we execute the kernel in-place, we don't actually
+	 * obey the load informations in the headers. This is expected
+	 * to work for the Linux Kernel because it's a fairly dumb ELF
+	 * but it will not work for any ELF binary.
+	 */
+	ph = (struct elf64_phdr *)(load_base + bswap_64(kh->e_phoff));
+	for (i = 0; i < bswap_16(kh->e_phnum); i++, ph++) {
+		if (bswap_32(ph->p_type) != ELF_PTYPE_LOAD)
+			continue;
+		if (bswap_64(ph->p_vaddr) > bswap_64(kh->e_entry) ||
+		    (bswap_64(ph->p_vaddr) + bswap_64(ph->p_memsz)) <
+		    bswap_64(kh->e_entry))
+			continue;
+
+		/* Get our entry */
+		kernel_entry = bswap_64(kh->e_entry) -
+			bswap_64(ph->p_vaddr) + bswap_64(ph->p_offset);
+		break;
+	}
+
+	if (!kernel_entry) {
+		prerror("INIT: Failed to find kernel entry !\n");
+		return false;
+	}
+	kernel_entry += load_base;
+	kernel_top = load_base + ksize;
+	kernel_32bit = false;
+
+	printf("INIT: 64-bit kernel entry at 0x%llx\n", kernel_entry);
+
+	return true;
+}
+
 static bool try_load_elf64(struct elf_hdr *header, size_t ksize)
 {
 	struct elf64_hdr *kh = (struct elf64_hdr *)header;
 	uint64_t load_base = (uint64_t)kh;
 	struct elf64_phdr *ph;
 	unsigned int i;
+
+	/* Check it's a ppc64 LE ELF */
+	if (kh->ei_ident == ELF_IDENT		&&
+	    kh->ei_data == ELF_DATA_LSB		&&
+	    kh->e_machine == bswap_16(ELF_MACH_PPC64)) {
+		return try_load_elf64_le(header, ksize);
+	}
 
 	/* Check it's a ppc64 ELF */
 	if (kh->ei_ident != ELF_IDENT		||
