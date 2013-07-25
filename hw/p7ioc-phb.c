@@ -1043,6 +1043,7 @@ static int64_t p7ioc_eeh_next_error(struct phb *phb, uint64_t *first_frozen_pe,
 		*pci_error_type = OPAL_EEH_PHB_ERROR;
 		*severity = OPAL_EEH_SEV_PHB_FENCED;
 		p->state = P7IOC_PHB_STATE_FENCED;
+		p7ioc_phb_set_err_pending(p, false);
 		return OPAL_SUCCESS;
 	}
 
@@ -1088,11 +1089,13 @@ static int64_t p7ioc_eeh_next_error(struct phb *phb, uint64_t *first_frozen_pe,
 		case P7IOC_ERR_CLASS_PHB:
 			*pci_error_type = OPAL_EEH_PHB_ERROR;
 			*severity = OPAL_EEH_SEV_PHB_FENCED;
+			p7ioc_phb_set_err_pending(p, false);
 			break;
 		case P7IOC_ERR_CLASS_MAL:
 		case P7IOC_ERR_CLASS_INF:
 			*pci_error_type = OPAL_EEH_PHB_ERROR;
 			*severity = OPAL_EEH_SEV_INF;
+			p7ioc_phb_set_err_pending(p, false);
 			break;
 		case P7IOC_ERR_CLASS_ER:
 			*pci_error_type = OPAL_EEH_PE_ERROR;
