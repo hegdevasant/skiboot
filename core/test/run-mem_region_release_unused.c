@@ -65,7 +65,7 @@ static void add_mem_node(uint64_t start, uint64_t len)
 	reg[0] = cpu_to_be64(start);
 	reg[1] = cpu_to_be64(len);
 
-	sprintf(name, "memory@%llx", start);
+	sprintf(name, "memory@%llx", (long long)start);
 
 	mem = dt_new(dt_root, name);
 	dt_add_property_string(mem, "device_type", "memory");

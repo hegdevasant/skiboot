@@ -86,7 +86,7 @@ struct dt_node *fsp_create_link(const struct spss_iopath *iopath, int index,
 		ststr = "Unknown";
 	}
 	printf("FSP #%d: IO PATH %d is %s PSI Link, GXHB at %llx\n",
-	       fsp_index, index, ststr, iopath->psi.gxhb_base);
+	       fsp_index, index, ststr, (long long)iopath->psi.gxhb_base);
 
 	addr = cleanup_addr(iopath->psi.gxhb_base);
 	chip_id = pcid_to_chip_id(iopath->psi.proc_chip_id);

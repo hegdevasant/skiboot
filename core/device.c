@@ -97,7 +97,7 @@ struct dt_node *dt_new_addr(struct dt_node *parent, const char *name,
 	struct dt_node *new;
 	assert(parent);
 
-	snprintf(lname, sizeof(lname), "%s@%llx", name, addr);
+	snprintf(lname, sizeof(lname), "%s@%llx", name, (long long)addr);
 	new = new_node(lname);
 	dt_attach_root(parent, new);
 	return new;
@@ -110,7 +110,8 @@ struct dt_node *dt_new_2addr(struct dt_node *parent, const char *name,
 	struct dt_node *new;
 	assert(parent);
 
-	snprintf(lname, sizeof(lname), "%s@%llx,%llx", name, addr0, addr1);
+	snprintf(lname, sizeof(lname), "%s@%llx,%llx",
+		 name, (long long)addr0, (long long)addr1);
 	new = new_node(lname);
 	dt_attach_root(parent, new);
 	return new;

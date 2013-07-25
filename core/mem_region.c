@@ -759,7 +759,8 @@ void mem_region_add_dt_reserved(void)
 		name += len;
 
 		printf("  0x%012llx..%012llx : %s\n",
-		       region->start, region->start + region->len - 1,
+		       (long long)region->start,
+		       (long long)(region->start + region->len - 1),
 		       region->name);
 
 		range[0] = cpu_to_fdt64(region->start);

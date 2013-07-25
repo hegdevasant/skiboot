@@ -101,7 +101,8 @@ static void add_xscom_node(uint64_t base, uint32_t id)
 	addr = base | ((uint64_t)id << PPC_BITLSHIFT(28));
 	size = (u64)1 << PPC_BITLSHIFT(28);
 
-	printf("XSCOM: Found gcid 0x%x, address: 0x%llx\n", id, addr);
+	printf("XSCOM: Found gcid 0x%x, address: 0x%llx\n",
+	       id, (long long)addr);
 
 	node = dt_new_addr(dt_root, "xscom", addr);
 	dt_add_property_cells(node, "ibm,chip-id", id);
