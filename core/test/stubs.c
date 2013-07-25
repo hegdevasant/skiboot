@@ -7,7 +7,7 @@ static void stub_function(void)
 }
 
 #define STUB(fnname) \
-	extern void *fnname __attribute__((weak, alias ("stub_function")))
+	void fnname(void) __attribute__((weak, alias ("stub_function")))
 
 STUB(fdt_begin_node);
 STUB(fdt_property);
