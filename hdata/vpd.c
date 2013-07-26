@@ -13,6 +13,7 @@
 void sysvpd_parse(void)
 {
 	const char *model;
+	const char *system_id;
 	char *str;
 	uint8_t sz;
 	const void *sysvpd;
@@ -37,6 +38,20 @@ void sysvpd_parse(void)
 	dt_add_property_string(dt_root, "model", str);
 	free(str);
 
+	system_id = vpd_find(sysvpd, sysvpd_sz, "VSYS", "SE", &sz);
+	if (!system_id)
+		goto no_sysid;
+	str = zalloc(sz + 1);
+	if (!str)
+		goto no_sysid;
+	memcpy(str, system_id, sz);
+	dt_add_property_string(dt_root, "system-id", str);
+	free(str);
+
+	return;
+
+no_sysid:
+	dt_add_property_string(dt_root, "system-id", "Unknown");
 	return;
 
  no_sysvpd:
