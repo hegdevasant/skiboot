@@ -81,8 +81,8 @@ static bool add_address_range(struct dt_node *root,
 	char name[sizeof("memory@") + STR_MAX_CHARS(reg[0])];
 
 	printf("  Range: 0x%016llx..0x%016llx on Chip 0x%x mattr: 0x%x\n",
-	       arange->start, arange->end, pcid_to_chip_id(arange->chip),
-	       arange->mirror_attr);
+	       (long long)arange->start, (long long)arange->end,
+	       pcid_to_chip_id(arange->chip), arange->mirror_attr);
 
 	/* reg contains start and length */
 	reg[0] = cleanup_addr(be64_to_cpu(arange->start));
@@ -93,7 +93,7 @@ static bool add_address_range(struct dt_node *root,
 		if (find_shared(root, be16_to_cpu(id->share_id), reg[0], reg[1]))
 			return true;
 	}
-	sprintf(name, "memory@%llx", reg[0]);
+	sprintf(name, "memory@%llx", (long long)reg[0]);
 
 	mem = dt_new(root, name);
 	dt_add_property_string(mem, "device_type", "memory");
@@ -233,14 +233,14 @@ bool __memory_parse(struct dt_node *root)
 	printf("MS VPD: TCMS is at %p\n", tcms);
 
 	printf("MS VPD: Maximum configured address: 0x%llx\n",
-	       be64_to_cpu(msac->max_configured_ms_address));
+	       (long long)be64_to_cpu(msac->max_configured_ms_address));
 	printf("MS VPD: Maximum possible address: 0x%llx\n",
-	       be64_to_cpu(msac->max_possible_ms_address));
+	       (long long)be64_to_cpu(msac->max_possible_ms_address));
 
 	get_msareas(root, ms_vpd);
 
 	printf("MS VPD: Total MB of RAM: 0x%llx\n",
-	       be64_to_cpu(tcms->total_in_mb));
+	       (long long)be64_to_cpu(tcms->total_in_mb));
 
 	return true;
 }

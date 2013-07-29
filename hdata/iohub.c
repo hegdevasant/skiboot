@@ -330,7 +330,8 @@ static struct dt_node *io_add_hea(const struct cechub_io_hub *hub,
 	reg[0] = hub->gx_ctrl_bar3 + 0x4000000000;
 	reg[1] = 0xc0000000;
 
-	printf("CEC:    * Adding HEA to P5IOC2, assuming GBA=0x%llx\n", reg[0]);
+	printf("CEC:    * Adding HEA to P5IOC2, assuming GBA=0x%llx\n",
+	       (long long)reg[0]);
 	np = dt_new_addr(dt_root, "ibm,hea", reg[0]);
 	dt_add_property(np, "reg", reg, sizeof(reg));
 	dt_add_property_strings(np, "compatible", "ibm,p5ioc2-hea");
@@ -425,11 +426,16 @@ static void io_parse_fru(const void *sp_iohubs, struct dt_node *ics,
 		       hub->proc_chip_id, hub->gx_index, hub->buid_ext,
 		       hub->ec_level);
 
-		printf("    GX BAR 0 = 0x%016llx\n", hub->gx_ctrl_bar0);
-		printf("    GX BAR 1 = 0x%016llx\n", hub->gx_ctrl_bar1);
-		printf("    GX BAR 2 = 0x%016llx\n", hub->gx_ctrl_bar2);
-		printf("    GX BAR 3 = 0x%016llx\n", hub->gx_ctrl_bar3);
-		printf("    GX BAR 4 = 0x%016llx\n", hub->gx_ctrl_bar4);
+		printf("    GX BAR 0 = 0x%016llx\n",
+		       (long long)hub->gx_ctrl_bar0);
+		printf("    GX BAR 1 = 0x%016llx\n",
+		       (long long)hub->gx_ctrl_bar1);
+		printf("    GX BAR 2 = 0x%016llx\n",
+		       (long long)hub->gx_ctrl_bar2);
+		printf("    GX BAR 3 = 0x%016llx\n",
+		       (long long)hub->gx_ctrl_bar3);
+		printf("    GX BAR 4 = 0x%016llx\n",
+		       (long long)hub->gx_ctrl_bar4);
 
 		lxr = NULL;
 		if (kwvpd) {
