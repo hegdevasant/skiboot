@@ -12,6 +12,7 @@
 #include <cpu.h>
 #include <device.h>
 #include <libfdt.h>
+#include <processor.h>
 
 #define MAX_SIZE sizeof(union trace)
 

@@ -17,16 +17,18 @@
 /* Don't include these: PPC-specific */
 #define __CPU_H
 #define __TIME_H
+#define __PROCESSOR_H
 
-#ifdef __i386__
+#if defined(__i386__) || defined(__x86_64__)
 /* This is more than a lwsync, but it'll work */
 static void full_barrier(void)
 {
 	asm volatile("mfence" : : : "memory");
 }
 #define lwsync full_barrier
+#define sync full_barrier
 #else
-#error "Define lwsync for this arch"
+#error "Define sync & lwsync for this arch"
 #endif
 
 #define zalloc(size) calloc((size), 1)
