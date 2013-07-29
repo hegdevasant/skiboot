@@ -21,6 +21,7 @@
 #include <chip.h>
 #include <interrupts.h>
 #include <mem_region.h>
+#include <trace.h>
 #include <libfdt/libfdt.h>
 
 /*
@@ -437,6 +438,9 @@ void main_cpu_entry(const void *fdt, u32 master_cpu)
 	pci_init_slots();
 
 	op_display(OP_LOG, OP_MOD_INIT, 0x0005);
+
+	/* Trace node in DT. */
+	trace_add_node();
 
 	/* Add OPAL-specific node to dt_root before booting the kernel
 	 *

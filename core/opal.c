@@ -14,6 +14,8 @@
 #include <op-panel.h>
 #include <device.h>
 #include <console.h>
+#include <trace.h>
+#include <timebase.h>
 
 /* Pending events to signal via opal_poll_events */
 uint64_t opal_pending_events;
@@ -21,16 +23,20 @@ uint64_t opal_pending_events;
 /* OPAL dispatch table defined in head.S */
 extern uint64_t opal_branch_table[];
 
+/* Number of args expected for each call. */
+static u8 opal_num_args[OPAL_LAST+1];
+
 void opal_table_init(void)
 {
-	struct opal_table_entry *s = &__opal_table_start;
-	struct opal_table_entry *e = &__opal_table_end;
+	struct opal_table_entry *s = __opal_table_start;
+	struct opal_table_entry *e = __opal_table_end;
 
 	printf("OPAL table: %p .. %p, branch table: %p\n",
 	       s, e, opal_branch_table);
 	while(s < e) {
 		uint64_t *func = s->func;
 		opal_branch_table[s->token] = *func;
+		opal_num_args[s->token] = s->nargs;
 		s++;
 	}
 }
@@ -42,34 +48,42 @@ long opal_bad_token(uint64_t token)
 	return OPAL_PARAMETER;
 }
 
+/* FIXME: Do this in asm */ 
 void opal_trace_entry(struct stack_frame *eframe)
 {
+	union trace t;
+	unsigned nargs;
+
 	if (this_cpu()->pir != mfspr(SPR_PIR)) {
 		printf("CPU MISMATCH ! PIR=%04lx cpu @%p -> pir=%04x\n",
 		       mfspr(SPR_PIR), this_cpu(), this_cpu()->pir);
 		abort();
 	}
-	printf("OPAL: Entry, token %lld args:\n", eframe->gpr[0]);
-	printf("OPAL:  r3=%016llx\n", eframe->gpr[3]);
-	printf("OPAL:  r4=%016llx\n", eframe->gpr[4]);
-	printf("OPAL:  r5=%016llx\n", eframe->gpr[5]);
-	printf("OPAL:  r6=%016llx\n", eframe->gpr[6]);
-	printf("OPAL:  r7=%016llx\n", eframe->gpr[7]);
-	printf("OPAL:  r8=%016llx\n", eframe->gpr[8]);
-	printf("OPAL:  r9=%016llx\n", eframe->gpr[9]);
-	printf("OPAL: r10=%016llx\n", eframe->gpr[10]);
-	printf("OPAL: r11=%016llx\n", eframe->gpr[11]);
-	printf("OPAL: caller LR: %016llx SP: %016llx\n",
-	       eframe->lr, eframe->gpr[1]);
+	if (eframe->gpr[0] > OPAL_LAST)
+		nargs = 0;
+	else
+		nargs = opal_num_args[eframe->gpr[0]];
+
+	t.opal.timestamp = mftb();
+	t.opal.type = TRACE_OPAL;
+	t.opal.len_div_8 = offsetof(struct trace_opal, r3_to_11[nargs]) / 8;
+	t.opal.cpu = this_cpu()->pir;
+	t.opal.token = eframe->gpr[0];
+	t.opal.lr = eframe->lr;
+	t.opal.sp = eframe->gpr[1];
+	memcpy(t.opal.r3_to_11, &eframe->gpr[3], nargs*sizeof(u64));
+
+	trace_add(&t);
 }
 
-void opal_register(uint64_t token, void *func)
+void __opal_register(uint64_t token, void *func, unsigned int nargs)
 {
 	uint64_t *opd = func;
 
 	assert(token <= OPAL_LAST);
 
 	opal_branch_table[token] = *opd;
+	opal_num_args[token] = nargs;
 }
 
 static void add_opal_firmware_node(struct dt_node *opal)
@@ -146,7 +160,7 @@ static uint64_t opal_test_func(uint64_t arg)
 
 	return 0xfeedf00d;
 }
-opal_call(OPAL_TEST, opal_test_func);
+opal_call(OPAL_TEST, opal_test_func, 1);
 
 struct opal_poll_entry {
 	struct list_node	link;
@@ -193,5 +207,5 @@ static int64_t opal_poll_events(uint64_t *outstanding_event_mask)
 
 	return OPAL_SUCCESS;
 }
-opal_call(OPAL_POLL_EVENTS, opal_poll_events);
+opal_call(OPAL_POLL_EVENTS, opal_poll_events, 1);
 

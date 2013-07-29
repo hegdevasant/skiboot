@@ -239,7 +239,7 @@ static int64_t opal_set_xive(uint32_t isn, uint16_t server, uint8_t priority)
 
 	return is->ops->set_xive(is->data, isn, server, priority);
 }
-opal_call(OPAL_SET_XIVE, opal_set_xive);
+opal_call(OPAL_SET_XIVE, opal_set_xive, 3);
 
 static int64_t opal_get_xive(uint32_t isn, uint16_t *server, uint8_t *priority)
 {
@@ -250,7 +250,7 @@ static int64_t opal_get_xive(uint32_t isn, uint16_t *server, uint8_t *priority)
 
 	return is->ops->get_xive(is->data, isn, server, priority);
 }
-opal_call(OPAL_GET_XIVE, opal_get_xive);
+opal_call(OPAL_GET_XIVE, opal_get_xive, 3);
 
 static int64_t opal_handle_interrupt(uint32_t isn, uint64_t *outstanding_event_mask)
 {
@@ -271,4 +271,4 @@ static int64_t opal_handle_interrupt(uint32_t isn, uint64_t *outstanding_event_m
 
 	return rc;
 }
-opal_call(OPAL_HANDLE_INTERRUPT, opal_handle_interrupt);
+opal_call(OPAL_HANDLE_INTERRUPT, opal_handle_interrupt, 2);

@@ -305,8 +305,8 @@ void lpc_init(void)
 		printf("LPC: Default bus on chip %d\n", lpc_default_chip_id);
 
 	if (has_lpc) {
-		opal_register(OPAL_LPC_WRITE, __lpc_write);
-		opal_register(OPAL_LPC_READ, __lpc_read);
+		opal_register(OPAL_LPC_WRITE, __lpc_write, 5);
+		opal_register(OPAL_LPC_READ, __lpc_read, 5);
 	}
 }
 

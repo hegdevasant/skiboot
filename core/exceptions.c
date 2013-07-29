@@ -284,5 +284,5 @@ static int64_t opal_register_exc_handler(uint64_t opal_exception,
 	}
 	return OPAL_PARAMETER;
 }
-opal_call(OPAL_REGISTER_OPAL_EXCEPTION_HANDLER, opal_register_exc_handler);
+opal_call(OPAL_REGISTER_OPAL_EXCEPTION_HANDLER, opal_register_exc_handler, 3);
 

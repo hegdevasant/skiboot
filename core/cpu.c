@@ -14,6 +14,7 @@
 #include <device.h>
 #include <opal.h>
 #include <stack.h>
+#include <trace.h>
 #include <ccan/str/str.h>
 #include <ccan/container_of/container_of.h>
 
@@ -333,6 +334,7 @@ void init_boot_cpu(void)
 	/* Setup boot CPU state */
 	boot_cpu = &cpu_stacks[pir].cpu;
 	init_cpu_thread(boot_cpu, cpu_state_active, pir);
+	init_boot_tracebuf(boot_cpu);
 	assert(this_cpu() == boot_cpu);
 }
 
@@ -376,8 +378,10 @@ void init_all_cpus(void)
 
 		/* Setup thread 0 */
 		t = pt = &cpu_stacks[pir].cpu;
-		if (t != boot_cpu)
+		if (t != boot_cpu) {
 			init_cpu_thread(t, state, pir);
+			t->tracebuf = trace_newbuf();
+		}
 		t->server_no = server_no;
 		t->primary = t;
 		t->node = cpu;
@@ -395,6 +399,7 @@ void init_all_cpus(void)
 			printf("CPU:   secondary thread %d found\n", thread);
 			t = &cpu_stacks[pir + thread].cpu;
 			init_cpu_thread(t, state, pir + thread);
+			t->tracebuf = trace_newbuf();
 			t->server_no = ((u32 *)p->prop)[thread];
 			t->is_secondary = true;
 			t->primary = pt;
@@ -479,7 +484,7 @@ static int64_t opal_start_cpu_thread(uint64_t server_no, uint64_t start_address)
 	}
 	return OPAL_SUCCESS;
 }
-opal_call(OPAL_START_CPU, opal_start_cpu_thread);
+opal_call(OPAL_START_CPU, opal_start_cpu_thread, 2);
 
 static int64_t opal_query_cpu_status(uint64_t server_no, uint8_t *thread_status)
 {
@@ -501,7 +506,7 @@ static int64_t opal_query_cpu_status(uint64_t server_no, uint8_t *thread_status)
 
 	return OPAL_SUCCESS;
 }
-opal_call(OPAL_QUERY_CPU_STATUS, opal_query_cpu_status);
+opal_call(OPAL_QUERY_CPU_STATUS, opal_query_cpu_status, 2);
 
 static int64_t opal_return_cpu(void)
 {
@@ -511,4 +516,4 @@ static int64_t opal_return_cpu(void)
 
 	return OPAL_HARDWARE; /* Should not happen */
 }
-opal_call(OPAL_RETURN_CPU, opal_return_cpu);
+opal_call(OPAL_RETURN_CPU, opal_return_cpu, 0);

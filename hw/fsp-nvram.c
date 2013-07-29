@@ -353,8 +353,8 @@ void fsp_nvram_init(void)
 		return;
 
 	/* Add the OPAL calls */
-	opal_register(OPAL_READ_NVRAM, fsp_opal_read_nvram);
-	opal_register(OPAL_WRITE_NVRAM, fsp_opal_write_nvram);
+	opal_register(OPAL_READ_NVRAM, fsp_opal_read_nvram, 3);
+	opal_register(OPAL_WRITE_NVRAM, fsp_opal_write_nvram, 3);
 
 	/* Start the opening sequence */
 	lock(&nvram_lock);

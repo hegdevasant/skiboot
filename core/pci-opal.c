@@ -35,12 +35,12 @@ OPAL_PCICFG_ACCESS(write_byte,		write8, uint8_t)
 OPAL_PCICFG_ACCESS(write_half_word,	write16, uint16_t)
 OPAL_PCICFG_ACCESS(write_word,		write32, uint32_t)
 
-opal_call(OPAL_PCI_CONFIG_READ_BYTE, opal_pci_config_read_byte);
-opal_call(OPAL_PCI_CONFIG_READ_HALF_WORD, opal_pci_config_read_half_word);
-opal_call(OPAL_PCI_CONFIG_READ_WORD, opal_pci_config_read_word);
-opal_call(OPAL_PCI_CONFIG_WRITE_BYTE, opal_pci_config_write_byte);
-opal_call(OPAL_PCI_CONFIG_WRITE_HALF_WORD, opal_pci_config_write_half_word);
-opal_call(OPAL_PCI_CONFIG_WRITE_WORD, opal_pci_config_write_word);
+opal_call(OPAL_PCI_CONFIG_READ_BYTE, opal_pci_config_read_byte, 4);
+opal_call(OPAL_PCI_CONFIG_READ_HALF_WORD, opal_pci_config_read_half_word, 4);
+opal_call(OPAL_PCI_CONFIG_READ_WORD, opal_pci_config_read_word, 4);
+opal_call(OPAL_PCI_CONFIG_WRITE_BYTE, opal_pci_config_write_byte, 4);
+opal_call(OPAL_PCI_CONFIG_WRITE_HALF_WORD, opal_pci_config_write_half_word, 4);
+opal_call(OPAL_PCI_CONFIG_WRITE_WORD, opal_pci_config_write_word, 4);
 
 static int64_t opal_pci_eeh_freeze_status(uint64_t phb_id, uint64_t pe_number,
 					  uint8_t *freeze_state,
@@ -62,7 +62,7 @@ static int64_t opal_pci_eeh_freeze_status(uint64_t phb_id, uint64_t pe_number,
 
 	return rc;
 }
-opal_call(OPAL_PCI_EEH_FREEZE_STATUS, opal_pci_eeh_freeze_status);
+opal_call(OPAL_PCI_EEH_FREEZE_STATUS, opal_pci_eeh_freeze_status, 5);
 
 static int64_t opal_pci_eeh_freeze_clear(uint64_t phb_id, uint64_t pe_number,
 					 uint64_t eeh_action_token)
@@ -81,7 +81,7 @@ static int64_t opal_pci_eeh_freeze_clear(uint64_t phb_id, uint64_t pe_number,
 
 	return rc;
 }
-opal_call(OPAL_PCI_EEH_FREEZE_CLEAR, opal_pci_eeh_freeze_clear);
+opal_call(OPAL_PCI_EEH_FREEZE_CLEAR, opal_pci_eeh_freeze_clear, 3);
 
 static int64_t opal_pci_phb_mmio_enable(uint64_t phb_id, uint16_t window_type,
 					uint16_t window_num, uint16_t enable)
@@ -100,7 +100,7 @@ static int64_t opal_pci_phb_mmio_enable(uint64_t phb_id, uint16_t window_type,
 
 	return rc;
 }
-opal_call(OPAL_PCI_PHB_MMIO_ENABLE, opal_pci_phb_mmio_enable);
+opal_call(OPAL_PCI_PHB_MMIO_ENABLE, opal_pci_phb_mmio_enable, 4);
 
 static int64_t opal_pci_set_phb_mem_window(uint64_t phb_id,
 					   uint16_t window_type,
@@ -126,7 +126,7 @@ static int64_t opal_pci_set_phb_mem_window(uint64_t phb_id,
 
 	return rc;
 }
-opal_call(OPAL_PCI_SET_PHB_MEM_WINDOW, opal_pci_set_phb_mem_window);
+opal_call(OPAL_PCI_SET_PHB_MEM_WINDOW, opal_pci_set_phb_mem_window, 6);
 
 static int64_t opal_pci_map_pe_mmio_window(uint64_t phb_id, uint16_t pe_number,
 					   uint16_t window_type,
@@ -148,7 +148,7 @@ static int64_t opal_pci_map_pe_mmio_window(uint64_t phb_id, uint16_t pe_number,
 
 	return rc;
 }
-opal_call(OPAL_PCI_MAP_PE_MMIO_WINDOW, opal_pci_map_pe_mmio_window);
+opal_call(OPAL_PCI_MAP_PE_MMIO_WINDOW, opal_pci_map_pe_mmio_window, 5);
 
 static int64_t opal_pci_set_phb_table_memory(uint64_t phb_id __unused,
 					     uint64_t rtt_addr __unused,
@@ -160,7 +160,7 @@ static int64_t opal_pci_set_phb_table_memory(uint64_t phb_id __unused,
 	/* IODA2 (P8) stuff, TODO */
 	return OPAL_UNSUPPORTED;
 }
-opal_call(OPAL_PCI_SET_PHB_TABLE_MEMORY, opal_pci_set_phb_table_memory);
+opal_call(OPAL_PCI_SET_PHB_TABLE_MEMORY, opal_pci_set_phb_table_memory, 6);
 
 static int64_t opal_pci_set_pe(uint64_t phb_id, uint64_t pe_number,
 			       uint64_t bus_dev_func, uint8_t bus_compare,
@@ -182,7 +182,7 @@ static int64_t opal_pci_set_pe(uint64_t phb_id, uint64_t pe_number,
 
 	return rc;
 }
-opal_call(OPAL_PCI_SET_PE, opal_pci_set_pe);
+opal_call(OPAL_PCI_SET_PE, opal_pci_set_pe, 7);
 
 static int64_t opal_pci_set_peltv(uint64_t phb_id, uint32_t parent_pe,
 				  uint32_t child_pe, uint8_t state)
@@ -201,7 +201,7 @@ static int64_t opal_pci_set_peltv(uint64_t phb_id, uint32_t parent_pe,
 
 	return rc;
 }
-opal_call(OPAL_PCI_SET_PELTV, opal_pci_set_peltv);
+opal_call(OPAL_PCI_SET_PELTV, opal_pci_set_peltv, 4);
 
 static int64_t opal_pci_set_mve(uint64_t phb_id, uint32_t mve_number,
 				uint32_t pe_number)
@@ -220,7 +220,7 @@ static int64_t opal_pci_set_mve(uint64_t phb_id, uint32_t mve_number,
 
 	return rc;
 }
-opal_call(OPAL_PCI_SET_MVE, opal_pci_set_mve);
+opal_call(OPAL_PCI_SET_MVE, opal_pci_set_mve, 3);
 
 static int64_t opal_pci_set_mve_enable(uint64_t phb_id, uint32_t mve_number,
 				       uint32_t state)
@@ -239,7 +239,7 @@ static int64_t opal_pci_set_mve_enable(uint64_t phb_id, uint32_t mve_number,
 
 	return rc;
 }
-opal_call(OPAL_PCI_SET_MVE_ENABLE, opal_pci_set_mve_enable);
+opal_call(OPAL_PCI_SET_MVE_ENABLE, opal_pci_set_mve_enable, 3);
 
 static int64_t opal_pci_get_xive_reissue(uint64_t phb_id __unused,
 					 uint32_t xive_number __unused,
@@ -249,7 +249,7 @@ static int64_t opal_pci_get_xive_reissue(uint64_t phb_id __unused,
 	/* IODA2 (P8) stuff, TODO */
 	return OPAL_UNSUPPORTED;
 }
-opal_call(OPAL_PCI_GET_XIVE_REISSUE, opal_pci_get_xive_reissue);
+opal_call(OPAL_PCI_GET_XIVE_REISSUE, opal_pci_get_xive_reissue, 4);
 
 static int64_t opal_pci_set_xive_reissue(uint64_t phb_id __unused,
 					 uint32_t xive_number __unused,
@@ -259,7 +259,7 @@ static int64_t opal_pci_set_xive_reissue(uint64_t phb_id __unused,
 	/* IODA2 (P8) stuff, TODO */
 	return OPAL_UNSUPPORTED;
 }
-opal_call(OPAL_PCI_SET_XIVE_REISSUE, opal_pci_set_xive_reissue);
+opal_call(OPAL_PCI_SET_XIVE_REISSUE, opal_pci_set_xive_reissue, 4);
 
 static int64_t opal_pci_msi_eoi(uint64_t phb_id,
 				uint32_t hwirq)
@@ -278,7 +278,7 @@ static int64_t opal_pci_msi_eoi(uint64_t phb_id,
 
 	return rc;
 }
-opal_call(OPAL_PCI_MSI_EOI, opal_pci_msi_eoi);
+opal_call(OPAL_PCI_MSI_EOI, opal_pci_msi_eoi, 2);
 
 static int64_t opal_pci_set_xive_pe(uint64_t phb_id, uint32_t pe_number,
 				    uint32_t xive_num)
@@ -297,7 +297,7 @@ static int64_t opal_pci_set_xive_pe(uint64_t phb_id, uint32_t pe_number,
 
 	return rc;
 }
-opal_call(OPAL_PCI_SET_XIVE_PE, opal_pci_set_xive_pe);
+opal_call(OPAL_PCI_SET_XIVE_PE, opal_pci_set_xive_pe, 3);
 
 static int64_t opal_get_xive_source(uint64_t phb_id, uint32_t xive_num,
 				    int32_t *interrupt_source_number)
@@ -316,7 +316,7 @@ static int64_t opal_get_xive_source(uint64_t phb_id, uint32_t xive_num,
 
 	return rc;
 }
-opal_call(OPAL_GET_XIVE_SOURCE, opal_get_xive_source);
+opal_call(OPAL_GET_XIVE_SOURCE, opal_get_xive_source, 3);
 
 static int64_t opal_get_msi_32(uint64_t phb_id, uint32_t mve_number,
 			       uint32_t xive_num, uint8_t msi_range,
@@ -337,7 +337,7 @@ static int64_t opal_get_msi_32(uint64_t phb_id, uint32_t mve_number,
 
 	return rc;
 }
-opal_call(OPAL_GET_MSI_32, opal_get_msi_32);
+opal_call(OPAL_GET_MSI_32, opal_get_msi_32, 6);
 
 static int64_t opal_get_msi_64(uint64_t phb_id, uint32_t mve_number,
 			       uint32_t xive_num, uint8_t msi_range,
@@ -358,7 +358,7 @@ static int64_t opal_get_msi_64(uint64_t phb_id, uint32_t mve_number,
 
 	return rc;
 }
-opal_call(OPAL_GET_MSI_64, opal_get_msi_64);
+opal_call(OPAL_GET_MSI_64, opal_get_msi_64, 6);
 
 static int64_t opal_pci_map_pe_dma_window(uint64_t phb_id, uint16_t pe_number,
 					  uint16_t window_id,
@@ -383,7 +383,7 @@ static int64_t opal_pci_map_pe_dma_window(uint64_t phb_id, uint16_t pe_number,
 
 	return rc;
 }
-opal_call(OPAL_PCI_MAP_PE_DMA_WINDOW, opal_pci_map_pe_dma_window);
+opal_call(OPAL_PCI_MAP_PE_DMA_WINDOW, opal_pci_map_pe_dma_window, 7);
 
 static int64_t opal_pci_map_pe_dma_window_real(uint64_t phb_id,
 					       uint16_t pe_number,
@@ -406,7 +406,7 @@ static int64_t opal_pci_map_pe_dma_window_real(uint64_t phb_id,
 
 	return rc;
 }
-opal_call(OPAL_PCI_MAP_PE_DMA_WINDOW_REAL, opal_pci_map_pe_dma_window_real);
+opal_call(OPAL_PCI_MAP_PE_DMA_WINDOW_REAL, opal_pci_map_pe_dma_window_real, 5);
 
 static int64_t opal_pci_reset(uint64_t phb_id, uint8_t reset_scope,
                               uint8_t assert_state)
@@ -480,7 +480,7 @@ static int64_t opal_pci_reset(uint64_t phb_id, uint8_t reset_scope,
 
 	return (rc > 0) ? tb_to_msecs(rc) : rc;
 }
-opal_call(OPAL_PCI_RESET, opal_pci_reset);
+opal_call(OPAL_PCI_RESET, opal_pci_reset, 3);
 
 static int64_t opal_pci_poll(uint64_t phb_id)
 {
@@ -506,7 +506,7 @@ static int64_t opal_pci_poll(uint64_t phb_id)
 
 	return rc;
 }
-opal_call(OPAL_PCI_POLL, opal_pci_poll);
+opal_call(OPAL_PCI_POLL, opal_pci_poll, 1);
 
 static int64_t opal_pci_set_phb_tce_memory(uint64_t phb_id,
 					   uint64_t tce_mem_addr,
@@ -526,7 +526,7 @@ static int64_t opal_pci_set_phb_tce_memory(uint64_t phb_id,
 
 	return rc;
 }
-opal_call(OPAL_PCI_SET_PHB_TCE_MEMORY, opal_pci_set_phb_tce_memory);
+opal_call(OPAL_PCI_SET_PHB_TCE_MEMORY, opal_pci_set_phb_tce_memory, 3);
 
 static int64_t opal_pci_get_phb_diag_data(uint64_t phb_id,
 					  void *diag_buffer,
@@ -546,7 +546,7 @@ static int64_t opal_pci_get_phb_diag_data(uint64_t phb_id,
 
 	return rc;
 }
-opal_call(OPAL_PCI_GET_PHB_DIAG_DATA, opal_pci_get_phb_diag_data);
+opal_call(OPAL_PCI_GET_PHB_DIAG_DATA, opal_pci_get_phb_diag_data, 3);
 
 static int64_t opal_pci_get_phb_diag_data2(uint64_t phb_id,
 					   void *diag_buffer,
@@ -566,7 +566,7 @@ static int64_t opal_pci_get_phb_diag_data2(uint64_t phb_id,
 
 	return rc;
 }
-opal_call(OPAL_PCI_GET_PHB_DIAG_DATA2, opal_pci_get_phb_diag_data2);
+opal_call(OPAL_PCI_GET_PHB_DIAG_DATA2, opal_pci_get_phb_diag_data2, 3);
 
 static int64_t opal_pci_next_error(uint64_t phb_id, uint64_t *first_frozen_pe,
 				   uint16_t *pci_error_type, uint16_t *severity)
@@ -589,7 +589,7 @@ static int64_t opal_pci_next_error(uint64_t phb_id, uint64_t *first_frozen_pe,
 
 	return rc;
 }
-opal_call(OPAL_PCI_NEXT_ERROR, opal_pci_next_error);
+opal_call(OPAL_PCI_NEXT_ERROR, opal_pci_next_error, 4);
 
 static int64_t opal_pci_eeh_freeze_status2(uint64_t phb_id, uint64_t pe_number,
 					   uint8_t *freeze_state,
@@ -612,5 +612,5 @@ static int64_t opal_pci_eeh_freeze_status2(uint64_t phb_id, uint64_t pe_number,
 
 	return rc;
 }
-opal_call(OPAL_PCI_EEH_FREEZE_STATUS2, opal_pci_eeh_freeze_status2);
+opal_call(OPAL_PCI_EEH_FREEZE_STATUS2, opal_pci_eeh_freeze_status2, 6);
 

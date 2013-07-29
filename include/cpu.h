@@ -39,6 +39,7 @@ struct cpu_thread {
 	enum cpu_thread_state		state;
 	struct dt_node			*node;
 	struct opal_machine_check_event	mc_event;
+	struct tracebuf			*tracebuf;
 
 	struct lock			job_lock;
 	struct list_head		job_queue;
