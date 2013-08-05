@@ -77,6 +77,20 @@ struct dt_node * add_core_common(struct dt_node *cpus,
 	/* FIXME: Hardcoding is bad. */
 	dt_add_property_cells(cpu, "timebase-frequency", 512000000);
 
+	dt_add_property_cells(cpu, "d-tlb-size",
+			      be32_to_cpu(cache->dtlb_entries));
+	dt_add_property_cells(cpu, "i-tlb-size",
+			      be32_to_cpu(cache->itlb_entries));
+	/* Assume unified TLB */
+	dt_add_property_cells(cpu, "tlb-size",
+			      be32_to_cpu(cache->dtlb_entries));
+	dt_add_property_cells(cpu, "d-tlb-sets",
+			      be32_to_cpu(cache->dtlb_assoc_sets));
+	dt_add_property_cells(cpu, "i-tlb-sets",
+			      be32_to_cpu(cache->itlb_assoc_sets));
+	dt_add_property_cells(cpu, "tlb-sets",
+			      be32_to_cpu(cache->dtlb_assoc_sets));
+
 	dt_add_property_cells(cpu, "d-cache-block-size",
 			      be32_to_cpu(cache->dcache_block_size));
 	dt_add_property_cells(cpu, "i-cache-block-size",
