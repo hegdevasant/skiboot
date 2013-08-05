@@ -77,6 +77,9 @@ struct dt_node * add_core_common(struct dt_node *cpus,
 	/* FIXME: Hardcoding is bad. */
 	dt_add_property_cells(cpu, "timebase-frequency", 512000000);
 
+	dt_add_property_cells(cpu, "reservation-granule-size",
+			      be32_to_cpu(cache->reservation_size));
+
 	dt_add_property_cells(cpu, "d-tlb-size",
 			      be32_to_cpu(cache->dtlb_entries));
 	dt_add_property_cells(cpu, "i-tlb-size",
