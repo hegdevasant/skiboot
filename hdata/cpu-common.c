@@ -85,6 +85,10 @@ struct dt_node * add_core_common(struct dt_node *cpus,
 			      be32_to_cpu(cache->l1_dcache_size_kb)*1024);
 	dt_add_property_cells(cpu, "i-cache-size",
 			      be32_to_cpu(cache->icache_size_kb)*1024);
+	dt_add_property_cells(cpu, "i-cache-sets",
+			      be32_to_cpu(cache->icache_assoc_sets));
+	dt_add_property_cells(cpu, "d-cache-sets",
+			      be32_to_cpu(cache->dcache_assoc_sets));
 
 	if (cache->icache_line_size != cache->icache_block_size)
 		dt_add_property_cells(cpu, "i-cache-line-size",
