@@ -33,6 +33,7 @@ static struct dt_node *add_cpu_node(struct dt_node *cpus,
 {
 	const struct sppaca_cpu_timebase *timebase;
 	const struct sppaca_cpu_cache *cache;
+	const struct sppaca_cpu_attr *attr;
 	struct dt_node *cpu;
 	u32 no, size, ve_flags;
 
@@ -65,6 +66,11 @@ static struct dt_node *add_cpu_node(struct dt_node *cpus,
 	}
 
 	cpu = add_core_common(cpus, cache, timebase, no, okay);
+
+	/* Core attributes */
+	attr = HDIF_get_idata(paca, SPPACA_IDATA_CPU_ATTR, &size);
+	if (attr)
+		add_core_attr(cpu, be32_to_cpu(attr->attr));
 
 	/* We append the secondary cpus in __cpu_parse */
 	dt_add_property_cells(cpu, "ibm,ppc-interrupt-server#s", no);

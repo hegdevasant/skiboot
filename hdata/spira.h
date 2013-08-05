@@ -661,6 +661,10 @@ struct sppaca_cpu_cache {
 	__be32 l35_cache_line_size;
 };
 
+/* Idata index 6 : CPU Attributes */
+#define SPPACA_IDATA_CPU_ATTR	6
+
+#define sppaca_cpu_attr sppcia_cpu_attr
 
 /*
  * SPPCIA structure. The SPIRA contain an array of these, one
@@ -726,6 +730,11 @@ struct sppcia_cpu_thread {
 #define SPPCIA_IDATA_CPU_ATTR		4
 
 struct sppcia_cpu_attr {
+#define CPU_ATTR_UNIFIED_PL1	0x80
+#define CPU_ATTR_SPLIT_TLB	0x40
+#define CPU_ATTR_TLBIA		0x20
+#define CPU_ATTR_PERF_MONITOR	0x10
+#define CPU_ATTR_EXTERN_CONT	0x02
 	__be32 attr;
 } __packed;
 

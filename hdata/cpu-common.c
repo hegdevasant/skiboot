@@ -116,4 +116,16 @@ struct dt_node * add_core_common(struct dt_node *cpus,
 	return cpu;
 }
 
-
+void add_core_attr(struct dt_node *cpu, uint32_t attr)
+{
+	if (attr & CPU_ATTR_UNIFIED_PL1)
+		dt_add_property(cpu, "cache-unified", NULL, 0);
+	if (attr & CPU_ATTR_SPLIT_TLB)
+		dt_add_property(cpu, "tlb-split", NULL, 0);
+	if (attr & CPU_ATTR_TLBIA)
+		dt_add_property(cpu, "tlbia", NULL, 0);
+	if (attr & CPU_ATTR_PERF_MONITOR)
+		dt_add_property_cells(cpu, "performance-monitor", 0, 1);
+	if (attr & CPU_ATTR_EXTERN_CONT)
+		dt_add_property(cpu, "external-control", NULL, 0);
+}

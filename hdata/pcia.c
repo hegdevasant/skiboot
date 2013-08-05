@@ -87,6 +87,7 @@ static struct dt_node *add_core_node(struct dt_node *cpus,
 	const struct sppcia_cpu_thread *t;
 	const struct sppcia_cpu_timebase *timebase;
 	const struct sppcia_cpu_cache *cache;
+	const struct sppcia_cpu_attr *attr;
 	struct dt_node *cpu;
 	const char *icp_compat;
 	u32 i, size, threads, ve_flags;
@@ -127,6 +128,11 @@ static struct dt_node *add_core_node(struct dt_node *cpus,
 
 	cpu = add_core_common(cpus, cache, timebase,
 			      be32_to_cpu(t->proc_int_line), okay);
+
+	/* Core attributes */
+	attr = HDIF_get_idata(pcia, SPPCIA_IDATA_CPU_ATTR, &size);
+	if (attr)
+		add_core_attr(cpu, be32_to_cpu(attr->attr));
 
 	if (proc_gen == proc_gen_p7)
 		icp_compat = "IBM,power7-icp";
