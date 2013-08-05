@@ -129,3 +129,121 @@ void add_core_attr(struct dt_node *cpu, uint32_t attr)
 	if (attr & CPU_ATTR_EXTERN_CONT)
 		dt_add_property(cpu, "external-control", NULL, 0);
 }
+
+static struct dt_node *create_cache_node(struct dt_node *cpus,
+					 const struct sppcia_cpu_cache *cache,
+					 char *name, uint32_t unit_addr,
+					 int okay)
+{
+	struct dt_node *node;
+
+	node = dt_new_addr(cpus, name, unit_addr);
+	assert(node);
+
+	dt_add_property_string(node, "device_type", "cache");
+	dt_add_property_cells(node, "reg", unit_addr);
+	dt_add_property_string(node, "status", okay ? "okay" : "bad");
+	dt_add_property(node, "cache-unified", NULL, 0);
+
+	/* Assume cache associavitity sets is same for L2, L3 and L3.5 */
+	dt_add_property_cells(node, "d-cache-sets",
+			      be32_to_cpu(cache->l2_cache_assoc_sets));
+	dt_add_property_cells(node, "i-cache-sets",
+			      be32_to_cpu(cache->l2_cache_assoc_sets));
+
+	return node;
+}
+
+static struct dt_node *l35_cache_node(struct dt_node *cpus,
+				      const struct sppcia_cpu_cache *cache,
+				      uint32_t unit_addr, int okay)
+{
+	struct dt_node *node;
+
+	node = create_cache_node(cpus, cache, "l35-cache", unit_addr, okay);
+
+	dt_add_property_cells(node, "d-cache-size",
+			      be32_to_cpu(cache->l35_dcache_size_kb) * 1024);
+	dt_add_property_cells(node, "i-cache-size",
+			      be32_to_cpu(cache->l35_dcache_size_kb) * 1024);
+
+	if (cache->icache_line_size != cache->icache_block_size)
+		dt_add_property_cells(node, "i-cache-line-size",
+				      be32_to_cpu(cache->icache_line_size));
+	if (cache->l35_cache_line_size != cache->dcache_block_size)
+		dt_add_property_cells(node, "d-cache-line-size",
+				      be32_to_cpu(cache->l35_cache_line_size));
+
+	return node;
+}
+
+static struct dt_node *l3_cache_node(struct dt_node *cpus,
+				     const struct sppcia_cpu_cache *cache,
+				     uint32_t unit_addr, int okay)
+{
+	struct dt_node *node;
+
+	node = create_cache_node(cpus, cache, "l3-cache", unit_addr, okay);
+
+	dt_add_property_cells(node, "d-cache-size",
+			      be32_to_cpu(cache->l3_dcache_size_kb) * 1024);
+	dt_add_property_cells(node, "i-cache-size",
+			      be32_to_cpu(cache->l3_dcache_size_kb) * 1024);
+
+	if (cache->icache_line_size != cache->icache_block_size)
+		dt_add_property_cells(node, "i-cache-line-size",
+				      be32_to_cpu(cache->icache_line_size));
+	if (cache->l3_line_size != cache->dcache_block_size)
+		dt_add_property_cells(node, "d-cache-line-size",
+				      be32_to_cpu(cache->l3_line_size));
+
+	return node;
+}
+
+static struct dt_node *l2_cache_node(struct dt_node *cpus,
+				     const struct sppcia_cpu_cache *cache,
+				     uint32_t unit_addr, int okay)
+{
+	struct dt_node *node;
+
+	node = create_cache_node(cpus, cache, "l2-cache", unit_addr, okay);
+
+	dt_add_property_cells(node, "d-cache-size",
+			      be32_to_cpu(cache->l2_dcache_size_kb) * 1024);
+	dt_add_property_cells(node, "i-cache-size",
+			      be32_to_cpu(cache->l2_dcache_size_kb) * 1024);
+
+	if (cache->icache_line_size != cache->icache_block_size)
+		dt_add_property_cells(node, "i-cache-line-size",
+				      be32_to_cpu(cache->icache_line_size));
+	if (cache->l2_line_size != cache->dcache_block_size)
+		dt_add_property_cells(node, "d-cache-line-size",
+				      be32_to_cpu(cache->l2_line_size));
+
+	return node;
+}
+
+uint32_t add_core_cache_info(struct dt_node *cpus,
+			     const struct sppcia_cpu_cache *cache,
+			     uint32_t int_server, int okay)
+{
+	struct dt_node *l2_node, *l3_node, *l35_node;
+	uint32_t unit_addr;
+
+	/* Use Processor Interrupt Line to genarate cache unit address */
+	unit_addr = 0x20 << 24 | int_server;
+	l2_node = l2_cache_node(cpus, cache, unit_addr, okay);
+
+	unit_addr = 0x30 << 24 | int_server;
+	l3_node = l3_cache_node(cpus, cache, unit_addr, okay);
+	/* Represents the next level of cache in the memory hierarchy */
+	dt_add_property_cells(l2_node, "l2-cache", l3_node->phandle);
+
+	if (be32_to_cpu(cache->l35_dcache_size_kb)) {
+		unit_addr = 0x35 << 24 | int_server;
+		l35_node = l35_cache_node(cpus, cache, unit_addr, okay);
+		dt_add_property_cells(l3_node, "l2-cache", l35_node->phandle);
+	}
+
+	return l2_node->phandle;
+}

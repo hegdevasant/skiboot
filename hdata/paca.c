@@ -35,7 +35,7 @@ static struct dt_node *add_cpu_node(struct dt_node *cpus,
 	const struct sppaca_cpu_cache *cache;
 	const struct sppaca_cpu_attr *attr;
 	struct dt_node *cpu;
-	u32 no, size, ve_flags;
+	u32 no, size, ve_flags, l2_phandle;
 
 	/* We use the process_interrupt_line as the res id */
 	no = be32_to_cpu(id->process_interrupt_line);
@@ -71,6 +71,10 @@ static struct dt_node *add_cpu_node(struct dt_node *cpus,
 	attr = HDIF_get_idata(paca, SPPACA_IDATA_CPU_ATTR, &size);
 	if (attr)
 		add_core_attr(cpu, be32_to_cpu(attr->attr));
+
+	/* Add cache info */
+	l2_phandle = add_core_cache_info(cpus, cache, no, okay);
+	dt_add_property_cells(cpu, "l2-cache", l2_phandle);
 
 	/* We append the secondary cpus in __cpu_parse */
 	dt_add_property_cells(cpu, "ibm,ppc-interrupt-server#s", no);

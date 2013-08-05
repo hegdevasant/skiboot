@@ -90,7 +90,7 @@ static struct dt_node *add_core_node(struct dt_node *cpus,
 	const struct sppcia_cpu_attr *attr;
 	struct dt_node *cpu;
 	const char *icp_compat;
-	u32 i, size, threads, ve_flags;
+	u32 i, size, threads, ve_flags, l2_phandle;
 	__be32 iserv[PCIA_MAX_THREADS];
 
 	/* Look for thread 0 */
@@ -133,6 +133,11 @@ static struct dt_node *add_core_node(struct dt_node *cpus,
 	attr = HDIF_get_idata(pcia, SPPCIA_IDATA_CPU_ATTR, &size);
 	if (attr)
 		add_core_attr(cpu, be32_to_cpu(attr->attr));
+
+	/* Add cache info */
+	l2_phandle = add_core_cache_info(cpus, cache,
+					 be32_to_cpu(t->proc_int_line), okay);
+	dt_add_property_cells(cpu, "l2-cache", l2_phandle);
 
 	if (proc_gen == proc_gen_p7)
 		icp_compat = "IBM,power7-icp";

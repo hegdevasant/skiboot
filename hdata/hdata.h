@@ -23,6 +23,9 @@ extern struct dt_node *add_core_common(struct dt_node *cpus,
 				       const struct sppaca_cpu_timebase *tb,
 				       uint32_t int_server, bool okay);
 extern void add_core_attr(struct dt_node *cpu, uint32_t attr);
+extern uint32_t add_core_cache_info(struct dt_node *cpus,
+				    const struct sppcia_cpu_cache *cache,
+				    uint32_t int_server, int okay);
 extern const char *get_loc_code(uint16_t rsrc_id);
 
 #endif /* __HDATA_H */
