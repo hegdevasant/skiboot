@@ -7,6 +7,7 @@
 #include <skiboot.h>
 #include <cpu.h>
 #include <fsp.h>
+#include <psi.h>
 #include <opal.h>
 #include <xscom.h>
 #include <interrupts.h>
@@ -314,7 +315,7 @@ void fast_reboot(void)
 	fsp_console_reset();
 
 	/* Reset/EOI the PSI interrupt */
-	fsp_psi_irq_reset();
+	psi_irq_reset();
 
 	/* Remove all PCI devices */
 	pci_reset();

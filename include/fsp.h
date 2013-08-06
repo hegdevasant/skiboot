@@ -510,9 +510,6 @@ extern void fsp_console_select_stdout(void);
 extern void fsp_console_reset(void);
 extern void fsp_console_poll(void *);
 
-/* Interrupts */
-extern void fsp_psi_irq_reset(void);
-
 /* NVRAM */
 extern void fsp_nvram_init(void);
 extern void add_opal_nvram_node(struct dt_node *opal);
