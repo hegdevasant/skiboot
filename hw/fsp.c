@@ -833,6 +833,11 @@ void fsp_poll(void)
 	return __fsp_poll(false);
 }
 
+void fsp_interrupt(void)
+{
+	return __fsp_poll(true);
+}
+
 int fsp_sync_msg(struct fsp_msg *msg, bool autofree)
 {
 	int rc;

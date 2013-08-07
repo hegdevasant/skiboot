@@ -6,6 +6,7 @@
  * Supplement V032404DR-3 dated August 16, 2012 (the “NDA”). */
 #include <skiboot.h>
 #include <fsp.h>
+#include <psi.h>
 #include <memory.h>
 #include <chiptod.h>
 #include <cpu.h>
@@ -383,6 +384,9 @@ void main_cpu_entry(const void *fdt, u32 master_cpu)
 
 	/* Initialize XSCOM */
 	xscom_init();
+
+	/* Initialize PSI */
+	psi_init();
 
 	/* Initialize LPC (P8 only) so we can get to UART */
 	lpc_init();

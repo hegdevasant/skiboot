@@ -474,6 +474,9 @@ extern int fsp_sync_msg(struct fsp_msg *msg, bool autofree);
 /* Process FSP mailbox activity */
 extern void fsp_poll(void);
 
+/* Handle FSP interrupts */
+extern void fsp_interrupt(void);
+
 /* An FSP client is interested in messages for a given class */
 struct fsp_client {
 	/* Return true to "own" the message (you can free it) */

@@ -119,4 +119,21 @@
 #define PSI_DMA_SYSPARAM	0x00b02000
 #define PSI_DMA_SYSPARAM_SIZE	0x00002000
 
+struct psi {
+	struct psi		*link;
+	void			*gxhb_regs;
+	unsigned int		chip_id;
+	unsigned int		interrupt;
+	bool			working;
+	bool			active;
+};
+
+extern struct psi *first_psi;
+extern void psi_init(void);
+extern struct psi *psi_find_link(void *addr);
+
+/* Interrupts */
+extern void psi_irq_reset(void);
+extern void psi_enable_interrupt(struct psi *psi);
+
 #endif /* __PSI_H */
