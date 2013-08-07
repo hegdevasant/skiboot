@@ -2,6 +2,7 @@
 #include <fsp.h>
 #include <lock.h>
 #include <processor.h>
+#include <psi.h>
 #include <fsp-sysparam.h>
 
 struct sysparam_req {
