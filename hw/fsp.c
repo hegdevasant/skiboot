@@ -68,7 +68,10 @@ static struct fsp *active_fsp;
 static u16 fsp_curseq = 0x8000;
 static u64 *fsp_tce_table;
 static u32 fsp_inbound_off;
+
 static struct lock fsp_lock = LOCK_UNLOCKED;
+
+void fsp_handle_resp(struct fsp_msg *msg);
 
 struct fsp_cmdclass {
 	int timeout;
@@ -562,6 +565,7 @@ static bool fsp_local_command(u32 cmd_sub_mod, struct fsp_msg *msg)
 	}
 	return false;
 }
+
 
 /* This is called without the FSP lock */
 static void fsp_handle_command(struct fsp_msg *msg)
@@ -1527,6 +1531,9 @@ void fsp_opl(void)
 	/* Tell FSP we are in running state */
 	printf("INIT: Sending HV Functional: Runtime...\n");
 	fsp_sync_msg(fsp_mkmsg(FSP_CMD_HV_FUNCTNAL, 1, 0x02000000), true);
+
+	/* Start the surveillance process */
+	fsp_init_surveillance();
 }
 
 int fsp_fetch_data(uint8_t flags, uint16_t id, uint32_t sub_id,

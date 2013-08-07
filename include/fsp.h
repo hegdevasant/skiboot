@@ -355,7 +355,8 @@
 /*
  * Class 0xD7
  */
-#define FSP_CMD_SURV_ACK	0x1d70000 /* ? */
+#define FSP_CMD_SURV_HBEAT	0x1d70000 /* ? */
+#define FSP_CMD_SURV_ACK	0x0d78000 /* ? */
 
 /*
  * Class 0xD8
@@ -609,5 +610,8 @@ extern void fsp_nvram_wait_open(void);
 
 /* RTC */
 extern void fsp_rtc_init(void);
+
+/* Surveillance */
+extern void fsp_init_surveillance(void);
 
 #endif /* __FSP_H */
