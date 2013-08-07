@@ -43,13 +43,6 @@
 #define FSP_STATUS_NOT_SUPPORTED	0x2f
 #define FSP_STATUS_GENERIC_ERROR	0xfe
 
-/* System parameter numbers used in the protocol
- *
- * these are the only ones we care about right now
- */
-#define SYS_PARAM_SURV			0xf0000001
-#define SYS_PARAM_NEED_HMC		0xf0000016
-
 /*
  * FSP registers
  *
@@ -326,6 +319,8 @@
 #define FSP_RSP_HV_QUERY_CAPS	0x1ce8400
 #define FSP_CMD_SP_QUERY_CAPS	0x0ce0501 /* FSP->HV */
 #define FSP_RSP_SP_QUERY_CAPS	0x0ce8500
+#define FSP_CMD_SP_QUERY_SPARM	0x1ce1200 /* HV->FSP: System parameter query */
+#define FSP_RSP_SP_QUERY_SPARM	0x0ce9200 /* FSP->HV: System parameter resp */
 #define FSP_CMD_POWERDOWN_NORM	0x1ce4d00 /* FSP->HV: Normal power down */
 #define FSP_CMD_POWERDOWN_QUICK	0x1ce4d01 /* FSP->HV: Quick power down */
 #define FSP_CMD_POWERDOWN_PCIRS	0x1ce4d02 /* FSP->HV: PCI cfg reset power dwn */
@@ -440,12 +435,14 @@
 #define PSI_DMA_INBOUND_SIZE	0x00100000
 #define PSI_DMA_FETCH		0x00200000
 #define PSI_DMA_FETCH_SIZE	0x00800000
-#define PSI_DMA_OP_PANEL_MISC	0x00a00000
-#define PSI_DMA_OP_PANEL_SIZE	0x00001000
-#define PSI_DMA_NVRAM_TRIPL	0x00a01000
-#define PSI_DMA_NVRAM_TRIPL_SZ	0x00001000
-#define PSI_DMA_NVRAM_BODY	0x00b00000
+#define PSI_DMA_NVRAM_BODY	0x00a00000
 #define PSI_DMA_NVRAM_BODY_SZ	0x00100000
+#define PSI_DMA_NVRAM_TRIPL	0x00b00000
+#define PSI_DMA_NVRAM_TRIPL_SZ	0x00001000
+#define PSI_DMA_OP_PANEL_MISC	0x00b01000
+#define PSI_DMA_OP_PANEL_SIZE	0x00001000
+#define PSI_DMA_SYSPARAM	0x00b02000
+#define PSI_DMA_SYSPARAM_SIZE	0x00002000
 
 /*
  * Functions exposed to the rest of skiboot
