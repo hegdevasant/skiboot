@@ -16,8 +16,6 @@
 
 #define PCIA_MAX_THREADS	8
 
-#define for_each_pcia(p) for_each_ntuple(&spira.ntuples.pcia, p, "SPPCIA")
-
 static unsigned int pcia_index(const void *pcia)
 {
 	return (pcia - (void *)get_hdif(&spira.ntuples.pcia, "SPPCIA"))

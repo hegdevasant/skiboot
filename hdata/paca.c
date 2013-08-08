@@ -17,8 +17,6 @@
 
 #define PACA_MAX_THREADS 4
 
-#define for_each_paca(p) for_each_ntuple(&spira.ntuples.paca, p, PACA_HDIF_SIG)
-
 static unsigned int paca_index(const struct HDIF_common_hdr *paca)
 {
 	void *start = get_hdif(&spira.ntuples.paca, PACA_HDIF_SIG);

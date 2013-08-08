@@ -95,6 +95,10 @@ extern struct HDIF_common_hdr *__get_hdif(struct spira_ntuple *n,
 			be32_to_cpu((_ntuples)->alloc_len));		\
 	     _p = (void *)_p + be32_to_cpu((_ntuples)->alloc_len))
 
+#define for_each_paca(p) for_each_ntuple(&spira.ntuples.paca, p, PACA_HDIF_SIG)
+
+#define for_each_pcia(p) for_each_ntuple(&spira.ntuples.pcia, p, SPPCIA_HDIF_SIG)
+
 
 /* We override these for testing. */
 #ifndef ntuple_addr
