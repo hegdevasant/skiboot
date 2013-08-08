@@ -13,6 +13,7 @@ struct dt_node * add_core_common(struct dt_node *cpus,
 {
 	const char *name;
 	struct dt_node *cpu;
+	uint32_t version;
 
 	printf("    Cache: I=%u D=%u/%u/%u/%u\n",
 	       be32_to_cpu(cache->icache_size_kb),
@@ -27,22 +28,27 @@ struct dt_node * add_core_common(struct dt_node *cpus,
 	switch(PVR_TYPE(mfspr(SPR_PVR))) {
 	case PVR_TYPE_P7:
 		name = "PowerPC,POWER7";
+		version = 0x0f000003;
 		break;
 	case PVR_TYPE_P7P:
 		name = "PowerPC,POWER7+";
+		version = 0x0f000003;
 		break;
 	case PVR_TYPE_P8:
 		name = "PowerPC,POWER8";
+		version = 0x0f000004;
 		/* XXX Not really supported with PACA, use PCIA */
 		break;
 	default:
 		name = "PowerPC,Unknown";
+		version = 0x00000000;
 	}
 
 	cpu = dt_new_addr(cpus, name, int_server);
 	dt_add_property_string(cpu, "device_type", "cpu");
 	dt_add_property_string(cpu, "status", okay ? "okay" : "bad");
 	dt_add_property_cells(cpu, "reg", int_server);
+	dt_add_property_cells(cpu, "cpu-version", version);
 	dt_add_property(cpu, "64-bit", NULL, 0);
 	dt_add_property(cpu, "32-64-bridge", NULL, 0);
 	dt_add_property(cpu, "graphics", NULL, 0);
