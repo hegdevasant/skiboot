@@ -35,7 +35,7 @@ static struct dt_node *add_cpu_node(struct dt_node *cpus,
 	const struct sppaca_cpu_cache *cache;
 	const struct sppaca_cpu_attr *attr;
 	struct dt_node *cpu;
-	u32 no, size, ve_flags, l2_phandle;
+	u32 no, size, ve_flags, l2_phandle, chip_id;
 
 	/* We use the process_interrupt_line as the res id */
 	no = be32_to_cpu(id->process_interrupt_line);
@@ -79,13 +79,23 @@ static struct dt_node *add_cpu_node(struct dt_node *cpus,
 	/* We append the secondary cpus in __cpu_parse */
 	dt_add_property_cells(cpu, "ibm,ppc-interrupt-server#s", no);
 
+	/* Get HW Chip ID */
+	chip_id = pcid_to_chip_id(be32_to_cpu(id->processor_chip_id));
+
+	dt_add_property_cells(cpu, "ibm,associativity",
+			      be32_to_cpu(0x05),
+			      be32_to_cpu(id->ccm_node_id),
+			      be32_to_cpu(id->hw_card_id),
+			      be32_to_cpu(id->hardware_module_id),
+			      chip_id,
+			      be32_to_cpu(id->hardware_proc_id));
+
 	dt_add_property_cells(cpu, DT_PRIVATE "hw_proc_id",
 			      be32_to_cpu(id->hardware_proc_id));
 	dt_add_property_u64(cpu, DT_PRIVATE "ibase",
 			    cleanup_addr(be64_to_cpu(id->ibase)));
 	dt_add_property_cells(cpu, "ibm,pir", be32_to_cpu(id->pir));
-	dt_add_property_cells(cpu, "ibm,chip-id",
-			   pcid_to_chip_id(be32_to_cpu(id->processor_chip_id)));
+	dt_add_property_cells(cpu, "ibm,chip-id", chip_id);
 	return cpu;
 }
 

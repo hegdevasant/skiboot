@@ -90,7 +90,7 @@ static struct dt_node *add_core_node(struct dt_node *cpus,
 	const struct sppcia_cpu_attr *attr;
 	struct dt_node *cpu;
 	const char *icp_compat;
-	u32 i, size, threads, ve_flags, l2_phandle;
+	u32 i, size, threads, ve_flags, l2_phandle, chip_id;
 	__be32 iserv[PCIA_MAX_THREADS];
 
 	/* Look for thread 0 */
@@ -144,9 +144,11 @@ static struct dt_node *add_core_node(struct dt_node *cpus,
 	else
 		icp_compat = "IBM,power8-icp";
 
+	/* Get HW Chip ID */
+	chip_id = pcid_to_chip_id(be32_to_cpu(id->proc_chip_id));
+
 	dt_add_property_cells(cpu, "ibm,pir", be32_to_cpu(t->pir));
-	dt_add_property_cells(cpu, "ibm,chip-id",
-			      pcid_to_chip_id(be32_to_cpu(id->proc_chip_id)));
+	dt_add_property_cells(cpu, "ibm,chip-id", chip_id);
 
 	/* Add private "ibase" property used by other bits of skiboot */
 	dt_add_property_u64(cpu, DT_PRIVATE "ibase",
@@ -164,6 +166,14 @@ static struct dt_node *add_core_node(struct dt_node *cpus,
 	}
 
 	dt_add_property(cpu, "ibm,ppc-interrupt-server#s", iserv, 4 * threads);
+
+	dt_add_property_cells(cpu, "ibm,associativity",
+			      be32_to_cpu(0x05),
+			      be32_to_cpu(id->ccm_node_id),
+			      be32_to_cpu(id->hw_card_id),
+			      be32_to_cpu(id->hw_module_id),
+			      chip_id,
+			      be32_to_cpu(id->hw_proc_id));
 
 	/* Add the ICP node for this CPU */
 	add_icp(pcia, threads, icp_compat);
