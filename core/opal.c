@@ -95,6 +95,16 @@ static void add_opal_firmware_node(struct dt_node *opal)
 	dt_add_property_string(firmware, "git-id", gitid);
 }
 
+static void add_associativity_ref_point(struct dt_node *opal)
+{
+	/* XXX Hardcoding reference point to Processor Chip ID.
+	 * We should consider physical node boundary (CCM Node ID)
+	 * to support multi node system.
+	 */
+	dt_add_property_cells(opal, "ibm,associativity-reference-points",
+			      0x4, 0x4);
+}
+
 void add_opal_nodes(void)
 {
 	uint64_t base, entry, size;
@@ -126,6 +136,7 @@ void add_opal_nodes(void)
 	add_opal_nvram_node(opal);
 	add_opal_oppanel_node(opal);
 	add_opal_firmware_node(opal);
+	add_associativity_ref_point(opal);
 
 	if (fsp_present())
 		fsp_console_add_nodes(opal);
