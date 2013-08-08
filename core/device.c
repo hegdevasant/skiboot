@@ -698,11 +698,25 @@ u64 dt_translate_address(const struct dt_node *node, unsigned int index,
 	return dt_get_address(node, index, out_size);
 }
 
+static void add_arch_vector(struct dt_node *dt_chosen)
+{
+	/**
+	 * vec5 = a PVR-list : Number-of-option-vectors :
+	 *	  option-vectors[Number-of-option-vectors + 1]
+	 */
+	uint8_t vec5[] = {0x05, 0x00, 0x00, 0x00, 0x00, 0x80, 0x00};
+
+	dt_add_property(dt_chosen, "ibm,architecture-vec-5",
+			vec5, sizeof(vec5));
+}
+
 void dt_init_misc(void)
 {
 	/* Check if there's a /chosen node, if not, add one */
 	dt_chosen = dt_find_by_path(dt_root, "/chosen");
-	if (!dt_chosen)
+	if (!dt_chosen) {
 		dt_chosen = dt_new(dt_root, "chosen");
+		add_arch_vector(dt_chosen);
+	}
 	assert(dt_chosen);
 }
