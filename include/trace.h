@@ -11,7 +11,7 @@
 #include <lock.h>
 #include <trace_types.h>
 
-#define TBUF_SZ (64 * 1024)
+#define TBUF_SZ (16 * 1024)
 
 struct cpu_thread;
 

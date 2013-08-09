@@ -115,16 +115,16 @@
 #define FSP_INBOUND_BUFS	(SKIBOOT_BASE + 0x01300000)
 #define FSP_INBOUND_SIZE	0x00100000UL
 
-/* Tell FSP to put the init data at base + 20M, allocate 4M */
+/* Tell FSP to put the init data at base + 20M, allocate 8M */
 #define SPIRA_HEAP_BASE		(SKIBOOT_BASE + 0x01400000)
-#define SPIRA_HEAP_SIZE		0x00400000
+#define SPIRA_HEAP_SIZE		0x00800000
 
-/* This is our NVRAM image at base + 24M, it is set to be 1M in size */
-#define NVRAM_BASE		(SKIBOOT_BASE + 0x01800000)
+/* This is our NVRAM image at base + 28M, it is set to be 1M in size */
+#define NVRAM_BASE		(SKIBOOT_BASE + 0x01c00000)
 #define NVRAM_MAX_SIZE		0x00100000
 
 /* Total size of the above area */
-#define SKIBOOT_SIZE		0x01900000
+#define SKIBOOT_SIZE		0x01d00000
 
 /* We start laying out the CPU stacks from here, indexed by PIR
  * each stack is STACK_SIZE in size (naturally aligned power of
