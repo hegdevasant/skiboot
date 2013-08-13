@@ -597,7 +597,7 @@ static void fsp_handle_command(struct fsp_msg *msg)
 	/* We don't know whether the message expected some kind of
 	 * response, so we send one anyway
 	 */
-	fsp_queue_msg(fsp_mkmsg((cmd_sub_mod & 0xffff00) | 0x008000, 0),
+	fsp_queue_msg(fsp_mkmsg((cmd_sub_mod & 0xffff00) | 0x008020, 0),
 		      fsp_freemsg);
  free:
 	fsp_freemsg(msg);
