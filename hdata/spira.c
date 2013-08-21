@@ -362,6 +362,74 @@ static void add_chiptod_new(uint32_t master_cpu)
 	}
 }
 
+static void add_nx_node(u32 gcid)
+{
+	struct dt_node *nx;
+	const char *cp_str;
+	u32 addr;
+	u32 size;
+	struct dt_node *xscom;
+
+	xscom = find_xscom_for_chip(gcid);
+	if (xscom == NULL) {
+		prerror("NX%d: did not found xscom node.\n", gcid);
+		return;
+	}
+
+	/*
+	 * The NX register space is relatively self contained on P7+ but
+	 * a bit more messy on P8. However it's all contained within the
+	 * PB chiplet port 1 so we'll stick to that in the "reg" property
+	 * and let the NX "driver" deal with the details.
+	 */
+	addr = 0x2010000;
+	size = 0x0004000;
+
+	switch (cpu_type) {
+	case PVR_TYPE_P7:
+	case PVR_TYPE_P7P:
+		cp_str = "ibm,power7-nx";
+		break;
+	case PVR_TYPE_P8:
+		cp_str = "ibm,power8-nx";
+		break;
+	default:
+		return;
+	}
+	nx = dt_new_addr(xscom, "nx", addr);
+
+	dt_add_property_cells(nx, "reg", addr, size);
+	dt_add_property_strings(nx, "compatible", "ibm,power-nx", cp_str);
+}
+
+static void add_nx(void)
+{
+	unsigned int i;
+	void *hdif;
+
+	for_each_ntuple_idx(&spira.ntuples.proc_chip, hdif, i,
+			SPPCRD_HDIF_SIG) {
+		const struct sppcrd_chip_info *cinfo;
+		u32 ve;
+
+		cinfo = HDIF_get_idata(hdif, SPPCRD_IDATA_CHIP_INFO, NULL);
+		if (!CHECK_SPPTR(cinfo)) {
+			prerror("NX: Bad ChipID data %d\n", i);
+			continue;
+		}
+
+		ve = be32_to_cpu(cinfo->verif_exist_flags) & CHIP_VERIFY_MASK;
+		ve >>= CHIP_VERIFY_SHIFT;
+		if (ve == CHIP_VERIFY_NOT_INSTALLED ||
+				ve == CHIP_VERIFY_UNUSABLE)
+			continue;
+
+		if (cinfo->nx_state)
+			add_nx_node(be32_to_cpu(cinfo->xscom_id));
+	}
+}
+
+
 static void add_iplparams_sys_params(const void *iplp, struct dt_node *node)
 {
 	const struct iplparams_sysparams *p;
@@ -566,6 +634,9 @@ void parse_hdat(bool is_opal, uint32_t master_cpu)
 	/* Add ChipTOD's */
 	add_chiptod_old();
 	add_chiptod_new(master_cpu);
+
+	/* Add NX */
+	add_nx();
 
 	/* Add IO HUBs and/or PHBs */
 	io_parse(ics);

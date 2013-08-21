@@ -26,4 +26,17 @@ extern int xscom_readme(uint32_t pcb_addr, uint64_t *val);
 extern int xscom_writeme(uint32_t pcb_addr, uint64_t val);
 extern void xscom_init(void);
 
+/*
+ * Under some conditions, we want to synthetize an XSCOM address from
+ * a given ring/satellite/offset combination, use this macro:
+ *
+ *     Ring    Satelite     offset
+ *  +---------+---------+-------------+
+ *  |    4    |    4    |     6       |
+ *  +---------+---------+-------------+
+ */
+
+#define XSCOM_SAT(_r, _s, _o)	\
+	(((_r) << 10) | ((_s) << 6) | (_o))
+
 #endif /* __XSCOM_H */

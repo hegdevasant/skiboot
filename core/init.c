@@ -9,6 +9,7 @@
 #include <psi.h>
 #include <memory.h>
 #include <chiptod.h>
+#include <nx.h>
 #include <cpu.h>
 #include <processor.h>
 #include <xscom.h>
@@ -423,6 +424,9 @@ void main_cpu_entry(const void *fdt, u32 master_cpu)
 
 	/* Enable timebase synchronization */
 	chiptod_init(master_cpu);
+
+	/* NX init */
+	nx_init();
 
 	/* Read our initial RTC value */
 	fsp_rtc_init();
