@@ -48,7 +48,43 @@ void psi_enable_interrupt(struct psi *psi)
 
 static void handle_psi_interrupt(struct psi *psi __unused)
 {
-	/* TODO: Handle PSI interrupts */
+	/* TODO: Handle CEC PSI interrupts here */
+	DBG("PSI: PSI interrupt received\n");
+}
+
+/* TODO: Determine which of these needs to be handled by powernv */
+static void handle_p8_psi_interrupt(struct psi *psi)
+{
+	u64 val;
+
+	val = in_be64(psi->gxhb_regs + PSIHB_IRQ_STATUS);
+
+	/*
+	 * Decode interrupt type, call appropriate handlers
+	 * when available.
+	 *
+	 * Host error not handled here.
+	 */
+	switch ((val >> 33) & 0x0f) {
+	case 1:		/* Local error */
+		DBG("PSI: Local error received\n");
+		break;
+	case 2:		/* LPC */
+		DBG("PSI: LPC received\n");
+		break;
+	case 4:		/* FSI */
+		DBG("PSI: FSI received\n");
+		break;
+	case 8:		/* OCC */
+		DBG("PSI: OCC received\n");
+		break;
+	}
+
+	/*
+	 * TODO: Per Vicente Chung, CRESPs don't generate interrupts,
+	 * and are just informational. Need to define the policy
+	 * to handle them.
+	 */
 }
 
 static void psi_interrupt(void *data, uint32_t isn __unused)
@@ -61,6 +97,8 @@ static void psi_interrupt(void *data, uint32_t isn __unused)
 		fsp_interrupt();
 	else if (val & PSIHB_CR_PSI_IRQ) /* CEC PSI interrupt? */
 		handle_psi_interrupt(psi);
+	else if (proc_gen == proc_gen_p8) /* P8 additional interrupt? */
+		handle_p8_psi_interrupt(psi);
 	else
 		prerror("Received unknown interrupt!\n");
 
@@ -307,12 +345,16 @@ static int psi_init_phb(struct psi *psi)
 		out_be64(psi->gxhb_regs + PSIHB_XIVR_HOST_ERR,
 			 (0xffull << 32) | (5 << 29));
 
-		/* Register the IRQ sources.
+		/*
+		 * Register the IRQ sources FSP, OCC, FSI, LPC
+		 * and Local Error.
 		 *
-		 * XXX: We only handle the main FSP interrupt for now
+		 * XXX: Current assumption is that all these interrupts
+		 * will be handled in Sapphire. That could change in
+		 * the future when more clarity on them emerges.
 		 */
 		register_irq_source(&psi_p8_irq_ops,
-				    psi, psi->interrupt, 1);
+				    psi, psi->interrupt, 5);
 		break;
 	default:
 		/* Unknown: just no interrupts */
