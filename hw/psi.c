@@ -46,17 +46,23 @@ void psi_enable_interrupt(struct psi *psi)
 		 in_be64(psi->gxhb_regs + PSIHB_CR) | PSIHB_CR_FSP_IRQ_ENABLE);
 }
 
-static void psi_interrupt(void *data __unused, uint32_t isn __unused)
+static void handle_psi_interrupt(struct psi *psi __unused)
 {
-	/* XXX We should decode the chip, find the link, etc...
-	 *
-	 * then we should handle PSI interrupts (link errors etc...)
-	 * vs. mailbox interrupts
-	 *
-	 * For now, we just poll the active FSP & clear the status bits
-	 */
-	fsp_interrupt();
+	/* TODO: Handle PSI interrupts */
+}
 
+static void psi_interrupt(void *data, uint32_t isn __unused)
+{
+	struct psi *psi = data;
+	u64 val;
+
+	val = in_be64(psi->gxhb_regs + PSIHB_CR);
+	if (val & PSIHB_CR_FSP_IRQ) /* FSP mailbox interrupt? */
+		fsp_interrupt();
+	else if (val & PSIHB_CR_PSI_IRQ) /* CEC PSI interrupt? */
+		handle_psi_interrupt(psi);
+	else
+		prerror("Received unknown interrupt!\n");
 
 	/* Poll the console buffers on any interrupt since we don't
 	 * get send notifications
