@@ -190,6 +190,12 @@
  * and thus needs a block of 8
  */
 #define P8_IRQ_MISC_PSI_BASE		0x10	/* 0x10..0x17 */
+#define P8_IRQ_MISC_PSI			0x10
+#define P8_IRQ_MISC_OCC			0x11
+#define P8_IRQ_MISC_FSI			0x12
+#define P8_IRQ_MISC_LPC			0x13
+#define P8_IRQ_MISC_LOCAL_ERR		0x14
+#define P8_IRQ_MISC_HOST_ERR		0x15	/* Used for UART */
 
 /* TBD: NX, AS, ...
  */
