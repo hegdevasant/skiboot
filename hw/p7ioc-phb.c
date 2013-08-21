@@ -342,8 +342,36 @@ static int64_t p7ioc_sm_freset(struct p7ioc_phb *p)
 		}
 
 		if (p->retries-- == 0) {
-			PHBDBG(p, "Slot freset: timeout for link up\n");
-			goto error;
+			uint16_t val;
+
+			if (p->gen == 1) {
+				PHBDBG(p, "Slot freset: timeout for link up in Gen1 mode!\n");
+				goto error;
+			}
+
+			PHBDBG(p, "Slot freset: timeout for link up.\n");
+			PHBDBG(p, "Slot freset: fallback to Gen1.\n");
+			p->gen --;
+
+			/* Limit speed to 2.5G */
+			p7ioc_pcicfg_read16(&p->phb, 0,
+					p->ecap + PCICAP_EXP_LCTL2, &val);
+			val = SETFIELD(PCICAP_EXP_LCTL2_TLSPD, val, 1);
+			p7ioc_pcicfg_write16(&p->phb, 0,
+					p->ecap + PCICAP_EXP_LCTL2,
+					val);
+
+			/* Retrain */
+			p7ioc_pcicfg_read16(&p->phb, 0,
+					p->ecap + PCICAP_EXP_LCTL, &val);
+			p7ioc_pcicfg_write16(&p->phb, 0,
+					p->ecap + PCICAP_EXP_LCTL,
+					val | PCICAP_EXP_LCTL_LINK_RETRAIN);
+
+			/* Enter FRESET_WAIT_LINK, again */
+			p->state = P7IOC_PHB_STATE_FRESET_WAIT_LINK;
+			p->retries = 100;
+			return p7ioc_set_sm_timeout(p, msecs_to_tb(10));
 		}
 
 		return p7ioc_set_sm_timeout(p, msecs_to_tb(10));
@@ -2229,6 +2257,7 @@ void p7ioc_phb_setup(struct p7ioc *ioc, uint8_t index)
 
 	p->index = index;
 	p->ioc = ioc;
+	p->gen = 2;	/* Operate in Gen2 mode by default */
 	p->phb.ops = &p7ioc_phb_ops;
 	p->phb.phb_type = phb_type_pcie_v2;
 	p->regs_asb = ioc->regs + PHBn_ASB_BASE(index);
