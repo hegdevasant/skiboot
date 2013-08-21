@@ -287,7 +287,7 @@ static int psi_init_phb(struct psi *psi)
 		 */
 		out_be64(psi->gxhb_regs + PSIHB_IRQ_SRC_COMP,
 			 (((u64)psi->interrupt) << 45) |
-			 ((0xffff0ul) << 13) | (0x3ull << 32));
+			 ((0xffff0ul) << 16) | (0x3ull << 32));
 		out_be64(psi->gxhb_regs + PSIHB_XIVR_FSP,
 			 (0xffull << 32) | (0 << 29));
 		out_be64(psi->gxhb_regs + PSIHB_XIVR_OCC,
