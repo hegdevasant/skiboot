@@ -264,6 +264,11 @@ static const struct irq_source_ops psi_p8_irq_ops = {
 	.interrupt = psi_interrupt,
 };
 
+static const struct irq_source_ops psi_p8_host_err_ops = {
+	.get_xive = psi_p8_get_xive,
+	.set_xive = psi_p8_set_xive,
+};
+
 static void psi_tce_enable(struct psi *psi, bool enable)
 {
 	void *addr;
@@ -355,6 +360,13 @@ static int psi_init_phb(struct psi *psi)
 		 */
 		register_irq_source(&psi_p8_irq_ops,
 				    psi, psi->interrupt, 5);
+
+		/*
+		 * Host Error is handled by powernv; host error
+		 * is at offset 5 from the PSI base.
+		 */
+		register_irq_source(&psi_p8_host_err_ops,
+				    psi, (psi->interrupt + 5), 1);
 		break;
 	default:
 		/* Unknown: just no interrupts */
