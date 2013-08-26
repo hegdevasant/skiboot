@@ -51,7 +51,7 @@ static void slw_init_chip(struct proc_chip *chip)
 	}
 	printf("  Image at 0x%llx size %lldMB\n", base, size / 0x100000);
 
-	mem_reserve("ibn,slw-image", base, size);
+	mem_reserve("ibm,slw-image", base, size);
 }
 
 void slw_init(void)
