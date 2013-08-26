@@ -218,7 +218,12 @@
 #define FSP_MCLASS_DATA_COPY		0xe9
 #define FSP_MCLASS_TONE			0xea
 #define FSP_MCLASS_VIRTUAL_NVRAM	0xeb
-#define FSP_MCLASS_LAST			0xeb
+#define FSP_MCLASS_TORRENT		0xec
+#define FSP_MCLASS_NODE_PDOWN		0xed
+#define FSP_MCLASS_DIAG			0xee
+#define FSP_MCLASS_PCIE_LINK_TOPO	0xef
+#define FSP_MCLASS_OCC			0xf0
+#define FSP_MCLASS_LAST			0xf0
 
 /*
  * Commands are provided in rxxyyzz form where:
