@@ -25,10 +25,12 @@
 		       (unsigned long)(offset),			\
 		       (unsigned long)(value),			\
 		       in_be64(ioc->regs + (offset)));		\
+		in_be64(ioc->regs + (offset));			\
         } while(0)
 #else
 #define REGW(offset, value)     do {                            \
                 out_be64(ioc->regs + (offset), (value));        \
+		in_be64(ioc->regs + (offset));			\
         } while(0)
 #endif
 #define REGR(offset)	in_be64(ioc->regs + (offset))
@@ -72,6 +74,7 @@ static void p7ioc_init_BI(struct p7ioc *ioc)
         REGW(0x3c00c8, 0x0303060403030000);
         /* Init_4: Credit Init Timer */
         REGW(0x3c00e8, 0x00000000000000FF);
+
         /* Init_4.1: BI Ack Timing */
         REGW(0x3c00e8, 0x0000FC0000000000);
         /* Init_5: Ordering Override 0*/
@@ -247,6 +250,8 @@ static void p7ioc_init_MISC_HSS(struct p7ioc *ioc)
                 REGW(regbase + P7IOC_HSSn_CTL3_OFFSET, 0x1130000320000000);
                 /* Init_3: HSSn CTL8 */
                 REGW(regbase + P7IOC_HSSn_CTL8_OFFSET, 0xDDDDDDDD00000000);
+
+#if 0 /* All these remain set to the values configured by the FSP */
                 /* Init_4: HSSn CTL9 */
                 REGW(regbase + P7IOC_HSSn_CTL9_OFFSET, 0x9999999900000000);
                 /* Init_5: HSSn CTL10 */
@@ -277,26 +282,26 @@ static void p7ioc_init_MISC_HSS(struct p7ioc *ioc)
 		REGW(regbase + P7IOC_HSSn_CTL22_OFFSET, 0x8888888800000000);
                 /* Init_18: HSSn CTL23 */
 		REGW(regbase + P7IOC_HSSn_CTL23_OFFSET, 0x7777777700000000);
+#endif
 	}
 }
 
 static void p7ioc_init_RGC(struct p7ioc *ioc)
 {
 	unsigned int i;
-	uint64_t val;
+	uint64_t val, cfg;
 
 	printf("P7IOC: Init RGC...\n");
 
 	/*** Clear ERPT Macros ***/
 	
-	/* Init_1: RGC Configuration reg
-	 *
-	 * XXX NOTE: Supposed to only modify bit 1 of default (see doc)
-	 */
-	REGW(0x3e1c08, 0x50000077CE100000);
+	/* Init_1: RGC Configuration reg */
+	cfg = REGR(0x3e1c08);
+	REGW(0x3e1c08, cfg | PPC_BIT(1));
+	time_wait_ms(1);
 
 	/* Init_2: RGC Configuration reg */
-	REGW(0x3e1c08, 0x10000077CE100000);
+	REGW(0x3e1c08, cfg);
 
 	/*** Set LEM regs (needs to match recov. code) */
 
@@ -331,17 +336,16 @@ static void p7ioc_init_RGC(struct p7ioc *ioc)
 
 	/*** Set running configuration **/
 
-	/* Init_12: Configuration reg (modes, values, timers)
-	 *
-	 * XXX Note: Supposed to only modify bit 16:23
-	 */
+	/* Init_12: Configuration reg (modes, values, timers) */
 	REGW(0x3e1c08, 0x10000077CE100000);
+
 	/* Init_13: Cmd/Dat Crd Allocation */
 	REGW(0x3e1c20, 0x00000103000700FF);
 	/* Init_14: GP reg - disable errs, wrap, stop_trc */
 	REGW(0x3e1018, 0x0000000000000000);
 	/* Init_15: Configuration reg (start init timers) */
-	REGW(0x3e1c08, 0x10003F77CE100000);
+	cfg = REGR(0x3e1c08);
+	REGW(0x3e1c08, cfg | 0x00003f0000000000);
 
 	/*** Setup  interrupts ***/
 
