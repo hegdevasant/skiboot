@@ -12,7 +12,7 @@ static u32 fsp_surv_ack_pend_cnt;
 static u32 surv_state_param;
 static struct lock surv_lock = LOCK_UNLOCKED;
 
-static void fsp_surv_ack(struct fsp_msg *msg __unused)
+static void fsp_surv_ack(struct fsp_msg *msg)
 {
 	/*
 	 * We just reset the pending flag.
@@ -27,6 +27,8 @@ static void fsp_surv_ack(struct fsp_msg *msg __unused)
 	if (fsp_surv_ack_pend_cnt)
 		fsp_surv_ack_pend_cnt--;
 	unlock(&surv_lock);
+
+	fsp_freemsg(msg);
 }
 
 
@@ -53,11 +55,7 @@ static void fsp_surv_hbeat(void)
 		 * we will need to issue a host initiated reboot to FSP
 		 */
 		fsp_surv_ack_pend_cnt++;
-		surv_timer = now + secs_to_tb(110);
-
-		/* Handle the timer wrapping around */
-		if (tb_compare(surv_timer, secs_to_tb(110)) == TB_ABEFOREB)
-			surv_timer = secs_to_tb(110) - surv_timer;
+		surv_timer = now + secs_to_tb(60);
 	}
 }
 
