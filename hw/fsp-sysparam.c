@@ -120,7 +120,7 @@ int fsp_get_sys_param(uint32_t param_id, void *buffer, uint32_t length,
 	baddr = (uint64_t)buffer;
 	fsp_tce_map(PSI_DMA_SYSPARAM, (void *)(baddr & ~0xffful), 0x2000);
 	tce_token = PSI_DMA_SYSPARAM | (baddr & 0xfff);
-	fsp_fillmsg(&r->msg, FSP_CMD_SP_QUERY_SPARM, 3,
+	fsp_fillmsg(&r->msg, FSP_CMD_QUERY_SPARM, 3,
 		    param_id, length, tce_token);
 	rc = fsp_queue_msg(&r->msg, fsp_sysparam_get_complete);
 
@@ -134,4 +134,36 @@ int fsp_get_sys_param(uint32_t param_id, void *buffer, uint32_t length,
 
 	/* Will free the request */
 	return fsp_sysparam_process(r);
+}
+
+static bool fsp_sysparam_msg(u32 cmd_sub_mod, struct fsp_msg *msg)
+{
+	struct fsp_msg *rsp;
+	int rc;
+
+	switch(cmd_sub_mod) {
+	case FSP_CMD_SP_SPARM_UPD_0:
+	case FSP_CMD_SP_SPARM_UPD_1:
+		printf("FSP: Got sysparam update, param ID 0x%x\n",
+		       msg->data.words[0]);
+		rsp = fsp_mkmsg((cmd_sub_mod & 0xffff00) | 0x008000, 0);
+		rc = fsp_queue_msg(rsp, fsp_freemsg);
+		if (rc) {
+			prerror("FSP: Error %d queuing sysparam reply\n", rc);
+			/* What to do here ? R/R ? */
+			fsp_freemsg(rsp);
+		}
+		return true;
+	}
+	return false;
+}
+
+static struct fsp_client fsp_sysparam_client = {
+	.message = fsp_sysparam_msg,
+};
+
+void fsp_sysparam_init(void)
+{
+	/* Register change notifications */
+	fsp_register_client(&fsp_sysparam_client, FSP_MCLASS_SERVICE);
 }

@@ -29,4 +29,7 @@ typedef void (*sysparam_compl_t)(uint32_t param_id, int err_len, void *data);
 int fsp_get_sys_param(uint32_t param_id, void *buffer, uint32_t length,
 		      sysparam_compl_t async_complete, void *comp_data);
 
+
+void fsp_sysparam_init(void);
+
 #endif /*  __FSP_SYSPARAM_H */

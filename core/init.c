@@ -6,6 +6,7 @@
  * Supplement V032404DR-3 dated August 16, 2012 (the “NDA”). */
 #include <skiboot.h>
 #include <fsp.h>
+#include <fsp-sysparam.h>
 #include <psi.h>
 #include <memory.h>
 #include <chiptod.h>
@@ -395,6 +396,7 @@ void main_cpu_entry(const void *fdt, u32 master_cpu)
 
 	/* Early initializations of the FSP interface */
 	fsp_init();
+	fsp_sysparam_init();
 
 	/* Get ready to receive E0 class messages. We need to respond
 	 * to some of these for the init sequence to make forward progress
