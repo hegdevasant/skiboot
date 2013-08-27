@@ -142,12 +142,28 @@ static bool __chiptod_init(u32 master_cpu)
 
 static void chiptod_setup_base_tfmr(void)
 {
+	struct dt_node *cpu = this_cpu()->node;
+	uint64_t core_freq, tod_freq;
+	uint64_t mcbs;
+
 	base_tfmr = SPR_TFMR_TB_ECLIPZ;
 
-	/* XXX Those values need to be derived from the core freq
-	 *     I'm working on getting the right formula -- BenH
+	/* Get CPU and TOD freqs in Hz */
+	core_freq = dt_prop_get_u32(cpu, "clock-frequency");
+	tod_freq = 32000000;
+
+	/* Calculate the "Max Cycles Between Steps" value according
+	 * to the magic formula:
+	 *
+	 * mcbs = (core_freq * max_jitter_factor) / (4 * tod_freq) / 100;
+	 *
+	 * The max jitter factor is set to 240 based on what pHyp uses.
 	 */
-	base_tfmr = SETFIELD(SPR_TFMR_MAX_CYC_BET_STEPS, base_tfmr, 0x4b);
+	mcbs = (core_freq * 240) / (4 * tod_freq) / 100;
+	printf("CHIPTOD: Calculated MCBS is 0x%llx\n", mcbs);
+
+	/* Bake that all into TFMR */
+	base_tfmr = SETFIELD(SPR_TFMR_MAX_CYC_BET_STEPS, base_tfmr, mcbs);
 	base_tfmr = SETFIELD(SPR_TFMR_N_CLKS_PER_STEP, base_tfmr, 0);
 	base_tfmr = SETFIELD(SPR_TFMR_SYNC_BIT_SEL, base_tfmr, 4);
 }
