@@ -36,7 +36,7 @@ struct psi *psi_find_link(void *addr)
 	return NULL;
 }
 
-void psi_enable_interrupt(struct psi *psi)
+void psi_enable_fsp_interrupt(struct psi *psi)
 {
 	if (!psi->working)
 		return;

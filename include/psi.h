@@ -136,6 +136,6 @@ extern struct psi *psi_find_link(void *addr);
 
 /* Interrupts */
 extern void psi_irq_reset(void);
-extern void psi_enable_interrupt(struct psi *psi);
+extern void psi_enable_fsp_interrupt(struct psi *psi);
 
 #endif /* __PSI_H */

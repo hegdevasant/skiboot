@@ -1071,7 +1071,7 @@ static void fsp_create_fsp(struct dt_node *fsp_node)
 		fsp_init_mbox(fsp);
 		fiop = &fsp->iopath[fsp->active_iopath];
 		/* Enable interrupts in the PSI HB */
-		psi_enable_interrupt(fiop->psi);
+		psi_enable_fsp_interrupt(fiop->psi);
 	}
 
 	fsp->link = first_fsp;
