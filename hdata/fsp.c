@@ -96,8 +96,18 @@ struct dt_node *fsp_create_link(const struct spss_iopath *iopath, int index,
 
 	/* XXX Read PSI BAR to determine size ? */
 	dt_add_property_cells(node, "reg", hi32(addr), lo32(addr), 1, 0);
-	dt_add_property_strings(node, "compatible", "ibm,psi",
-				"ibm,power7-psi");
+	switch (proc_gen) {
+	case proc_gen_p7:
+		dt_add_property_strings(node, "compatible", "ibm,psi",
+					"ibm,power7-psi");
+		break;
+	case proc_gen_p8:
+		dt_add_property_strings(node, "compatible", "ibm,psi",
+					"ibm,power8-psi");
+		break;
+	default:
+		dt_add_property_strings(node, "compatible", "ibm,psi");
+	}
 	dt_add_property_cells(node, "interrupt-parent", get_ics_phandle());
 	dt_add_property_cells(node, "interrupts", get_psi_interrupt(chip_id));
 	dt_add_property_cells(node, "ibm,chip-id", chip_id);
