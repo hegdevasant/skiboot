@@ -2027,7 +2027,7 @@ static void phb3_add_properties(struct phb3 *p)
 {
 	struct dt_node *np = p->phb.dt_node;
 	uint32_t lsibase, icsp = get_ics_phandle();
-	uint64_t m32b, reg, tkill;
+	uint64_t m32b, m64b, reg, tkill;
 
 	reg = cleanup_addr((uint64_t)p->regs);
 
@@ -2055,12 +2055,17 @@ static void phb3_add_properties(struct phb3 *p)
 	 * get confused (OPAL does it)
 	 */
 	m32b = cleanup_addr(p->m32_base + PHB_M32_OFFSET);
+	m64b = cleanup_addr(p->m64_base);
 	dt_add_property_cells(np, "ranges",
 			      /* M32 space */
 			      0x02000000, 0x00000000, M32_PCI_START,
 			      hi32(m32b), lo32(m32b), 0, M32_PCI_SIZE - 0x10000);
 
-	/* XXX FIXME: add opal-memwin32, 64, dmawins, etc... */
+	/* XXX FIXME: add opal-memwin32, dmawins, etc... */
+	dt_add_property_cells(np, "ibm,opal-m64-window",
+			      hi32(m64b), lo32(m64b),
+			      hi32(m64b), lo32(m64b),
+			      hi32(PHB_M64_SIZE), lo32(PHB_M64_SIZE));
 	//dt_add_property_cells(np, "ibm,opal-msi-ports", 2048);
 	dt_add_property_cells(np, "ibm,opal-num-pes", 256);
 	dt_add_property_cells(np, "ibm,opal-msi-ranges",
