@@ -9,6 +9,7 @@
 #include <console.h>
 #include <opal.h>
 #include <device.h>
+#include <interrupts.h>
 
 /* UART reg defs */
 #define REG_RBR		0
@@ -118,6 +119,7 @@ void uart_init(void)
 	const struct dt_property *prop;
 	struct dt_node *n;
 	char *path __unused;
+	uint32_t irqchip, irq;
 
 	if (!lpc_present())
 		return;
@@ -143,6 +145,13 @@ void uart_init(void)
 		     dt_prop_get_u32(n, "clock-frequency"));
 
 	set_console(&uart_con_driver);
+
+	/* Setup the interrupts properties since HB couldn't do it */
+	irqchip = dt_prop_get_u32(n, "ibm,irq-chip-id");
+	irq = get_psi_interrupt(irqchip) + P8_IRQ_PSI_HOST_ERR;
+	printf("UART: IRQ connected to chip %d, irq# is 0x%x\n", irqchip, irq);
+	dt_add_property_cells(n, "interrupts", irq);
+	dt_add_property_cells(n, "interrupt-parent", get_ics_phandle());
 
 #ifdef ENABLE_DUMMY_CONSOLE
 	/*

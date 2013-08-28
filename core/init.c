@@ -365,7 +365,15 @@ static void dt_fixups(void)
 		 */
 		dt_add_property_strings(uart, "device_type", "serial");
 
-		/* XXX Add interrupt */
+		/*
+		 * Add interrupt. This simulates coming from HostBoot which
+		 * does not know our interrupt numbering scheme. Instead, it
+		 * just tells us which chip the interrupt is wired to, it will
+		 * be the PSI "host error" interrupt of that chip. For now we
+		 * assume the same chip as the LPC bus is on.
+		 */
+		dt_add_property_cells(uart, "ibm,irq-chip-id",
+				      dt_get_chip_id(primary_lpc));
 	}
 #endif /* ADD_SIMICS_LPC_UART */
 }
