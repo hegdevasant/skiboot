@@ -1773,16 +1773,19 @@ static void phb3_init_errors(struct phb3 *p)
 	out_be64(p->regs + PHB_ERR_STATUS_MASK,		   0x0000000000000000);
 	out_be64(p->regs + PHB_ERR1_STATUS_MASK,	   0x0000000000000000);
 
-	/* Init_98_106: Configure MMIO error traps & clear old state */
+	/* Init_98_106: Configure MMIO error traps & clear old state
+	 *
+	 * Don't enable BAR multi-hit detection
+	 */
 	out_be64(p->regs + PHB_OUT_ERR_STATUS,		   0xffffffffffffffff);
 	out_be64(p->regs + PHB_OUT_ERR1_STATUS,		   0x0000000000000000);
-	out_be64(p->regs + PHB_OUT_ERR_LEM_ENABLE,	   0xfdffffffffffffff);
+	out_be64(p->regs + PHB_OUT_ERR_LEM_ENABLE,	   0xfdffffffffAfffff);
 	out_be64(p->regs + PHB_OUT_ERR_FREEZE_ENABLE,	   0x0000420800000000);
-	out_be64(p->regs + PHB_OUT_ERR_AIB_FENCE_ENABLE,   0x9cf3bc00f8dc700f);
+	out_be64(p->regs + PHB_OUT_ERR_AIB_FENCE_ENABLE,   0x9cf3bc00f89c700f);
 	out_be64(p->regs + PHB_OUT_ERR_LOG_0,		   0x0000000000000000);
 	out_be64(p->regs + PHB_OUT_ERR_LOG_1,		   0x0000000000000000);
-	out_be64(p->regs + PHB_OUT_ERR_STATUS_MASK,	   0x0000000000000000);
-	out_be64(p->regs + PHB_OUT_ERR1_STATUS_MASK,	   0x0000000000000000);
+	out_be64(p->regs + PHB_OUT_ERR_STATUS_MASK,	   0x0000000000400000);
+	out_be64(p->regs + PHB_OUT_ERR1_STATUS_MASK,	   0x0000000000400000);
 
 	/* Init_107_115: Configure DMA_A error traps & clear old state */
 	out_be64(p->regs + PHB_INA_ERR_STATUS,		   0xffffffffffffffff);
