@@ -90,7 +90,9 @@ void unregister_irq_source(uint32_t start, uint32_t count)
 /*
  * This takes a 6-bit chip id and returns a 20 bit value representing
  * the PSI interrupt. This includes all the fields above, ie, is a
- * global interrupt number
+ * global interrupt number.
+ *
+ * For P8, this returns the base of the 8-interrupts block for PSI
  */
 uint32_t get_psi_interrupt(uint32_t chip_id)
 {

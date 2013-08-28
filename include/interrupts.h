@@ -190,12 +190,20 @@
  * and thus needs a block of 8
  */
 #define P8_IRQ_MISC_PSI_BASE		0x10	/* 0x10..0x17 */
-#define P8_IRQ_MISC_PSI			0x10
-#define P8_IRQ_MISC_OCC			0x11
-#define P8_IRQ_MISC_FSI			0x12
-#define P8_IRQ_MISC_LPC			0x13
-#define P8_IRQ_MISC_LOCAL_ERR		0x14
-#define P8_IRQ_MISC_HOST_ERR		0x15	/* Used for UART */
+
+/* These are handled by skiboot */
+#define P8_IRQ_PSI_SKIBOOT_BASE		0
+#define P8_IRQ_PSI_FSP			0
+#define P8_IRQ_PSI_OCC			1
+#define P8_IRQ_PSI_FSI			2
+#define P8_IRQ_PSI_LPC			3
+#define P8_IRQ_PSI_LOCAL_ERR		4
+#define P8_IRQ_PSI_SKIBOOT_COUNT	5
+
+/* These are passed onto Linux */
+#define P8_IRQ_PSI_LINUX_BASE		5
+#define P8_IRQ_PSI_HOST_ERR		5	/* Used for UART */
+#define P8_IRQ_PSI_LINUX_COUNT		5
 
 /* TBD: NX, AS, ...
  */

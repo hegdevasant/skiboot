@@ -53,7 +53,7 @@ static void handle_psi_interrupt(struct psi *psi __unused)
 }
 
 /* TODO: Determine which of these needs to be handled by powernv */
-static void handle_p8_psi_interrupt(struct psi *psi)
+static void handle_extra_interrupt(struct psi *psi)
 {
 	u64 val;
 
@@ -98,7 +98,7 @@ static void psi_interrupt(void *data, uint32_t isn __unused)
 	else if (val & PSIHB_CR_PSI_IRQ) /* CEC PSI interrupt? */
 		handle_psi_interrupt(psi);
 	else if (proc_gen == proc_gen_p8) /* P8 additional interrupt? */
-		handle_p8_psi_interrupt(psi);
+		handle_extra_interrupt(psi);
 	else
 		prerror("Received unknown interrupt!\n");
 
@@ -152,22 +152,22 @@ static int64_t psi_p8_set_xive(void *data, uint32_t isn,
 	uint64_t xivr_p, xivr;
 
 	switch(isn & 7) {
-	case 0:
+	case P8_IRQ_PSI_FSP:
 		xivr_p = PSIHB_XIVR_FSP;
 		break;
-	case 1:
+	case P8_IRQ_PSI_OCC:
 		xivr_p = PSIHB_XIVR_OCC;
 		break;
-	case 2:
+	case P8_IRQ_PSI_FSI:
 		xivr_p = PSIHB_XIVR_FSI;
 		break;
-	case 3:
+	case P8_IRQ_PSI_LPC:
 		xivr_p = PSIHB_XIVR_LPC;
 		break;
-	case 4:
+	case P8_IRQ_PSI_LOCAL_ERR:
 		xivr_p = PSIHB_XIVR_LOCAL_ERR;
 		break;
-	case 5:
+	case P8_IRQ_PSI_HOST_ERR:
 		xivr_p = PSIHB_XIVR_HOST_ERR;
 		break;
 	default:
@@ -191,22 +191,22 @@ static int64_t psi_p8_get_xive(void *data, uint32_t isn __unused,
 	uint64_t xivr_p, xivr;
 
 	switch(isn & 7) {
-	case 0:
+	case P8_IRQ_PSI_FSP:
 		xivr_p = PSIHB_XIVR_FSP;
 		break;
-	case 1:
+	case P8_IRQ_PSI_OCC:
 		xivr_p = PSIHB_XIVR_OCC;
 		break;
-	case 2:
+	case P8_IRQ_PSI_FSI:
 		xivr_p = PSIHB_XIVR_FSI;
 		break;
-	case 3:
+	case P8_IRQ_PSI_LPC:
 		xivr_p = PSIHB_XIVR_LPC;
 		break;
-	case 4:
+	case P8_IRQ_PSI_LOCAL_ERR:
 		xivr_p = PSIHB_XIVR_LOCAL_ERR;
 		break;
-	case 5:
+	case P8_IRQ_PSI_HOST_ERR:
 		xivr_p = PSIHB_XIVR_HOST_ERR;
 		break;
 	default:
@@ -336,19 +336,19 @@ static int psi_init_phb(struct psi *psi)
 		 */
 		out_be64(psi->gxhb_regs + PSIHB_IRQ_SRC_COMP,
 			 (((u64)psi->interrupt) << 45) |
-			 ((0xffff0ul) << 16) | (0x3ull << 32));
+			 ((0x7fff8ul) << 13) | (0x3ull << 32));
 		out_be64(psi->gxhb_regs + PSIHB_XIVR_FSP,
-			 (0xffull << 32) | (0 << 29));
+			 (0xffull << 32) | (P8_IRQ_PSI_FSP << 29));
 		out_be64(psi->gxhb_regs + PSIHB_XIVR_OCC,
-			 (0xffull << 32) | (1 << 29));
+			 (0xffull << 32) | (P8_IRQ_PSI_OCC << 29));
 		out_be64(psi->gxhb_regs + PSIHB_XIVR_FSI,
-			 (0xffull << 32) | (2 << 29));
+			 (0xffull << 32) | (P8_IRQ_PSI_FSI << 29));
 		out_be64(psi->gxhb_regs + PSIHB_XIVR_LPC,
-			 (0xffull << 32) | (3 << 29));
+			 (0xffull << 32) | (P8_IRQ_PSI_LPC << 29));
 		out_be64(psi->gxhb_regs + PSIHB_XIVR_LOCAL_ERR,
-			 (0xffull << 32) | (4 << 29));
+			 (0xffull << 32) | (P8_IRQ_PSI_LOCAL_ERR << 29));
 		out_be64(psi->gxhb_regs + PSIHB_XIVR_HOST_ERR,
-			 (0xffull << 32) | (5 << 29));
+			 (0xffull << 32) | (P8_IRQ_PSI_HOST_ERR << 29));
 
 		/*
 		 * Register the IRQ sources FSP, OCC, FSI, LPC
@@ -359,14 +359,18 @@ static int psi_init_phb(struct psi *psi)
 		 * the future when more clarity on them emerges.
 		 */
 		register_irq_source(&psi_p8_irq_ops,
-				    psi, psi->interrupt, 5);
+				    psi,
+				    psi->interrupt + P8_IRQ_PSI_SKIBOOT_BASE,
+				    P8_IRQ_PSI_SKIBOOT_COUNT);
 
 		/*
 		 * Host Error is handled by powernv; host error
 		 * is at offset 5 from the PSI base.
 		 */
 		register_irq_source(&psi_p8_host_err_ops,
-				    psi, (psi->interrupt + 5), 1);
+				    psi,
+				    psi->interrupt + P8_IRQ_PSI_LINUX_BASE,
+				    P8_IRQ_PSI_LINUX_COUNT);
 		break;
 	default:
 		/* Unknown: just no interrupts */
