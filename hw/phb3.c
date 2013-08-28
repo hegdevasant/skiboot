@@ -508,7 +508,7 @@ static int64_t phb3_map_pe_mmio_window(struct phb *phb,
 				       uint16_t segment_num)
 {
 	struct phb3 *p = phb_to_phb3(phb);
-	uint64_t tbl, index, *cache;
+	uint64_t data64, *cache;
 
 	if (pe_num >= PHB3_MAX_PE_NUM)
 		return OPAL_PARAMETER;
@@ -521,23 +521,36 @@ static int64_t phb3_map_pe_mmio_window(struct phb *phb,
 	 */
 	switch(window_type) {
 	case OPAL_IO_WINDOW_TYPE:
-	case OPAL_M64_WINDOW_TYPE:
 		return OPAL_UNSUPPORTED;
 	case OPAL_M32_WINDOW_TYPE:
 		if (window_num != 0 || segment_num >= PHB3_MAX_PE_NUM)
 			return OPAL_PARAMETER;
-		tbl = IODA2_TBL_M32DT;
-		index = segment_num;
-		cache = &p->m32d_cache[index];
+
+		cache = &p->m32d_cache[segment_num];
+		phb3_ioda_sel(p, IODA2_TBL_M32DT, segment_num, false);
+		out_be64(p->regs + PHB_IODA_DATA0,
+			 SETFIELD(IODA2_M32DT_PE, 0ull, pe_num));
+		*cache = SETFIELD(IODA2_M32DT_PE, 0ull, pe_num);
+
+		break;
+	case OPAL_M64_WINDOW_TYPE:
+		if (window_num >= 16)
+			return OPAL_PARAMETER;
+		cache = &p->m64b_cache[window_num];
+		data64 = *cache;
+
+		/* The BAR shouldn't be enabled yet */
+		if (data64 & IODA2_M64BT_ENABLE)
+			return OPAL_PARTIAL;
+
+		data64 = SETFIELD(IODA2_M64BT_PE_HI, data64, pe_num >> 5);
+		data64 = SETFIELD(IODA2_M64BT_PE_LOW, data64, pe_num);
+		*cache = data64;
+
 		break;
 	default:
 		return OPAL_PARAMETER;
 	}
-
-	phb3_ioda_sel(p, tbl, index, false);
-	out_be64(p->regs + PHB_IODA_DATA0,
-		 SETFIELD(IODA2_M32DT_PE, 0ull, pe_num));
-	*cache = SETFIELD(IODA2_M32DT_PE, 0ull, pe_num);
 
 	return OPAL_SUCCESS;
 }
