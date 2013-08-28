@@ -267,10 +267,46 @@ void load_and_boot_kernel(bool is_reboot)
 	start_kernel(kernel_entry, fdt, mem_top);
 }
 
-void dt_fixups(void)
+static void dt_fixup_psi(uint32_t chip_id)
+{
+	uint64_t psibar;
+	struct dt_node *node;
+
+	/* Read PSI BAR */
+	if (xscom_read(chip_id, 0x201090A, &psibar)) {
+		prerror("DT_FIXUP: Error reading PSI BAR\n");
+		return;
+	}
+	printf("DT_FIXUP: PSI on chip %d BAR: %llx\n", chip_id, psibar);
+	psibar &= ~1ull;
+
+	/* XXX Should check for valid bit ? */
+	node = dt_new_addr(dt_root, "psi", psibar);
+	dt_add_property_cells(node, "reg", hi32(psibar), lo32(psibar), 1, 0);
+	dt_add_property_strings(node, "compatible", "ibm,psi","ibm,power8-psi");
+	dt_add_property_cells(node, "interrupt-parent", get_ics_phandle());
+	dt_add_property_cells(node, "interrupts", get_psi_interrupt(chip_id));
+	dt_add_property_cells(node, "ibm,chip-id", chip_id);
+	dt_add_property_strings(node, "status", "ok");
+}
+
+static void dt_fixups(void)
 {
 	struct dt_node *n;
 	struct dt_node *primary_lpc = NULL;
+
+	/* Missing PSI bridges on P8 */
+	if (proc_gen == proc_gen_p8) {
+		struct proc_chip *chip;
+
+		for_each_chip(chip) {
+			n = dt_find_compatible_node_on_chip(dt_root, NULL,
+							    "ibm,psi",
+							    chip->id);
+			if (!n)
+				dt_fixup_psi(chip->id);
+		}
+	}
 
 	/* lpc node missing #address/size cells. Also pick one as
 	 * primary for now (TBD: How to convey that from HB)
@@ -372,9 +408,6 @@ void main_cpu_entry(const void *fdt, u32 master_cpu)
 	/* Put various bits & pieces in device-tree */
 	dt_init_misc();
 
-	/* Fix missing bits from device-tree */
-	dt_fixups();
-
 	/* Get out list of chips and allocate per-chip data */
 	init_chips();
 
@@ -386,6 +419,13 @@ void main_cpu_entry(const void *fdt, u32 master_cpu)
 
 	/* Initialize XSCOM */
 	xscom_init();
+
+	/*
+	 * Fix missing bits from device-tree. This is done after
+	 * xscom_init as we might need to use xscom to read some
+	 * BARs to setup the DT nodes appropriately
+	 */
+	dt_fixups();
 
 	/* Initialize PSI */
 	psi_init();
