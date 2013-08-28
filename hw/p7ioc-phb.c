@@ -1329,15 +1329,54 @@ static int64_t p7ioc_get_diag_data(struct phb *phb, void *diag_buffer,
 	return OPAL_SUCCESS;
 }
 
-static int64_t p7ioc_phb_mmio_enable(struct phb *phb __unused,
-				     uint16_t window_type __unused,
-				     uint16_t window_num __unused,
-				     uint16_t enable __unused)
+/*
+ * We can't enable or disable I/O and M32 dynamically, even
+ * unnecessary. So the function only support M64 BARs.
+ */
+static int64_t p7ioc_phb_mmio_enable(struct phb *phb,
+				     uint16_t window_type,
+				     uint16_t window_num,
+				     uint16_t enable)
 {
-	/* XXX We don't support that function yet, M32 is enabled by
-	 * default and that's it for now. Linux doesn't use it yet
+	struct p7ioc_phb *p = phb_to_p7ioc_phb(phb);
+	uint64_t data64, base, mask;
+
+	switch (window_type) {
+	case OPAL_IO_WINDOW_TYPE:
+	case OPAL_M32_WINDOW_TYPE:
+		return OPAL_UNSUPPORTED;
+	case OPAL_M64_WINDOW_TYPE:
+		if (window_num >= 16 ||
+		    enable >= OPAL_ENABLE_M64_NON_SPLIT)
+			return OPAL_PARAMETER;
+
+		break;
+	default:
+		return OPAL_PARAMETER;
+	}
+
+	/*
+	 * While enabling one specific M64 BAR, we should have
+	 * the base/size configured correctly. Otherwise, it
+	 * probably incurs fenced AIB.
 	 */
-	return OPAL_UNSUPPORTED;
+	data64 = p->m64b_cache[window_num];
+	if (enable == OPAL_ENABLE_M64_SPLIT) {
+		base = GETFIELD(IODA_M64BT_BASE, data64);
+		base = (base << 24);
+		mask = GETFIELD(IODA_M64BT_MASK, data64);
+		if (base < p->m64_base || mask == 0x0ul)
+			return OPAL_PARTIAL;
+
+		data64 |= IODA_M64BT_ENABLE;
+	} else if (enable == OPAL_DISABLE_M64) {
+		data64 &= ~IODA_M64BT_ENABLE;
+	}
+	p7ioc_phb_ioda_sel(p, IODA_TBL_M64BT, window_num, false);
+	out_be64(p->regs + PHB_IODA_DATA0, data64);
+	p->m64b_cache[window_num] = data64;
+
+	return OPAL_SUCCESS;
 }
 
 static int64_t p7ioc_set_phb_mem_window(struct phb *phb __unused,

@@ -305,6 +305,7 @@ struct p7ioc_phb {
 	uint64_t			tve_hi_cache[128];
 	uint64_t			iod_cache[128];
 	uint64_t			m32d_cache[128];
+	uint64_t			m64b_cache[16];
 	uint64_t			m64d_cache[128];
 	bool				err_pending;
 	struct p7ioc_err		err;

@@ -281,6 +281,12 @@ enum OpalMveEnableAction {
 	OPAL_ENABLE_MVE = 1
 };
 
+enum OpalM64Action {
+	OPAL_DISABLE_M64 = 0,
+	OPAL_ENABLE_M64_SPLIT = 1,
+	OPAL_ENABLE_M64_NON_SPLIT = 2
+};
+
 enum OpalPciResetAndReinitScope {
 	OPAL_PHB_COMPLETE		= 1,
 	OPAL_PCI_LINK			= 2,
