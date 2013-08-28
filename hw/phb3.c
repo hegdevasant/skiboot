@@ -411,8 +411,8 @@ static int64_t phb3_set_phb_mem_window(struct phb *phb,
 		return OPAL_PARAMETER;
 	}
 
-	data64 = SETFIELD(IODA2_M64BT_BASE_ADDR, 0x0ul, starting_pci_addr);
-	data64 = SETFIELD(IODA2_M64BT_ADDRMASK, data64, segment_size - 1);
+	data64 = SETFIELD(IODA2_M64BT_BASE, 0x0ul, starting_pci_addr);
+	data64 = SETFIELD(IODA2_M64BT_MASK, data64, segment_size - 1);
 	phb3_ioda_sel(p, tbl, index, false);
 	out_be64(p->regs + PHB_IODA_DATA0, data64);
 	*cache = data64;
@@ -420,13 +420,17 @@ static int64_t phb3_set_phb_mem_window(struct phb *phb,
 	return OPAL_SUCCESS;
 }
 
+/*
+ * For one specific M64 BAR, it can be shared by all PEs,
+ * or owned by single PE exclusively.
+ */
 static int64_t phb3_phb_mmio_enable(struct phb *phb,
 				    uint16_t window_type,
 				    uint16_t window_num,
 				    uint16_t enable)
 {
 	struct phb3 *p = phb_to_phb3(phb);
-	uint64_t tbl, index, data64, *cache;
+	uint64_t data64, base, mask;
 
 	/*
 	 * By design, PHB3 doesn't support IODT any more.
@@ -439,25 +443,50 @@ static int64_t phb3_phb_mmio_enable(struct phb *phb,
 	case OPAL_M32_WINDOW_TYPE:
 		return OPAL_UNSUPPORTED;
 	case OPAL_M64_WINDOW_TYPE:
-		if (window_num >= 16)
+		if (window_num >= 16 ||
+		    enable > OPAL_ENABLE_M64_NON_SPLIT)
 			return OPAL_PARAMETER;
-
-		tbl = IODA2_TBL_M64BT;
-		index = window_num;
-		cache = &p->m64d_cache[index];
 		break;
 	default:
 		return OPAL_PARAMETER;
 	}
 
-	phb3_ioda_sel(p, tbl, index, false);
-	data64 = in_be64(p->regs + PHB_IODA_DATA0);
-	if (enable)
-		data64 |= IODA2_M64BT_ENABLE;
-	else
+	/*
+	 * We need check the base/mask while enabling
+	 * the M64 BAR. Otherwise, invalid base/mask
+	 * might cause fenced AIB unintentionally
+	 */
+	data64 = p->m64d_cache[window_num];
+	switch (enable) {
+	case OPAL_DISABLE_M64:
 		data64 &= ~IODA2_M64BT_ENABLE;
-	*cache = data64;
+		break;
+	case OPAL_ENABLE_M64_SPLIT:
+		base = GETFIELD(IODA2_M64BT_BASE, data64);
+		base = (base << 20);
+		mask = GETFIELD(IODA2_M64BT_MASK, data64);
+		if (base < p->m64_base || !mask)
+			return OPAL_PARTIAL;
 
+		data64 &= ~IODA2_M64BT_SINGLE_PE;
+		data64 |= IODA2_M64BT_ENABLE;
+		break;
+	case OPAL_ENABLE_M64_NON_SPLIT:
+		base = GETFIELD(IODA2_M64BT_SINGLE_BASE, data64);
+		base = (base << 25);
+		mask = GETFIELD(IODA2_M64BT_SINGLE_MASK, data64);
+		if (base < p->m64_base || !mask)
+			return OPAL_PARTIAL;
+
+		data64 |= IODA2_M64BT_SINGLE_PE;
+		data64 |= IODA2_M64BT_ENABLE;
+		break;
+	}
+
+	/* Update HW and cache */
+	phb3_ioda_sel(p, IODA2_TBL_M64BT, window_num, false);
+	out_be64(p->regs + PHB_IODA_DATA0, data64);
+	p->m64d_cache[window_num] = data64;
 	return OPAL_SUCCESS;
 }
 
