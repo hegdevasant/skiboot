@@ -105,9 +105,9 @@ opal_call(OPAL_PCI_PHB_MMIO_ENABLE, opal_pci_phb_mmio_enable, 4);
 static int64_t opal_pci_set_phb_mem_window(uint64_t phb_id,
 					   uint16_t window_type,
 					   uint16_t window_num,
-					   uint64_t starting_real_address,
-					   uint64_t starting_pci_address,
-					   uint16_t segment_size)
+					   uint64_t addr,
+					   uint64_t pci_addr,
+					   uint64_t size)
 {
 	struct phb *phb = pci_get_phb(phb_id);
 	int64_t rc;
@@ -118,9 +118,7 @@ static int64_t opal_pci_set_phb_mem_window(uint64_t phb_id,
 		return OPAL_UNSUPPORTED;
 	phb->ops->lock(phb);
 	rc = phb->ops->set_phb_mem_window(phb, window_type, window_num,
-					  starting_real_address,
-					  starting_pci_address,
-					  segment_size);
+					  addr, pci_addr, size);
 	phb->ops->unlock(phb);
 	pci_put_phb(phb);
 

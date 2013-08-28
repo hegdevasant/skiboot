@@ -1330,6 +1330,55 @@ static int64_t p7ioc_get_diag_data(struct phb *phb, void *diag_buffer,
 }
 
 /*
+ * We don't support address remapping now since all M64
+ * BARs are sharing on remapping base address. We might
+ * introduce flag to the PHB in order to trace that. The
+ * flag allows to be changed for once. It's something to
+ * do in future.
+ */
+static int64_t p7ioc_set_phb_mem_window(struct phb *phb,
+                                        uint16_t window_type,
+                                        uint16_t window_num,
+                                        uint64_t base,
+                                        uint64_t __unused pci_base,
+                                        uint64_t size)
+{
+	struct p7ioc_phb *p = phb_to_p7ioc_phb(phb);
+	uint64_t data64;
+
+	switch (window_type) {
+	case OPAL_IO_WINDOW_TYPE:
+	case OPAL_M32_WINDOW_TYPE:
+		return OPAL_UNSUPPORTED;
+	case OPAL_M64_WINDOW_TYPE:
+		if (window_num >= 16)
+			return OPAL_PARAMETER;
+		/* The base and size should be 16MB aligned */
+		if (base & 0xFFFFFF || size & 0xFFFFFF)
+			return OPAL_PARAMETER;
+		data64 = p->m64b_cache[window_num];
+		data64 = SETFIELD(IODA_M64BT_BASE, data64, base >> 24);
+		size = (size >> 24);
+		data64 = SETFIELD(IODA_M64BT_MASK, data64, 0x1000000 - size);
+		break;
+	default:
+		return OPAL_PARAMETER;
+	}
+
+	/*
+	 * If the M64 BAR hasn't enabled yet, we needn't flush
+	 * the setting to hardware and just keep it to the cache
+	 */
+	p->m64b_cache[window_num] = data64;
+	if (!(data64 & IODA_M64BT_ENABLE))
+		return OPAL_SUCCESS;
+	p7ioc_phb_ioda_sel(p, IODA_TBL_M64BT, window_num, false);
+	out_be64(p->regs + PHB_IODA_DATA0, data64);
+
+	return OPAL_SUCCESS;
+}
+
+/*
  * We can't enable or disable I/O and M32 dynamically, even
  * unnecessary. So the function only support M64 BARs.
  */
@@ -1377,19 +1426,6 @@ static int64_t p7ioc_phb_mmio_enable(struct phb *phb,
 	p->m64b_cache[window_num] = data64;
 
 	return OPAL_SUCCESS;
-}
-
-static int64_t p7ioc_set_phb_mem_window(struct phb *phb __unused,
-					uint16_t window_type __unused,
-					uint16_t window_num __unused,
-					uint64_t starting_real_addr  __unused,
-					uint64_t starting_pci_addr  __unused,
-					uint16_t segment_size __unused)
-{
-	/* XXX We don't support that function yet, M32 is pre-configured
-	 * by default and that's it for now. Linux doesn't use it yet
-	 */
-	return OPAL_UNSUPPORTED;
 }
 
 static int64_t p7ioc_map_pe_mmio_window(struct phb *phb, uint16_t pe_number,

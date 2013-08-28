@@ -144,10 +144,8 @@ struct phb_ops {
 				   uint16_t window_num, uint16_t enable);
 
 	int64_t (*set_phb_mem_window)(struct phb *phb, uint16_t window_type,
-				      uint16_t window_num,
-				      uint64_t starting_real_address,
-				      uint64_t starting_pci_address,
-				      uint16_t segment_size);
+				      uint16_t window_num, uint64_t addr,
+				      uint64_t pci_addr, uint64_t size);
 
 	int64_t (*map_pe_mmio_window)(struct phb *phb, uint16_t pe_number,
 				      uint16_t window_type, uint16_t window_num,
