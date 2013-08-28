@@ -250,7 +250,7 @@ struct phb3 {
 	uint64_t		ive_cache[IVT_TABLE_ENTRIES];
 	uint64_t		tve_cache[512];
 	uint64_t		m32d_cache[256];
-	uint64_t		m64d_cache[16];
+	uint64_t		m64b_cache[16];
 
 	struct phb		phb;
 };

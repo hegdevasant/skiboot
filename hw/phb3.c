@@ -283,7 +283,7 @@ static void phb3_init_ioda_cache(struct phb3 *p)
 	/* Clear M32 domain */
 	memset(p->m32d_cache, 0x0, sizeof(p->m32d_cache));
 	/* Clear M64 domain */
-	memset(p->m64d_cache, 0x0, sizeof(p->m64d_cache));
+	memset(p->m64b_cache, 0x0, sizeof(p->m64b_cache));
 }
 
 /* phb3_ioda_reset - Reset the IODA tables
@@ -331,8 +331,8 @@ static int64_t phb3_ioda_reset(struct phb *phb, bool purge)
 
 	/* Init_33..34 - M64BT */
 	phb3_ioda_sel(p, IODA2_TBL_M64BT, 0, true);
-	for (i = 0; i < ARRAY_SIZE(p->m64d_cache); i++)
-		out_be64(p->regs + PHB_IODA_DATA0, p->m64d_cache[i]);
+	for (i = 0; i < ARRAY_SIZE(p->m64b_cache); i++)
+		out_be64(p->regs + PHB_IODA_DATA0, p->m64b_cache[i]);
 
 	/* Init_35..36 - M32DT */
 	phb3_ioda_sel(p, IODA2_TBL_M32DT, 0, true);
@@ -378,12 +378,12 @@ static int64_t phb3_ioda_reset(struct phb *phb, bool purge)
 static int64_t phb3_set_phb_mem_window(struct phb *phb,
 				       uint16_t window_type,
 				       uint16_t window_num,
-				       uint64_t __unused starting_real_addr,
-				       uint64_t starting_pci_addr,
-				       uint16_t segment_size)
+				       uint64_t addr,
+				       uint64_t __unused pci_addr,
+				       uint64_t size)
 {
 	struct phb3 *p = phb_to_phb3(phb);
-	uint64_t tbl, index, data64, *cache;
+	uint64_t data64;
 
 	/*
 	 * By design, PHB3 doesn't support IODT any more.
@@ -398,24 +398,35 @@ static int64_t phb3_set_phb_mem_window(struct phb *phb,
 	case OPAL_M64_WINDOW_TYPE:
 		if (window_num >= 16)
 			return OPAL_PARAMETER;
-		if ((starting_pci_addr & 0xffffful) ||
-		    (segment_size & 0xffffful))
-			return OPAL_PARAMETER;
 
-		tbl = IODA2_TBL_M64BT;
-		index = window_num;
-		segment_size *= PHB3_MAX_PE_NUM;
-		cache = &p->m64d_cache[index];
+		data64 = p->m64b_cache[window_num];
+		if (data64 & IODA2_M64BT_SINGLE_PE) {
+			if ((addr & 0x1FFFFFFul) ||
+			    (size & 0x1FFFFFFul))
+				return OPAL_PARAMETER;
+		} else {
+			if ((addr & 0xFFFFFul) ||
+			    (size & 0xFFFFFul))
+				return OPAL_PARAMETER;
+		}
+
 		break;
 	default:
 		return OPAL_PARAMETER;
 	}
 
-	data64 = SETFIELD(IODA2_M64BT_BASE, 0x0ul, starting_pci_addr);
-	data64 = SETFIELD(IODA2_M64BT_MASK, data64, segment_size - 1);
-	phb3_ioda_sel(p, tbl, index, false);
-	out_be64(p->regs + PHB_IODA_DATA0, data64);
-	*cache = data64;
+	if (data64 & IODA2_M64BT_SINGLE_PE) {
+		data64 = SETFIELD(IODA2_M64BT_SINGLE_BASE, data64,
+				  addr >> 25);
+		data64 = SETFIELD(IODA2_M64BT_SINGLE_MASK, data64,
+				  0x10000000 - (size >> 25));
+	} else {
+		data64 = SETFIELD(IODA2_M64BT_BASE, data64,
+				  addr >> 20);
+		data64 = SETFIELD(IODA2_M64BT_MASK, data64,
+				  0x10000000 - (size >> 20));
+	}
+	p->m64b_cache[window_num] = data64;
 
 	return OPAL_SUCCESS;
 }
@@ -456,7 +467,7 @@ static int64_t phb3_phb_mmio_enable(struct phb *phb,
 	 * the M64 BAR. Otherwise, invalid base/mask
 	 * might cause fenced AIB unintentionally
 	 */
-	data64 = p->m64d_cache[window_num];
+	data64 = p->m64b_cache[window_num];
 	switch (enable) {
 	case OPAL_DISABLE_M64:
 		data64 &= ~IODA2_M64BT_ENABLE;
@@ -486,7 +497,7 @@ static int64_t phb3_phb_mmio_enable(struct phb *phb,
 	/* Update HW and cache */
 	phb3_ioda_sel(p, IODA2_TBL_M64BT, window_num, false);
 	out_be64(p->regs + PHB_IODA_DATA0, data64);
-	p->m64d_cache[window_num] = data64;
+	p->m64b_cache[window_num] = data64;
 	return OPAL_SUCCESS;
 }
 
