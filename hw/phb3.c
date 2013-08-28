@@ -1527,7 +1527,7 @@ static void phb3_init_ioda2(struct phb3 *p)
 		 p->tbl_rba | PHB_RBA_BAR_ENABLE);
 
 	/* Init_18..21 - Setup M32 */
-	out_be64(p->regs + PHB_M32_BASE_ADDR, p->mm_base + M32_PCI_START);
+	out_be64(p->regs + PHB_M32_BASE_ADDR, p->m32_base);
 	out_be64(p->regs + PHB_M32_BASE_MASK, ~(M32_PCI_SIZE - 1));
 	out_be64(p->regs + PHB_M32_START_ADDR, M32_PCI_START);
 
@@ -2001,7 +2001,7 @@ static void phb3_add_properties(struct phb3 *p)
 	 * M32 size (for the 32-bit MSIs). If we don't do that, it will
 	 * get confused (OPAL does it)
 	 */
-	m32b = cleanup_addr(p->mm_base + PHB_M32_OFFSET + M32_PCI_START);
+	m32b = cleanup_addr(p->m32_base + PHB_M32_OFFSET);
 	dt_add_property_cells(np, "ranges",
 			      /* M32 space */
 			      0x02000000, 0x00000000, M32_PCI_START,
@@ -2071,6 +2071,8 @@ static void phb3_create(struct dt_node *np)
 	prop = dt_require_property(np, "ibm,mmio-window", 2 * sizeof(uint64_t));
 	p->mm_base = ((uint64_t *)prop->prop)[0];
 	p->mm_size = ((uint64_t *)prop->prop)[1];
+	p->m32_base = p->mm_base + M32_PCI_START;
+	p->m64_base = p->mm_base + PHB_M64_OFFSET;
 
 	/* Get the various XSCOM register bases from the device-tree */
 	prop = dt_require_property(np, "ibm,xscom-bases", 3 * sizeof(uint32_t));
@@ -2094,6 +2096,10 @@ static void phb3_create(struct dt_node *np)
 	path = dt_get_path(np);
 	printf("PHB3: Found %s @%p MMIO [0x%016llx..0x%016llx]\n",
 	       path, p->regs, p->mm_base, p->mm_base + p->mm_size - 1);
+	printf("      M32 [0x%016llx..0x%016llx]\n",
+	       p->m32_base, p->m32_base + M32_PCI_SIZE - 1);
+	printf("      M64 [0x%016llx..0x%016llx]\n",
+	       p->m64_base, p->m64_base + PHB_M64_SIZE - 1);
 	free(path);
 
 	/* Allocate the SkiBoot internal in-memory tables for the PHB */

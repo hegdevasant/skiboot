@@ -29,6 +29,8 @@
 #define PHB_M32_SIZE	0x100000000ul	/* Size of this area (whole 4G) */
 #define M32_PCI_START	0x080000000	/* Offset of the actual M32 window */
 #define M32_PCI_SIZE	0x080000000	/* Size of the actual M32 window */
+#define PHB_M64_OFFSET	0x800000000ul	/* M64 window offset in the giant one */
+#define PHB_M64_SIZE	0x800000000ul	/* Size of M64 window (32GB) */
 
 /*
  * Interrupt map.
@@ -221,6 +223,8 @@ struct phb3 {
 	struct lock		lock;
 	uint64_t		mm_base;    /* Full MM window to PHB */
 	uint64_t		mm_size;    /* '' '' '' */
+	uint64_t		m32_base;
+	uint64_t		m64_base;
 	uint32_t		base_msi;
 	uint32_t		base_lsi;
 
