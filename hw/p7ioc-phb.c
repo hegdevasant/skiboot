@@ -1848,6 +1848,8 @@ static void p7ioc_phb_init_ioda_cache(struct p7ioc_phb *p)
 		p->mxive_cache[i] = SETFIELD(IODA_XIVT_PRIORITY, 0ull, 0xff);
 		p->mve_cache[i]   = 0;
 	}
+	for (i = 0; i < 16; i++)
+		p->m64b_cache[i] = 0;
 	for (i = 0; i < 127; i++) {
 		p->peltm_cache[i]	= 0;
 		p->peltv_lo_cache[i]	= 0;
@@ -2007,10 +2009,16 @@ static int64_t p7ioc_ioda_reset(struct phb *phb, bool purge)
 	}
 
 	/* Init_40..41: Cleanup the M64DT */
+	p7ioc_phb_ioda_sel(p, IODA_TBL_M64BT, 0, true);
+	for (i = 0; i < 16; i++) {
+		data64 = p->m64b_cache[i];
+		out_be64(p->regs + PHB_IODA_DATA0, data64);
+	}
+
 	p7ioc_phb_ioda_sel(p, IODA_TBL_M64DT, 0, true);
 	for (i = 0; i < 127; i++) {
 		data64 = p->m64d_cache[i];
-		out_be64(p->regs + PHB_IODA_DATA0, 0);
+		out_be64(p->regs + PHB_IODA_DATA0, data64);
 	}
 
 	/* Clear up the TCE cache */
