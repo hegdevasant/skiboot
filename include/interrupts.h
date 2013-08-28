@@ -203,7 +203,7 @@
 /* These are passed onto Linux */
 #define P8_IRQ_PSI_LINUX_BASE		5
 #define P8_IRQ_PSI_HOST_ERR		5	/* Used for UART */
-#define P8_IRQ_PSI_LINUX_COUNT		5
+#define P8_IRQ_PSI_LINUX_COUNT		1
 
 /* TBD: NX, AS, ...
  */
