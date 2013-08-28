@@ -2265,7 +2265,7 @@ static const struct irq_source_ops p7ioc_phb_err_irq_ops = {
 static void p7ioc_pcie_add_node(struct p7ioc_phb *p)
 {
 
-	uint64_t reg[2], m32b, iob, tkill;
+	uint64_t reg[2], iob, m32b, m64b, tkill;
 	uint32_t lsibase, icsp = get_ics_phandle();
 	struct dt_node *np;
 
@@ -2303,7 +2303,12 @@ static void p7ioc_pcie_add_node(struct p7ioc_phb *p)
 			      0x02000000, 0x00000000, M32_PCI_START,
 			      hi32(m32b), lo32(m32b), 0,M32_PCI_SIZE - 0x10000);
 
-	/* XXX FIXME: add opal-memwin32, 64, dmawins, etc... */
+	/* XXX FIXME: add opal-memwin32, dmawins, etc... */
+	m64b = cleanup_addr(p->m64_base);
+	dt_add_property_cells(np, "ibm,opal-m64-window",
+			      hi32(m64b), lo32(m64b),
+			      hi32(m64b), lo32(m64b),
+			      hi32(PHB_M64_SIZE), lo32(PHB_M64_SIZE));
 	dt_add_property_cells(np, "ibm,opal-msi-ports", 256);
 	dt_add_property_cells(np, "ibm,opal-num-pes", 128);
 	dt_add_property_cells(np, "ibm,opal-msi-ranges",
