@@ -278,9 +278,12 @@ static void dt_fixup_psi(uint32_t chip_id)
 		return;
 	}
 	printf("DT_FIXUP: PSI on chip %d BAR: %llx\n", chip_id, psibar);
-	psibar &= ~1ull;
 
-	/* XXX Should check for valid bit ? */
+	/* Don't create a node for an uninitialized PSI BAR */
+	if ((psibar & 1) == 0)
+		return;
+
+	psibar &= ~1ull;
 	node = dt_new_addr(dt_root, "psi", psibar);
 	dt_add_property_cells(node, "reg", hi32(psibar), lo32(psibar), 1, 0);
 	dt_add_property_strings(node, "compatible", "ibm,psi","ibm,power8-psi");
