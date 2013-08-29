@@ -108,6 +108,7 @@ static void add_xscom_node(uint64_t base, uint32_t id)
 	dt_add_property_cells(node, "ibm,chip-id", id);
 	dt_add_property_cells(node, "#address-cells", 1);
 	dt_add_property_cells(node, "#size-cells", 1);
+	dt_add_property(node, "scom-controller", NULL, 0);
 
 	/* XXX Use boot CPU PVR to decide on XSCOM type... */
 	switch(cpu_type) {

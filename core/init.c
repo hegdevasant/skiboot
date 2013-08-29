@@ -379,6 +379,12 @@ static void dt_fixups(void)
 				      dt_get_chip_id(primary_lpc));
 	}
 #endif /* ADD_SIMICS_LPC_UART */
+
+	/* Missing "scom-controller" */
+	dt_for_each_compatible(dt_root, n, "ibm,xscom") {
+		if (!dt_has_node_property(n, "scom-controller", NULL))
+			dt_add_property(n, "scom-controller", NULL, 0);
+	}
 }
 
 void main_cpu_entry(const void *fdt, u32 master_cpu)
