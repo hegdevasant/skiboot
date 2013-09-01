@@ -1420,7 +1420,9 @@ static int64_t p7ioc_phb_mmio_enable(struct phb *phb,
 		data64 |= IODA_M64BT_ENABLE;
 	} else if (enable == OPAL_DISABLE_M64) {
 		data64 &= ~IODA_M64BT_ENABLE;
-	}
+	} else
+		return OPAL_PARAMETER;
+
 	p7ioc_phb_ioda_sel(p, IODA_TBL_M64BT, window_num, false);
 	out_be64(p->regs + PHB_IODA_DATA0, data64);
 	p->m64b_cache[window_num] = data64;
