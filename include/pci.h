@@ -113,6 +113,14 @@ struct phb_ops {
 	uint8_t (*choose_bus)(struct phb *phb, struct pci_device *bridge,
 			      uint8_t candidate, uint8_t *max_bus,
 			      bool *use_max);
+
+	/*
+	 * Device init method is called after a device has been detected
+	 * and before probing further. It can alter things like scan_map
+	 * for bridge ports etc...
+	 */
+	void (*device_init)(struct phb *phb, struct pci_device *device);
+
 	/*
 	 * EEH methods
 	 *

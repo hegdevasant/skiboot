@@ -158,6 +158,12 @@ static struct pci_device *pci_scan_one(struct phb *phb, uint16_t bdfn)
 	       bdfn, vdid & 0xffff, vdid >> 16, pd->is_multifunction,
 	       pd->is_bridge, pd->is_pcie, pd->dev_type);
 
+	/*
+	 * Call PHB hook
+	 */
+	if (phb->ops->device_init)
+		phb->ops->device_init(phb, pd);
+
 	return pd;
  fail:
 	if (pd)
