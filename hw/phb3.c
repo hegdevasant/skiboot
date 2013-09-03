@@ -1827,12 +1827,12 @@ static void phb3_init_utl(struct phb3 *p)
 
 	/* Init_83..85: Clean & setup port errors */
 	out_be64(p->regs + UTL_PCIE_PORT_STATUS,           0xffdfffffffffffff);
-	out_be64(p->regs + UTL_PCIE_PORT_ERROR_SEV,        0x5289500000000000);
+	out_be64(p->regs + UTL_PCIE_PORT_ERROR_SEV,        0x5021000000000000);
 
 	if (p->has_link)
-		out_be64(p->regs + UTL_PCIE_PORT_IRQ_EN,   0xffdbf80000000000);
+		out_be64(p->regs + UTL_PCIE_PORT_IRQ_EN,   0xffdb800000000000);
 	else
-		out_be64(p->regs + UTL_PCIE_PORT_IRQ_EN,   0xffc3f80000000000);
+		out_be64(p->regs + UTL_PCIE_PORT_IRQ_EN,   0xffc3800000000000);
 
 	/* Init_86 : Cleanup RC errors */
 	out_be64(p->regs + UTL_RC_STATUS,                  0xffffffffffffffff);
@@ -2016,10 +2016,10 @@ static void phb3_init_hw(struct phb3 *p)
 	out_be64(p->regs + PHB_TCE_SPEC_CTL,		   0xf000000000000000);
 
 	/* Init_142 - PHB3 - Timeout Control Register 1 */
-	out_be64(p->regs + PHB_TIMEOUT_CTRL1,		   0x1111112016200000);
+	out_be64(p->regs + PHB_TIMEOUT_CTRL1,		   0x1313132016200000);
 
 	/* Init_143 - PHB3 - Timeout Control Register 2 */
-	out_be64(p->regs + PHB_TIMEOUT_CTRL2,		   0x2320d10b00000000);
+	out_be64(p->regs + PHB_TIMEOUT_CTRL2,		   0x2320d30b00000000);
 
 	/* Mark the PHB as functional which enables all the various sequences */
 	p->state = PHB3_STATE_FUNCTIONAL;
