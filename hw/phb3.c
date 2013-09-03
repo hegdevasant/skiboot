@@ -1856,11 +1856,11 @@ static void phb3_init_errors(struct phb3 *p)
 
 	/* Init_98_106: Configure MMIO error traps & clear old state
 	 *
-	 * Don't enable BAR multi-hit detection
+	 * Don't enable BAR multi-hit detection in bit 41.
 	 */
 	out_be64(p->regs + PHB_OUT_ERR_STATUS,		   0xffffffffffffffff);
 	out_be64(p->regs + PHB_OUT_ERR1_STATUS,		   0x0000000000000000);
-	out_be64(p->regs + PHB_OUT_ERR_LEM_ENABLE,	   0xfdffffffffAfffff);
+	out_be64(p->regs + PHB_OUT_ERR_LEM_ENABLE,	   0xfdffffffffbfffff);
 	out_be64(p->regs + PHB_OUT_ERR_FREEZE_ENABLE,	   0x0000420800000000);
 	out_be64(p->regs + PHB_OUT_ERR_AIB_FENCE_ENABLE,   0x9cf3bc00f89c700f);
 	out_be64(p->regs + PHB_OUT_ERR_LOG_0,		   0x0000000000000000);
