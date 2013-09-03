@@ -193,6 +193,33 @@ static uint8_t phb3_choose_bus(struct phb *phb __unused,
 	return candidate;
 }
 
+static void phb3_device_init(struct phb *phb, struct pci_device *dev)
+{
+	struct phb3 *p = phb_to_phb3(phb);
+	int64_t aercap;
+
+	/* Nothing to do for RC */
+	if (dev->bdfn == 0)
+		return;
+
+	/* Nothing to do for Murano DD2.0 and later */
+	if (p->rev >= PHB3_REV_MURANO_DD20)
+		return;
+
+	/*
+	 * On Murano and Venice DD1.0 we disable emission of corrected
+	 * error messages to the PHB completely to workaround errata
+	 * HW257476 causing the loss of tags. Additionally we turn them
+	 * into ER freezes (in case Linux re-enables them) in
+	 * phb3_init_errors()
+	 */
+	aercap = pci_find_ecap(phb, dev->bdfn, PCIECAP_ID_AER, NULL);
+	if (aercap < 0)
+		return;
+	phb3_pcicfg_write32(phb, dev->bdfn, aercap + PCIECAP_AER_CE_MASK,
+			    0xffffffff);
+}
+
 static int64_t phb3_presence_detect(struct phb *phb)
 {
 	struct phb3 *p = phb_to_phb3(phb);
@@ -1505,6 +1532,7 @@ static const struct phb_ops phb3_ops = {
 	.cfg_write16		= phb3_pcicfg_write16,
 	.cfg_write32		= phb3_pcicfg_write32,
 	.choose_bus		= phb3_choose_bus,
+	.device_init		= phb3_device_init,
 	.presence_detect	= phb3_presence_detect,
 	.ioda_reset		= phb3_ioda_reset,
 	.set_phb_mem_window	= phb3_set_phb_mem_window,
@@ -1855,7 +1883,18 @@ static void phb3_init_errors(struct phb3 *p)
 	out_be64(p->regs + PHB_INB_ERR_STATUS,		   0xffffffffffffffff);
 	out_be64(p->regs + PHB_INB_ERR1_STATUS,		   0x0000000000000000);
 	out_be64(p->regs + PHB_INB_ERR_LEM_ENABLE,	   0xffffffffffffffff);
-	out_be64(p->regs + PHB_INB_ERR_FREEZE_ENABLE,	   0x0000600000000060);
+
+	/*
+	 * Workaround for errata HW257476, turn correctable messages into
+	 * ER freezes on Murano and Venice DD1.0
+	 */
+	if (p->rev < PHB3_REV_MURANO_DD20)
+		out_be64(p->regs + PHB_INB_ERR_FREEZE_ENABLE,
+			                                   0x0000600000000070);
+	else
+		out_be64(p->regs + PHB_INB_ERR_FREEZE_ENABLE,
+			                                   0x0000600000000060);
+
 	out_be64(p->regs + PHB_INB_ERR_AIB_FENCE_ENABLE,   0xfcff80fbff7ff08c);
 	out_be64(p->regs + PHB_INB_ERR_LOG_0,		   0x0000000000000000);
 	out_be64(p->regs + PHB_INB_ERR_LOG_1,		   0x0000000000000000);
@@ -2108,6 +2147,7 @@ static void phb3_create(struct dt_node *np)
 	struct phb3 *p = zalloc(sizeof(struct phb3));
 	const struct dt_property *prop;
 	char *path;
+	uint64_t r;
 
 	assert(p);
 
@@ -2150,13 +2190,18 @@ static void phb3_create(struct dt_node *np)
 	/* Check if we can use the A/B detect pins */
 	p->use_ab_detect = dt_has_node_property(np, "ibm,use-ab-detect", NULL);
 
+	/* Grab version and fit it in an int */
+	r = in_be64(p->regs + PHB_VERSION);
+	p->rev = ((r >> 16) & 0x00ff0000) | (r & 0xffff);
+
 	/* Hello ! */
 	path = dt_get_path(np);
-	printf("PHB3: Found %s @%p MMIO [0x%016llx..0x%016llx]\n",
-	       path, p->regs, p->mm_base, p->mm_base + p->mm_size - 1);
-	printf("      M32 [0x%016llx..0x%016llx]\n",
+	printf("PHB3: Found rev 0x%x %s @%p\n", p->rev, path, p->regs);
+	printf("  MMIO [0x%016llx..0x%016llx]\n",
+	       p->mm_base, p->mm_base + p->mm_size - 1);
+	printf("  M32 [0x%016llx..0x%016llx]\n",
 	       p->m32_base, p->m32_base + M32_PCI_SIZE - 1);
-	printf("      M64 [0x%016llx..0x%016llx]\n",
+	printf("  M64 [0x%016llx..0x%016llx]\n",
 	       p->m64_base, p->m64_base + PHB_M64_SIZE - 1);
 	free(path);
 

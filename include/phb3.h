@@ -216,6 +216,10 @@ enum phb3_state {
 struct phb3 {
 	unsigned int		index;	    /* 0..2 index inside P8 */
 	unsigned int		chip_id;    /* Chip ID (== GCID on P8) */
+	unsigned int		rev;        /* 00MMmmmm */
+#define PHB3_REV_MURANO_DD10	0xa30001
+#define PHB3_REV_VENICE_DD10	0xa30002
+#define PHB3_REV_MURANO_DD20	0xa30003
 	void			*regs;
 	uint64_t		pe_xscom;   /* XSCOM bases */
 	uint64_t		pci_xscom;
