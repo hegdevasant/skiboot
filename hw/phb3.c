@@ -954,6 +954,106 @@ static void phb3_err_ER_clear(struct phb3 *p)
 	out_be64(p->regs + PHB_LEM_WOF, 0x0ul);
 }
 
+static void phb3_read_phb_status(struct phb3 *p,
+				 struct OpalIoPhb3ErrorData *stat)
+{
+	uint16_t val;
+	uint64_t *pPEST;
+	uint32_t i;
+
+	memset(stat, 0, sizeof(struct OpalIoPhb3ErrorData));
+
+	/* Error data common part */
+	stat->common.version = OPAL_PHB_ERROR_DATA_VERSION_1;
+	stat->common.ioType  = OPAL_PHB_ERROR_DATA_TYPE_PHB3;
+	stat->common.len     = sizeof(struct OpalIoPhb3ErrorData);
+
+	/*
+	 * We read some registers using config space through AIB.
+	 *
+	 * Get to other registers using ASB when possible to get to them
+	 * through a fence if one is present.
+	 */
+
+	/* Grab RC bridge control, make it 32-bit */
+	phb3_pcicfg_read16(&p->phb, 0, PCI_CFG_BRCTL, &val);
+	stat->brdgCtl = val;
+
+	/* Grab UTL status registers */
+	stat->portStatusReg = hi32(phb3_read_reg_asb(p, UTL_PCIE_PORT_STATUS));
+	stat->rootCmplxStatus = hi32(phb3_read_reg_asb(p, UTL_RC_STATUS));
+	stat->busAgentStatus = hi32(phb3_read_reg_asb(p, UTL_SYS_BUS_AGENT_STATUS));
+
+	/*
+	 * Grab various RC PCIe capability registers. All device, slot
+	 * and link status are 16-bit, so we grab the pair control+status
+	 * for each of them
+	 */
+	phb3_pcicfg_read32(&p->phb, 0, p->ecap + PCICAP_EXP_DEVCTL,
+			   &stat->deviceStatus);
+	phb3_pcicfg_read32(&p->phb, 0, p->ecap + PCICAP_EXP_SLOTCTL,
+			   &stat->slotStatus);
+	phb3_pcicfg_read32(&p->phb, 0, p->ecap + PCICAP_EXP_LCTL,
+			   &stat->linkStatus);
+
+	/*
+	 * I assume those are the standard config space header, cmd & status
+	 * together makes 32-bit. Secondary status is 16-bit so I'll clear
+	 * the top on that one
+	 */
+	phb3_pcicfg_read32(&p->phb, 0, PCI_CFG_CMD, &stat->devCmdStatus);
+	phb3_pcicfg_read16(&p->phb, 0, PCI_CFG_SECONDARY_STATUS, &val);
+	stat->devSecStatus = val;
+
+	/* Grab a bunch of AER regs */
+	phb3_pcicfg_read32(&p->phb, 0, p->aercap + PCIECAP_AER_RERR_STA,
+			   &stat->rootErrorStatus);
+	phb3_pcicfg_read32(&p->phb, 0, p->aercap + PCIECAP_AER_UE_STATUS,
+			   &stat->uncorrErrorStatus);
+	phb3_pcicfg_read32(&p->phb, 0, p->aercap + PCIECAP_AER_CE_STATUS,
+			   &stat->corrErrorStatus);
+	phb3_pcicfg_read32(&p->phb, 0, p->aercap + PCIECAP_AER_HDR_LOG0,
+			   &stat->tlpHdr1);
+	phb3_pcicfg_read32(&p->phb, 0, p->aercap + PCIECAP_AER_HDR_LOG1,
+			   &stat->tlpHdr2);
+	phb3_pcicfg_read32(&p->phb, 0, p->aercap + PCIECAP_AER_HDR_LOG2,
+			   &stat->tlpHdr3);
+	phb3_pcicfg_read32(&p->phb, 0, p->aercap + PCIECAP_AER_HDR_LOG3,
+			   &stat->tlpHdr4);
+	phb3_pcicfg_read32(&p->phb, 0, p->aercap + PCIECAP_AER_SRCID,
+			   &stat->sourceId);
+
+	/* PHB3 inbound and outbound error Regs */
+	stat->phbPlssr = phb3_read_reg_asb(p, PHB_CPU_LOADSTORE_STATUS);
+	stat->phbPlssr = phb3_read_reg_asb(p, PHB_DMA_CHAN_STATUS);
+	stat->lemFir = phb3_read_reg_asb(p, PHB_LEM_FIR_ACCUM);
+	stat->lemErrorMask = phb3_read_reg_asb(p, PHB_LEM_ERROR_MASK);
+	stat->lemWOF = phb3_read_reg_asb(p, PHB_LEM_WOF);
+	stat->phbErrorStatus = phb3_read_reg_asb(p, PHB_ERR_STATUS);
+	stat->phbFirstErrorStatus = phb3_read_reg_asb(p, PHB_ERR1_STATUS);
+	stat->phbErrorLog0 = phb3_read_reg_asb(p, PHB_ERR_LOG_0);
+	stat->phbErrorLog1 = phb3_read_reg_asb(p, PHB_ERR_LOG_1);
+	stat->mmioErrorStatus = phb3_read_reg_asb(p, PHB_OUT_ERR_STATUS);
+	stat->mmioFirstErrorStatus = phb3_read_reg_asb(p, PHB_OUT_ERR1_STATUS);
+	stat->mmioErrorLog0 = phb3_read_reg_asb(p, PHB_OUT_ERR_LOG_0);
+	stat->mmioErrorLog1 = phb3_read_reg_asb(p, PHB_OUT_ERR_LOG_1);
+	stat->dma0ErrorStatus = phb3_read_reg_asb(p, PHB_INA_ERR_STATUS);
+	stat->dma0FirstErrorStatus = phb3_read_reg_asb(p, PHB_INA_ERR1_STATUS);
+	stat->dma0ErrorLog0 = phb3_read_reg_asb(p, PHB_INA_ERR_LOG_0);
+	stat->dma0ErrorLog1 = phb3_read_reg_asb(p, PHB_INA_ERR_LOG_1);
+	stat->dma1ErrorStatus = phb3_read_reg_asb(p, PHB_INB_ERR_STATUS);
+	stat->dma1FirstErrorStatus = phb3_read_reg_asb(p, PHB_INB_ERR1_STATUS);
+	stat->dma1ErrorLog0 = phb3_read_reg_asb(p, PHB_INB_ERR_LOG_0);
+	stat->dma1ErrorLog1 = phb3_read_reg_asb(p, PHB_INB_ERR_LOG_1);
+
+	/* Grab PESTA & B content */
+	pPEST = (uint64_t *)p->tbl_pest;
+	for (i = 0; i < OPAL_PHB3_NUM_PEST_REGS; i++) {
+		stat->pestA[i] = pPEST[2 * i];
+		stat->pestB[i] = pPEST[2 * i + 1];
+	}
+}
+
 static int64_t phb3_msi_get_xive(void *data,
 				 uint32_t isn,
 				 uint16_t *server,
