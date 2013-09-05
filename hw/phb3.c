@@ -744,6 +744,71 @@ static int64_t phb3_get_msi_64(struct phb *phb __unused,
 	return OPAL_SUCCESS;
 }
 
+static bool phb3_err_check_pbcq(struct phb3 *p)
+{
+	uint64_t nfir, mask, wof, val64;
+	int32_t class, bit;
+	uint64_t severity[PHB3_ERR_CLASS_LAST] = {
+		0x0000000000000000,	/* NONE	*/
+		0x018000F800000000,	/* DEAD */
+		0x7E7DC70000000000,	/* FENCED */
+		0x0000000000000000,	/* ER	*/
+		0x0000000000000000	/* INF	*/
+	};
+
+	/*
+	 * Read on NFIR to see if XSCOM is working properly.
+	 * If XSCOM doesn't work well, we need take the PHB
+	 * into account any more.
+	 */
+	xscom_read(p->chip_id, p->pe_xscom + 0x0, &nfir);
+	if (nfir == 0xffffffffffffffff) {
+		p->err.err_src = PHB3_ERR_SRC_NONE;
+		p->err.err_class = PHB3_ERR_CLASS_DEAD;
+		phb3_set_err_pending(p, true);
+		return true;
+	}
+
+	/*
+	 * Check WOF. We need handle unmasked errors firstly.
+	 * We probably run into the situation (on simulator)
+	 * where we have asserted FIR bits, but WOF has nothing.
+	 * For that case, we should check FIR as well.
+	 */
+	xscom_read(p->chip_id, p->pe_xscom + 0x3, &mask);
+	xscom_read(p->chip_id, p->pe_xscom + 0x8, &wof);
+	if (wof & ~mask)
+		wof &= ~mask;
+	if (!wof) {
+		if (nfir & ~mask)
+			nfir &= ~mask;
+		if (!nfir)
+			return false;
+		wof = nfir;
+	}
+
+	/* We shouldn't hit class PHB3_ERR_CLASS_NONE */
+	for (class = PHB3_ERR_CLASS_NONE;
+	     class < PHB3_ERR_CLASS_LAST;
+	     class++) {
+		val64 = wof & severity[class];
+		if (!val64)
+			continue;
+
+		for (bit = 0; bit < 64; bit++) {
+			if (val64 & PPC_BIT(bit)) {
+				p->err.err_src = PHB3_ERR_SRC_PBCQ;
+				p->err.err_class = class;
+				p->err.err_bit = 63 - bit;
+				phb3_set_err_pending(p, true);
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+
 static int64_t phb3_msi_get_xive(void *data,
 				 uint32_t isn,
 				 uint16_t *server,
