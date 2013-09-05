@@ -809,6 +809,70 @@ static bool phb3_err_check_pbcq(struct phb3 *p)
 	return false;
 }
 
+static bool phb3_err_check_lem(struct phb3 *p)
+{
+	uint64_t fir, wof, mask, val64;
+	int32_t class, bit;
+	uint64_t severity[PHB3_ERR_CLASS_LAST] = {
+		0x0000000000000000,	/* NONE */
+		0x0000000000000000,	/* DEAD */
+		0xADB670C980ADD151,	/* FENCED */
+		0x000800107F500A2C,	/* ER   */
+		0x42018E2200002482	/* INF  */
+	};
+
+	/*
+	 * Read FIR. If XSCOM or ASB is frozen, we needn't
+	 * go forward and just mark the PHB with dead state
+	 */
+	fir = phb3_read_reg_asb(p, PHB_LEM_FIR_ACCUM);
+	if (fir == 0xffffffffffffffff) {
+		p->err.err_src = PHB3_ERR_SRC_PHB;
+		p->err.err_class = PHB3_ERR_CLASS_DEAD;
+		phb3_set_err_pending(p, true);
+		return true;
+	}
+
+	/*
+	 * Check on WOF for the unmasked errors firstly. Under
+	 * some situation where we run skiboot on simulator,
+	 * we already had FIR bits asserted, but WOF is still zero.
+	 * For that case, we check FIR directly.
+	 */
+	wof = phb3_read_reg_asb(p, PHB_LEM_WOF);
+	mask = phb3_read_reg_asb(p, PHB_LEM_ERROR_MASK);
+	if (wof & ~mask)
+		wof &= ~mask;
+	if (!wof) {
+		if (fir & ~mask)
+			fir &= ~mask;
+		if (!fir)
+			return false;
+		wof = fir;
+	}
+
+	/* We shouldn't hit PHB3_ERR_CLASS_NONE */
+	for (class = PHB3_ERR_CLASS_NONE;
+	     class < PHB3_ERR_CLASS_LAST;
+	     class++) {
+		val64 = wof & severity[class];
+		if (!val64)
+			continue;
+
+		for (bit = 0; bit < 64; bit++) {
+			if (val64 & PPC_BIT(bit)) {
+				p->err.err_src = PHB3_ERR_SRC_PHB;
+				p->err.err_class = class;
+				p->err.err_bit = 63 - bit;
+				phb3_set_err_pending(p, true);
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+
 static int64_t phb3_msi_get_xive(void *data,
 				 uint32_t isn,
 				 uint16_t *server,
