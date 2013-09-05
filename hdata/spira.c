@@ -93,19 +93,21 @@ struct HDIF_common_hdr *__get_hdif(struct spira_ntuple *n, const char id[],
 	return h;
 }
 
-static struct dt_node *add_xscom_node(uint64_t base, uint32_t id)
+static struct dt_node *add_xscom_node(uint64_t base, uint32_t hw_id,
+				      uint32_t proc_chip_id)
 {
 	struct dt_node *node;
 	uint64_t addr, size;
 
-	addr = base | ((uint64_t)id << PPC_BITLSHIFT(28));
+	addr = base | ((uint64_t)hw_id << PPC_BITLSHIFT(28));
 	size = (u64)1 << PPC_BITLSHIFT(28);
 
-	printf("XSCOM: Found gcid 0x%x, address: 0x%llx\n",
-	       id, (long long)addr);
+	printf("XSCOM: Found HW ID 0x%x (PCID 0x%x) @ 0x%llx\n",
+	       hw_id, proc_chip_id, (long long)addr);
 
 	node = dt_new_addr(dt_root, "xscom", addr);
-	dt_add_property_cells(node, "ibm,chip-id", id);
+	dt_add_property_cells(node, "ibm,chip-id", hw_id);
+	dt_add_property_cells(node, "ibm,proc-chip-id", proc_chip_id);
 	dt_add_property_cells(node, "#address-cells", 1);
 	dt_add_property_cells(node, "#size-cells", 1);
 	dt_add_property(node, "scom-controller", NULL, 0);
@@ -143,46 +145,13 @@ struct dt_node *find_xscom_for_chip(uint32_t chip_id)
 	return NULL;
 }
 
-static void add_xscom(void)
+static bool add_xscom_sppcrd(uint64_t xscom_base)
 {
-	const void *ms_vpd;
-	const struct msvpd_pmover_bsr_synchro *pmbs;
-	unsigned int size, i, vpd_sz;
-	uint64_t xscom_base;
 	struct HDIF_common_hdr *hdif;
+	unsigned int i, vpd_sz;
 	const void *vpd;
 	struct dt_node *np;
 
-	ms_vpd = get_hdif(&spira.ntuples.ms_vpd, MSVPD_HDIF_SIG);
-	if (!ms_vpd) {
-		prerror("XSCOM: Can't find MS VPD\n");
-		return;
-	}
-
-	pmbs = HDIF_get_idata(ms_vpd, MSVPD_IDATA_PMOVER_SYNCHRO, &size);
-	if (!CHECK_SPPTR(pmbs) || size < sizeof(*pmbs)) {
-		prerror("XSCOM: absent or bad PMBS size %u @ %p\n", size, pmbs);
-		return;
-	}
-
-	if (!(be32_to_cpu(pmbs->flags) & MSVPD_PMS_FLAG_XSCOMBASE_VALID)) {
-		prerror("XSCOM: No XSCOM base in PMBS, using default\n");
-		return;
-	}
-
-	xscom_base = be64_to_cpu(pmbs->xscom_addr);
-
-	/* Some FSP (on P7) give me a crap base address for XSCOM (it has
-	 * spurious bits set as far as I can tell). Since only 5 bits 18:22 can
-	 * be programmed in hardware, let's isolate these. This seems to give
-	 * me the right value on VPL1
-	 */
-	if (cpu_type == PVR_TYPE_P7)
-		xscom_base &= 0x80003e0000000000ul;
-
-	xscom_base = cleanup_addr(xscom_base);
-
-	/* First, try the proc_chip ntuples for chip data */
 	for_each_ntuple_idx(&spira.ntuples.proc_chip, hdif, i,
 			    SPPCRD_HDIF_SIG) {
 		const struct sppcrd_chip_info *cinfo;
@@ -201,7 +170,9 @@ static void add_xscom(void)
 			continue;
 
 		/* Create the XSCOM node */
-		np = add_xscom_node(xscom_base, be32_to_cpu(cinfo->xscom_id));
+		np = add_xscom_node(xscom_base,
+				    be32_to_cpu(cinfo->xscom_id),
+				    be32_to_cpu(cinfo->proc_chip_id));
 		if (!np)
 			continue;
 
@@ -230,10 +201,16 @@ static void add_xscom(void)
 		}
 	}
 
-	if (i > 0)
-		return;
+	return i > 0;
+}
 
-	/* Otherwise, check the old-style PACA, looking for unique chips */
+static void add_xscom_sppaca(uint64_t xscom_base)
+{
+	struct HDIF_common_hdr *hdif;
+	unsigned int i, vpd_sz;
+	const void *vpd;
+	struct dt_node *np;
+
 	for_each_ntuple_idx(&spira.ntuples.paca, hdif, i, PACA_HDIF_SIG) {
 		const struct sppaca_cpu_id *id;
 		unsigned int chip_id;
@@ -263,13 +240,59 @@ static void add_xscom(void)
 			continue;
 
 		/* Create the XSCOM node */
-		np = add_xscom_node(xscom_base, chip_id);
+		np = add_xscom_node(xscom_base, chip_id,
+				    be32_to_cpu(id->processor_chip_id));
 
 		/* Add chip VPD */
 		vpd = HDIF_get_idata(hdif, SPPACA_IDATA_KW_VPD, &vpd_sz);
 		if (CHECK_SPPTR(vpd))
 			dt_add_property(np, "ibm,chip-vpd", vpd, vpd_sz);
 	}
+}
+
+static void add_xscom(void)
+{
+	const void *ms_vpd;
+	const struct msvpd_pmover_bsr_synchro *pmbs;
+	unsigned int size;
+	uint64_t xscom_base;
+
+	ms_vpd = get_hdif(&spira.ntuples.ms_vpd, MSVPD_HDIF_SIG);
+	if (!ms_vpd) {
+		prerror("XSCOM: Can't find MS VPD\n");
+		return;
+	}
+
+	pmbs = HDIF_get_idata(ms_vpd, MSVPD_IDATA_PMOVER_SYNCHRO, &size);
+	if (!CHECK_SPPTR(pmbs) || size < sizeof(*pmbs)) {
+		prerror("XSCOM: absent or bad PMBS size %u @ %p\n", size, pmbs);
+		return;
+	}
+
+	if (!(be32_to_cpu(pmbs->flags) & MSVPD_PMS_FLAG_XSCOMBASE_VALID)) {
+		prerror("XSCOM: No XSCOM base in PMBS, using default\n");
+		return;
+	}
+
+	xscom_base = be64_to_cpu(pmbs->xscom_addr);
+
+	/* Some FSP (on P7) give me a crap base address for XSCOM (it has
+	 * spurious bits set as far as I can tell). Since only 5 bits 18:22 can
+	 * be programmed in hardware, let's isolate these. This seems to give
+	 * me the right value on VPL1
+	 */
+	if (cpu_type == PVR_TYPE_P7)
+		xscom_base &= 0x80003e0000000000ul;
+
+	/* Get rid of the top bits */
+	xscom_base = cleanup_addr(xscom_base);
+
+	/* First, try the new proc_chip ntuples for chip data */
+	if (add_xscom_sppcrd(xscom_base))
+		return;
+
+	/* Otherwise, check the old-style PACA, looking for unique chips */
+	add_xscom_sppaca(xscom_base);
 }
 
 static void add_chiptod_node(unsigned int chip_id, int flags)
