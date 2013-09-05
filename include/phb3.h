@@ -209,6 +209,28 @@ enum phb3_state {
 	PHB3_STATE_WAIT_LINK,
 };
 
+/*
+ * PHB3 error descriptor. Errors from all components (PBCQ, PHB)
+ * will be cached to PHB3 instance. However, PBCQ errors would
+ * have higher priority than those from PHB
+ */
+#define PHB3_ERR_SRC_NONE	0
+#define PHB3_ERR_SRC_PBCQ	1
+#define PHB3_ERR_SRC_PHB	2
+
+#define PHB3_ERR_CLASS_NONE	0
+#define PHB3_ERR_CLASS_DEAD	1
+#define PHB3_ERR_CLASS_FENCED	2
+#define PHB3_ERR_CLASS_ER	3
+#define PHB3_ERR_CLASS_INF	4
+#define PHB3_ERR_CLASS_LAST	5
+
+struct phb3_err {
+	uint32_t err_src;
+	uint32_t err_class;
+	uint32_t err_bit;
+};
+
 /* Link timeouts, increments of 100ms */
 #define PHB3_LINK_WAIT_RETRIES		90
 #define PHB3_LINK_ELECTRICAL_RETRIES	10
@@ -252,12 +274,25 @@ struct phb3 {
 	uint64_t		m32d_cache[256];
 	uint64_t		m64b_cache[16];
 
+	bool			err_pending;
+	struct phb3_err		err;
+
 	struct phb		phb;
 };
 
 static inline struct phb3 *phb_to_phb3(struct phb *phb)
 {
 	return container_of(phb, struct phb3, phb);
+}
+
+static inline bool phb3_err_pending(struct phb3 *p)
+{
+	return p->err_pending;
+}
+
+static inline void phb3_set_err_pending(struct phb3 *p, bool val)
+{
+	p->err_pending = val;
 }
 
 #endif /* __PHB3_H */
