@@ -189,7 +189,7 @@ void vpd_iohub_load(struct dt_node *hub_node)
 	if (!vpd) {
 		prerror("VPD: Failed to load VPD LID\n");
 	} else {
-		dt_add_property(hub_node, "ibm,vpd", vpd, sz);
+		dt_add_property(hub_node, "ibm,io-vpd", vpd, sz);
 		free(vpd);
 	}
 }
