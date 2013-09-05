@@ -285,6 +285,20 @@ static inline struct phb3 *phb_to_phb3(struct phb *phb)
 	return container_of(phb, struct phb3, phb);
 }
 
+static inline void phb3_cfg_lock(struct phb3 *p)
+{
+	uint64_t lock;
+
+	do {
+		lock = in_be64(p->regs + 0x138);
+	} while(lock);
+}
+
+static inline void phb3_cfg_unlock(struct phb3 *p)
+{
+	out_be64(p->regs + 0x138, 0x0ul);
+}
+
 static inline uint64_t phb3_read_reg_asb(struct phb3 *p, uint64_t offset)
 {
 	uint64_t val;

@@ -873,6 +873,87 @@ static bool phb3_err_check_lem(struct phb3 *p)
 	return false;
 }
 
+/*
+ * The function can be called during error recovery for INF
+ * and ER class. For INF case, it's expected to be called
+ * when grabbing the error log. We will call it explicitly
+ * when clearing frozen PE state for ER case.
+ */
+static void phb3_err_ER_clear(struct phb3 *p)
+{
+	uint32_t val32;
+	uint64_t val64;
+	uint64_t fir = in_be64(p->regs + PHB_LEM_FIR_ACCUM);
+
+	/* Rec 1: Grab the PCI config lock */
+	phb3_cfg_lock(p);
+
+	/* Rec 2/3/4: Take all inbound transactions */
+	out_be64(p->regs + PHB_CONFIG_ADDRESS, 0x8000001c00000000ul);
+	out_be32(p->regs + PHB_CONFIG_DATA, 0x10000000);
+
+	/* Rec 5/6/7: Clear pending non-fatal errors */
+	out_be64(p->regs + PHB_CONFIG_ADDRESS, 0x8000005000000000ul);
+	val32 = in_be32(p->regs + PHB_CONFIG_DATA);
+	out_be32(p->regs + PHB_CONFIG_DATA, (val32 & 0xe0700000) | 0x0f000f00);
+
+	/* Rec 8/9/10: Clear pending fatal errors for AER */
+	out_be64(p->regs + PHB_CONFIG_ADDRESS, 0x8000010400000000ul);
+	out_be32(p->regs + PHB_CONFIG_DATA, 0xffffffff);
+
+	/* Rec 11/12/13: Clear pending non-fatal errors for AER */
+	out_be64(p->regs + PHB_CONFIG_ADDRESS, 0x8000011000000000ul);
+	out_be32(p->regs + PHB_CONFIG_DATA, 0xffffffff);
+
+	/* Rec 22/23/24: Clear root port errors */
+	out_be64(p->regs + PHB_CONFIG_ADDRESS, 0x8000013000000000ul);
+	out_be32(p->regs + PHB_CONFIG_DATA, 0xffffffff);
+
+	/* Rec 25/26/27: Enable IO and MMIO bar */
+	out_be64(p->regs + PHB_CONFIG_ADDRESS, 0x8000004000000000ul);
+	out_be32(p->regs + PHB_CONFIG_DATA, 0x470100f8);
+
+	/* Rec 28: Release the PCI config lock */
+	phb3_cfg_unlock(p);
+
+	/* Rec 29...34: Clear UTL errors */
+	val64 = in_be64(p->regs + UTL_SYS_BUS_AGENT_STATUS);
+	out_be64(p->regs + UTL_SYS_BUS_AGENT_STATUS, val64);
+	val64 = in_be64(p->regs + UTL_PCIE_PORT_STATUS);
+	out_be64(p->regs + UTL_PCIE_PORT_STATUS, val64);
+	val64 = in_be64(p->regs + UTL_RC_STATUS);
+	out_be64(p->regs + UTL_RC_STATUS, val64);
+
+	/* Rec 39...66: Clear PHB error trap */
+	val64 = in_be64(p->regs + PHB_ERR_STATUS);
+	out_be64(p->regs + PHB_ERR_STATUS, val64);
+	out_be64(p->regs + PHB_ERR1_STATUS, 0x0ul);
+	out_be64(p->regs + PHB_ERR_LOG_0, 0x0ul);
+	out_be64(p->regs + PHB_ERR_LOG_1, 0x0ul);
+
+	val64 = in_be64(p->regs + PHB_OUT_ERR_STATUS);
+	out_be64(p->regs + PHB_OUT_ERR_STATUS, val64);
+	out_be64(p->regs + PHB_OUT_ERR1_STATUS, 0x0ul);
+	out_be64(p->regs + PHB_OUT_ERR_LOG_0, 0x0ul);
+	out_be64(p->regs + PHB_OUT_ERR_LOG_1, 0x0ul);
+
+	val64 = in_be64(p->regs + PHB_INA_ERR_STATUS);
+	out_be64(p->regs + PHB_INA_ERR_STATUS, val64);
+	out_be64(p->regs + PHB_INA_ERR1_STATUS, 0x0ul);
+	out_be64(p->regs + PHB_INA_ERR_LOG_0, 0x0ul);
+	out_be64(p->regs + PHB_INA_ERR_LOG_1, 0x0ul);
+
+	val64 = in_be64(p->regs + PHB_INB_ERR_STATUS);
+	out_be64(p->regs + PHB_INB_ERR_STATUS, val64);
+	out_be64(p->regs + PHB_INB_ERR1_STATUS, 0x0ul);
+	out_be64(p->regs + PHB_INB_ERR_LOG_0, 0x0ul);
+	out_be64(p->regs + PHB_INB_ERR_LOG_1, 0x0ul);
+
+	/* Rec 67/68: Clear FIR/WOF */
+	out_be64(p->regs + PHB_LEM_FIR_AND_MASK, ~fir);
+	out_be64(p->regs + PHB_LEM_WOF, 0x0ul);
+}
+
 static int64_t phb3_msi_get_xive(void *data,
 				 uint32_t isn,
 				 uint16_t *server,
@@ -1500,82 +1581,6 @@ static int64_t phb3_eeh_freeze_status(struct phb *phb, uint64_t pe_number,
 	return OPAL_SUCCESS;
 }
 
-static void phb3_ER_err_clear(struct phb3 *p)
-{
-	u64 err, lem;
-	u32 val;
-
-	/* XXX This is the P7IOC recovery sequence quickly hacked...
-	 *
-	 * We need to rework that based on PHB3 specifics
-	 */
-
-	/* Rec 1,2 */
-	lem = in_be64(p->regs + PHB_LEM_FIR_ACCUM);
-
-	/* Rec 3,4,5 AER registers (could use cfg space accessors) */
-	out_be64(p->regs + PHB_CONFIG_ADDRESS, 0x8000001c00000000ull);
-	out_be32(p->regs + PHB_CONFIG_DATA, 0x10000000);
-
-	/* Rec 6,7,8 XXX DOC whacks payload & req size ... we don't */
-	out_be64(p->regs + PHB_CONFIG_ADDRESS, 0x8000005000000000ull);
-	val = in_be32(p->regs + PHB_CONFIG_DATA);
-	out_be32(p->regs + PHB_CONFIG_DATA, (val & 0xe0700000) | 0x0f000f00);
-
-	/* Rec 9,10,11 */
-	out_be64(p->regs + PHB_CONFIG_ADDRESS, 0x8000010400000000ull);
-	out_be32(p->regs + PHB_CONFIG_DATA, 0xffffffff);
-
-	/* Rec 12,13,14 */
-	out_be64(p->regs + PHB_CONFIG_ADDRESS, 0x8000011000000000ull);
-	out_be32(p->regs + PHB_CONFIG_DATA, 0xffffffff);
-
-	/* Rec 23,24,25 */
-	out_be64(p->regs + PHB_CONFIG_ADDRESS, 0x8000013000000000ull);
-	out_be32(p->regs + PHB_CONFIG_DATA, 0xffffffff);
-
-	/* Rec 26,27,28 */
-	out_be64(p->regs + PHB_CONFIG_ADDRESS, 0x8000004000000000ull);
-	out_be32(p->regs + PHB_CONFIG_DATA, 0x470100f8);
-
-	/* Rec 29..34 UTL registers */
-	err = in_be64(p->regs + UTL_SYS_BUS_AGENT_STATUS);
-	out_be64(p->regs + UTL_SYS_BUS_AGENT_STATUS, err);
-	err = in_be64(p->regs + UTL_PCIE_PORT_STATUS);
-	out_be64(p->regs + UTL_PCIE_PORT_STATUS, err);
-	err = in_be64(p->regs + UTL_RC_STATUS);
-	out_be64(p->regs + UTL_RC_STATUS, err);
-
-	/* PHB error traps registers */
-	err = in_be64(p->regs + PHB_ERR_STATUS);
-	out_be64(p->regs + PHB_ERR_STATUS, err);
-	out_be64(p->regs + PHB_ERR1_STATUS, 0);
-	out_be64(p->regs + PHB_ERR_LOG_0, 0);
-	out_be64(p->regs + PHB_ERR_LOG_1, 0);
-
-	err = in_be64(p->regs + PHB_OUT_ERR_STATUS);
-	out_be64(p->regs + PHB_OUT_ERR_STATUS, err);
-	out_be64(p->regs + PHB_OUT_ERR1_STATUS, 0);
-	out_be64(p->regs + PHB_OUT_ERR_LOG_0, 0);
-	out_be64(p->regs + PHB_OUT_ERR_LOG_1, 0);
-
-	err = in_be64(p->regs + PHB_INA_ERR_STATUS);
-	out_be64(p->regs + PHB_INA_ERR_STATUS, err);
-	out_be64(p->regs + PHB_INA_ERR1_STATUS, 0);
-	out_be64(p->regs + PHB_INA_ERR_LOG_0, 0);
-	out_be64(p->regs + PHB_INA_ERR_LOG_1, 0);
-
-	err = in_be64(p->regs + PHB_INB_ERR_STATUS);
-	out_be64(p->regs + PHB_INB_ERR_STATUS, err);
-	out_be64(p->regs + PHB_INB_ERR1_STATUS, 0);
-	out_be64(p->regs + PHB_INB_ERR_LOG_0, 0);
-	out_be64(p->regs + PHB_INB_ERR_LOG_1, 0);
-
-	/* Rec 67, 68 LEM */
-	out_be64(p->regs + PHB_LEM_FIR_AND_MASK, ~lem);
-	out_be64(p->regs + PHB_LEM_WOF, 0);
-}
-
 static int64_t phb3_eeh_freeze_clear(struct phb *phb, uint64_t pe_number,
 				     uint64_t eeh_action_token)
 {
@@ -1594,7 +1599,7 @@ static int64_t phb3_eeh_freeze_clear(struct phb *phb, uint64_t pe_number,
 	if (err == 0)
 		goto clear_pest;
 
-	phb3_ER_err_clear(p);
+	phb3_err_ER_clear(p);
 
  clear_pest:
 	if (eeh_action_token & OPAL_EEH_ACTION_CLEAR_FREEZE_MMIO) {
