@@ -1729,6 +1729,131 @@ static int64_t phb3_eeh_freeze_clear(struct phb *phb, uint64_t pe_number,
 	return OPAL_SUCCESS;
 }
 
+static int64_t phb3_eeh_next_error(struct phb *phb,
+				   uint64_t *first_frozen_pe,
+				   uint16_t *pci_error_type,
+				   uint16_t *severity)
+{
+	struct phb3 *p = phb_to_phb3(phb);
+	uint64_t fir, peev[4];
+	uint32_t cfg32;
+	int32_t i, j;
+
+	/* If the PHB is broken, we needn't go forward */
+	if (p->state == PHB3_STATE_BROKEN) {
+		*pci_error_type = OPAL_EEH_PHB_ERROR;
+		*severity = OPAL_EEH_SEV_PHB_DEAD;
+		return OPAL_SUCCESS;
+	}
+
+	/*
+	 * Check if we already have pending errors. If that's
+	 * the case, then to get more information about the
+	 * pending errors. Here we try PBCQ prior to PHB.
+	 */
+	if (phb3_err_pending(p)) {
+		if (!phb3_err_check_pbcq(p) &&
+		    !phb3_err_check_lem(p)) {
+			p->err.err_src   = PHB3_ERR_SRC_NONE;
+			p->err.err_class = PHB3_ERR_CLASS_NONE;
+			p->err.err_bit   = -1;
+			phb3_set_err_pending(p, false);
+		}
+	}
+
+	/* Clear result */
+	*pci_error_type  = OPAL_EEH_NO_ERROR;
+	*severity	 = OPAL_EEH_SEV_NO_ERROR;
+	*first_frozen_pe = (uint64_t)-1;
+
+	/* Check frozen PEs */
+	if (!phb3_err_pending(p)) {
+		phb3_ioda_sel(p, IODA2_TBL_PEEV, 0, true);
+		for (i = 0; i < ARRAY_SIZE(peev); i++) {
+			peev[i] = in_be64(p->regs + PHB_IODA_DATA0);
+			if (peev[i]) {
+				p->err.err_src	 = PHB3_ERR_SRC_PHB;
+				p->err.err_class = PHB3_ERR_CLASS_ER;
+				p->err.err_bit	 = -1;
+				phb3_set_err_pending(p, true);
+				break;
+			}
+		}
+        }
+
+	/* Mapping errors */
+	if (phb3_err_pending(p)) {
+		/*
+		 * If the frozen PE is caused by a malfunctioning TLP, we
+		 * need reset the PHB. So convert ER to PHB-fatal error
+		 * for the case.
+		 */
+		if (p->err.err_class == PHB3_ERR_CLASS_ER) {
+			fir = phb3_read_reg_asb(p, PHB_LEM_FIR_ACCUM);
+			if (fir & PPC_BIT(60)) {
+				phb3_pcicfg_read32(&p->phb, 0,
+					p->aercap + PCIECAP_AER_UE_STATUS, &cfg32);
+				if (cfg32 & PCIECAP_AER_UE_MALFORMED_TLP)
+					p->err.err_class = PHB3_ERR_CLASS_FENCED;
+			}
+		}
+
+		switch (p->err.err_class) {
+		case PHB3_ERR_CLASS_DEAD:
+			*pci_error_type = OPAL_EEH_PHB_ERROR;
+			*severity = OPAL_EEH_SEV_PHB_DEAD;
+			break;
+		case PHB3_ERR_CLASS_FENCED:
+			*pci_error_type = OPAL_EEH_PHB_ERROR;
+			*severity = OPAL_EEH_SEV_PHB_FENCED;
+			break;
+		case PHB3_ERR_CLASS_ER:
+			*pci_error_type = OPAL_EEH_PE_ERROR;
+			*severity = OPAL_EEH_SEV_PE_ER;
+
+			phb3_ioda_sel(p, IODA2_TBL_PEEV, 0, true);
+			for (i = 0; i < ARRAY_SIZE(peev); i++)
+				peev[i] = in_be64(p->regs + PHB_IODA_DATA0);
+			for (i = ARRAY_SIZE(peev) - 1; i >= 0; i--) {
+				for (j = 0; j < 64; j++) {
+					if (peev[i] & PPC_BIT(j)) {
+						*first_frozen_pe = i * 64 + j;
+						break;
+					}
+				}
+
+				if (*first_frozen_pe != (uint64_t)(-1))
+					break;
+			}
+
+			/* No frozen PE ? */
+			if (*first_frozen_pe == (uint64_t)-1) {
+				*pci_error_type = OPAL_EEH_NO_ERROR;
+				*severity = OPAL_EEH_SEV_NO_ERROR;
+				p->err.err_src	 = PHB3_ERR_SRC_NONE;
+				p->err.err_class = PHB3_ERR_CLASS_NONE;
+				p->err.err_bit	 = -1;
+				phb3_set_err_pending(p, false);
+			}
+
+                        break;
+		case PHB3_ERR_CLASS_INF:
+			*pci_error_type = OPAL_EEH_PHB_ERROR;
+			*severity = OPAL_EEH_SEV_INF;
+			break;
+		default:
+			*pci_error_type = OPAL_EEH_NO_ERROR;
+			*severity = OPAL_EEH_SEV_NO_ERROR;
+			p->err.err_src   = PHB3_ERR_SRC_NONE;
+			p->err.err_class = PHB3_ERR_CLASS_NONE;
+			p->err.err_bit   = -1;
+			phb3_set_err_pending(p, false);
+		}
+	}
+
+	return OPAL_SUCCESS;
+}
+
 static const struct phb_ops phb3_ops = {
 	.lock			= phb3_lock,
 	.unlock			= phb3_unlock,
@@ -1759,11 +1884,11 @@ static const struct phb_ops phb3_ops = {
 	.poll			= phb3_poll,
 	.eeh_freeze_status	= phb3_eeh_freeze_status,
 	.eeh_freeze_clear	= phb3_eeh_freeze_clear,
+	.next_error		= phb3_eeh_next_error,
 /*
 	.complete_reset		= p7ioc_complete_reset,
 	.hot_reset		= p7ioc_hot_reset,
 	.get_diag_data		= p7ioc_get_diag_data,
-	.next_error		= p7ioc_eeh_next_error,
 */
 };
 
