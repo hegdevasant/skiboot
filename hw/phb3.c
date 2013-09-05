@@ -1214,6 +1214,27 @@ static int64_t phb3_lsi_set_xive(void *data,
 	return OPAL_SUCCESS;
 }
 
+static void phb3_err_interrupt(void *data, uint32_t isn)
+{
+	struct phb3 *p = data;
+
+	PHBDBG(p, "Got interrupt 0x%08x\n", isn);
+
+	/* Update pending event */
+	opal_update_pending_evt(OPAL_EVENT_PCI_ERROR,
+				OPAL_EVENT_PCI_ERROR);
+
+	/* If the PHB is broken, go away */
+	if (p->state == PHB3_STATE_BROKEN)
+		return;
+
+	/*
+	 * Mark the PHB has pending error so that the OS
+	 * can handle it at late point.
+	 */
+	phb3_set_err_pending(p, true);
+}
+
 /* MSIs (OS owned) */
 static const struct irq_source_ops phb3_msi_irq_ops = {
 	.get_xive = phb3_msi_get_xive,
@@ -1224,6 +1245,13 @@ static const struct irq_source_ops phb3_msi_irq_ops = {
 static const struct irq_source_ops phb3_lsi_irq_ops = {
 	.get_xive = phb3_lsi_get_xive,
 	.set_xive = phb3_lsi_set_xive,
+};
+
+/* Error LSIs (skiboot owned) */
+static const struct irq_source_ops phb3_err_lsi_irq_ops = {
+	.get_xive = phb3_lsi_get_xive,
+	.set_xive = phb3_lsi_set_xive,
+	.interrupt = phb3_err_interrupt,
 };
 
 static int64_t phb3_set_pe(struct phb *phb,
@@ -2671,11 +2699,12 @@ static void phb3_create(struct dt_node *np)
 	/* Clear IODA2 cache */
 	phb3_init_ioda_cache(p);
 
-	/* Register OS interrupt sources */
+	/* Register interrupt sources */
 	register_irq_source(&phb3_msi_irq_ops, p, p->base_msi,
 			    PHB3_MSI_IRQ_COUNT);
-	register_irq_source(&phb3_lsi_irq_ops, p, p->base_lsi,
-			    PHB3_LSI_IRQ_COUNT);
+	register_irq_source(&phb3_lsi_irq_ops, p, p->base_lsi, 4);
+	register_irq_source(&phb3_err_lsi_irq_ops, p,
+			    p->base_lsi + PHB3_LSI_PCIE_INF, 2);
 
 	phb3_init_hw(p);
 }
