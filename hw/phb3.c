@@ -96,6 +96,16 @@ static inline uint64_t phb3_set_sm_timeout(struct phb3 *p, uint64_t dur)
 	return dur;
 }
 
+/* Check if AIB is fenced via PBCQ NFIR */
+static bool phb3_fenced(struct phb3 *p)
+{
+	uint64_t nfir;
+
+	/* We still probably has crazy xscom */
+	xscom_read(p->chip_id, p->pe_xscom + 0x0, &nfir);
+	return !!(nfir & PPC_BIT(16));
+}
+
 /*
  * Configuration space access
  *
@@ -133,47 +143,80 @@ static int64_t phb3_pcicfg_check(struct phb3 *p, uint32_t bdfn,
 static int64_t phb3_pcicfg_read##size(struct phb *phb, uint32_t bdfn,	\
                                       uint32_t offset, type *data)	\
 {									\
-        struct phb3 *p = phb_to_phb3(phb);				\
-        uint64_t addr;							\
-        int64_t rc;							\
-        uint8_t pe;							\
+	struct phb3 *p = phb_to_phb3(phb);				\
+	uint64_t addr, val64;						\
+	int64_t rc;							\
+	uint8_t pe;							\
+	bool use_asb = false;						\
 									\
-        /* Initialize data in case of error */				\
-        *data = (type)0xffffffff;					\
+	/* Initialize data in case of error */				\
+	*data = (type)0xffffffff;					\
 									\
-        rc = phb3_pcicfg_check(p, bdfn, offset, sizeof(type), &pe);	\
-        if (rc)								\
-                return rc;						\
+	rc = phb3_pcicfg_check(p, bdfn, offset, sizeof(type), &pe);	\
+	if (rc)								\
+		return rc;						\
 									\
-        addr = PHB_CA_ENABLE | ((uint64_t)bdfn << PHB_CA_FUNC_LSH);	\
-        addr = SETFIELD(PHB_CA_REG, addr, offset);			\
-        addr = SETFIELD(PHB_CA_PE, addr, pe);				\
-        out_be64(p->regs + PHB_CONFIG_ADDRESS, addr);			\
-        *data = in_le##size(p->regs + PHB_CONFIG_DATA +			\
-                                (offset & (4 - sizeof(type))));		\
+	if (phb3_fenced(p)) {						\
+		if (!(p->flags & PHB3_CFG_USE_ASB))			\
+			return OPAL_HARDWARE;				\
+		use_asb = true;						\
+	} else if ((p->flags & PHB3_CFG_BLOCKED) && bdfn != 0) {	\
+		return OPAL_HARDWARE;					\
+	}								\
 									\
-        return OPAL_SUCCESS;						\
+	addr = PHB_CA_ENABLE | ((uint64_t)bdfn << PHB_CA_FUNC_LSH);	\
+	addr = SETFIELD(PHB_CA_REG, addr, offset);			\
+	addr = SETFIELD(PHB_CA_PE, addr, pe);				\
+	if (use_asb) {							\
+		phb3_write_reg_asb(p, PHB_CONFIG_ADDRESS, addr);	\
+		sync();							\
+		val64 = bswap_64(phb3_read_reg_asb(p, PHB_CONFIG_DATA));	\
+		*data = (type)(val64 >> (8 * (offset & (4 - sizeof(type)))));	\
+	} else {							\
+		out_be64(p->regs + PHB_CONFIG_ADDRESS, addr);		\
+		*data = in_le##size(p->regs + PHB_CONFIG_DATA +		\
+				    (offset & (4 - sizeof(type))));	\
+	}								\
+									\
+	return OPAL_SUCCESS;						\
 }
 
 #define PHB3_PCI_CFG_WRITE(size, type)	\
 static int64_t phb3_pcicfg_write##size(struct phb *phb, uint32_t bdfn,	\
                                        uint32_t offset, type data)	\
 {									\
-        struct phb3 *p = phb_to_phb3(phb);				\
-        uint64_t addr;							\
-        int64_t rc;							\
-        uint8_t pe;							\
+	struct phb3 *p = phb_to_phb3(phb);				\
+	uint64_t addr, val64 = 0;					\
+	int64_t rc;							\
+	uint8_t pe;							\
+	bool use_asb = false;						\
 									\
-        rc = phb3_pcicfg_check(p, bdfn, offset, sizeof(type), &pe);	\
-        if (rc)								\
-                return rc;						\
+	rc = phb3_pcicfg_check(p, bdfn, offset, sizeof(type), &pe);	\
+	if (rc)								\
+		return rc;						\
 									\
-        addr = PHB_CA_ENABLE | ((uint64_t)bdfn << PHB_CA_FUNC_LSH);	\
-        addr = SETFIELD(PHB_CA_REG, addr, offset);			\
-        addr = SETFIELD(PHB_CA_PE, addr, pe);				\
-        out_be64(p->regs + PHB_CONFIG_ADDRESS, addr);			\
-        out_le##size(p->regs + PHB_CONFIG_DATA +			\
-                     (offset & (4 - sizeof(type))), data);		\
+	if (phb3_fenced(p)) {						\
+		if (!(p->flags & PHB3_CFG_USE_ASB))			\
+			return OPAL_HARDWARE;				\
+		use_asb = true;						\
+	} else if ((p->flags & PHB3_CFG_BLOCKED) && bdfn != 0) {	\
+		return OPAL_HARDWARE;					\
+	}								\
+									\
+	addr = PHB_CA_ENABLE | ((uint64_t)bdfn << PHB_CA_FUNC_LSH);	\
+	addr = SETFIELD(PHB_CA_REG, addr, offset);			\
+	addr = SETFIELD(PHB_CA_PE, addr, pe);				\
+	if (use_asb) {							\
+		val64 = data;						\
+		val64 = bswap_64(val64 << 8 * (offset & (4 - sizeof(type))));	\
+		phb3_write_reg_asb(p, PHB_CONFIG_ADDRESS, addr);	\
+		sync();							\
+		phb3_write_reg_asb(p, PHB_CONFIG_DATA, val64);		\
+	} else {							\
+		out_be64(p->regs + PHB_CONFIG_ADDRESS, addr);		\
+		out_le##size(p->regs + PHB_CONFIG_DATA +		\
+			     (offset & (4 - sizeof(type))), data);	\
+	}								\
 									\
         return OPAL_SUCCESS;						\
 }
@@ -959,6 +1002,7 @@ static void phb3_err_ER_clear(struct phb3 *p)
 static void phb3_read_phb_status(struct phb3 *p,
 				 struct OpalIoPhb3ErrorData *stat)
 {
+	bool locked;
 	uint16_t val;
 	uint64_t *pPEST;
 	uint32_t i;
@@ -976,6 +1020,10 @@ static void phb3_read_phb_status(struct phb3 *p,
 	 * Get to other registers using ASB when possible to get to them
 	 * through a fence if one is present.
 	 */
+
+	/* Use ASB to access PCICFG if the PHB has been fenced */
+	locked = lock_recursive(&p->lock);
+	p->flags |= PHB3_CFG_USE_ASB;
 
 	/* Grab RC bridge control, make it 32-bit */
 	phb3_pcicfg_read16(&p->phb, 0, PCI_CFG_BRCTL, &val);
@@ -1024,6 +1072,13 @@ static void phb3_read_phb_status(struct phb3 *p,
 			   &stat->tlpHdr4);
 	phb3_pcicfg_read32(&p->phb, 0, p->aercap + PCIECAP_AER_SRCID,
 			   &stat->sourceId);
+
+	/* Restore to AIB */
+	p->flags &= ~PHB3_CFG_USE_ASB;
+	if (locked) {
+		unlock(&p->lock);
+		pci_put_phb(&p->phb);
+	}
 
 	/* PHB3 inbound and outbound error Regs */
 	stat->phbPlssr = phb3_read_reg_asb(p, PHB_CPU_LOADSTORE_STATUS);
@@ -1466,6 +1521,9 @@ static void phb3_setup_for_link_up(struct phb3 *p)
 
 	/* Mark link down */
 	p->has_link = true;
+
+	/* Don't block PCI-CFG */
+	p->flags &= ~PHB3_CFG_BLOCKED;
 }
 
 static int64_t phb3_sm_link_poll(struct phb3 *p)
@@ -1589,6 +1647,7 @@ static int64_t phb3_hot_reset(struct phb *phb)
 		return OPAL_HARDWARE;
 	}
 
+	p->flags |= PHB3_CFG_BLOCKED;
 	return phb3_sm_hot_reset(p);
 }
 
@@ -1657,6 +1716,7 @@ static int64_t phb3_fundamental_reset(struct phb *phb)
 		return OPAL_HARDWARE;
 	}
 
+	p->flags |= PHB3_CFG_BLOCKED;
 	return phb3_sm_fundamental_reset(p);
 }
 
@@ -1683,6 +1743,9 @@ static int64_t phb3_complete_reset(struct phb *phb, uint8_t assert)
 		if (p->state != PHB3_STATE_FUNCTIONAL &&
 		    p->state != PHB3_STATE_FENCED)
 			return OPAL_HARDWARE;
+
+		/* Block PCI-CFG access */
+		p->flags |= PHB3_CFG_BLOCKED;
 
 		/* Clear errors in NFIR and raise ETU reset */
 		xscom_read(p->chip_id, p->pe_xscom + 0x0, &nfir);
@@ -1712,7 +1775,10 @@ static int64_t phb3_complete_reset(struct phb *phb, uint8_t assert)
 		if (p->state != PHB3_STATE_FUNCTIONAL)
 			return OPAL_HARDWARE;
 
-		/* Issue hot reset */
+		/*
+		 * Issue hot reset. PCI-CFG access will be
+		 * enabled on completion of hot reset.
+		 */
 		return phb3_hot_reset(phb);
         }
 
@@ -1817,7 +1883,7 @@ static int64_t phb3_eeh_freeze_status(struct phb *phb, uint64_t pe_number,
 bail:
 	if (phb_status)
 		phb3_read_phb_status(p,
-			(struct OpalIoPhb3ErrorData *)phb_status, 0);
+			(struct OpalIoPhb3ErrorData *)phb_status);
 
 	return OPAL_SUCCESS;
 }

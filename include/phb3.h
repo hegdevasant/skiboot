@@ -241,8 +241,13 @@ struct phb3_err {
 #define PHB3_LINK_WAIT_RETRIES		90
 #define PHB3_LINK_ELECTRICAL_RETRIES	10
 
+/* PHB3 flags */
+#define PHB3_CFG_USE_ASB	0x00000001
+#define PHB3_CFG_BLOCKED	0x00000002
+
 struct phb3 {
 	unsigned int		index;	    /* 0..2 index inside P8 */
+	unsigned int		flags;
 	unsigned int		chip_id;    /* Chip ID (== GCID on P8) */
 	void			*regs;
 	uint64_t		pe_xscom;   /* XSCOM bases */
