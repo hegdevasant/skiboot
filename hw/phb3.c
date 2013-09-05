@@ -35,6 +35,8 @@
 #include <phb3.h>
 #include <phb3-regs.h>
 
+static void phb3_init_hw(struct phb3 *p);
+
 static void phb3_trace(struct phb3 *p, FILE *s, const char *fmt, ...)
 {
 	/* Use a temp stack buffer to print all at once to avoid
@@ -1630,6 +1632,66 @@ static int64_t phb3_fundamental_reset(struct phb *phb)
 	return phb3_sm_fundamental_reset(p);
 }
 
+/*
+ * The OS is expected to do fundamental reset after complete
+ * reset to make sure the PHB could be recovered from the
+ * fenced state. However, the OS needn't do that explicitly
+ * since fundamental reset will be done automatically while
+ * powering on the PHB.
+ *
+ *
+ * Usually, we need power off/on the PHB. That includes the
+ * fundamental reset. However, we don't know how to control
+ * the power stuff yet. So skip that and do fundamental reset
+ * directly after reinitialization the hardware.
+ */
+static int64_t phb3_complete_reset(struct phb *phb, uint8_t assert)
+{
+	struct phb3 *p = phb_to_phb3(phb);
+	uint64_t nfir, cqsts, val;
+	int i;
+
+	if (assert == OPAL_ASSERT_RESET) {
+		if (p->state != PHB3_STATE_FUNCTIONAL &&
+		    p->state != PHB3_STATE_FENCED)
+			return OPAL_HARDWARE;
+
+		/* Clear errors in NFIR and raise ETU reset */
+		xscom_read(p->chip_id, p->pe_xscom + 0x0, &nfir);
+		xscom_write(p->chip_id, p->pci_xscom + 0xa,
+			    0x8000000000000000);
+		for (i = 0; i < 500; i++) {
+			xscom_read(p->chip_id, p->pe_xscom + 0x1c, &val);
+			xscom_read(p->chip_id, p->pe_xscom + 0x1d, &val);
+			xscom_read(p->chip_id, p->pe_xscom + 0x1e, &val);
+			xscom_read(p->chip_id, p->pe_xscom + 0xf, &cqsts);
+			if (!(cqsts & 0xC000000000000000))
+				break;
+			time_wait_ms(10);
+		}
+		if (cqsts & 0xC000000000000000)
+			PHBERR(p, "Timeout waiting for pending transaction\n");
+		xscom_write(p->chip_id, p->pe_xscom + 0x1, ~nfir);
+		time_wait_ms(100);
+
+		/*
+		 * Re-initialize the PHB and issue
+		 * the fundamental reset.
+		 */
+		phb3_init_hw(p);
+		return phb3_fundamental_reset(phb);
+	} else {
+		if (p->state != PHB3_STATE_FUNCTIONAL)
+			return OPAL_HARDWARE;
+
+		/* Issue hot reset */
+		return phb3_hot_reset(phb);
+        }
+
+	/* We shouldn't run to here */
+	return OPAL_PARAMETER;
+}
+
 static int64_t phb3_poll(struct phb *phb)
 {
 	struct phb3 *p = phb_to_phb3(phb);
@@ -1960,15 +2022,13 @@ static const struct phb_ops phb3_ops = {
 	.slot_power_on		= phb3_slot_power_on,
 	.hot_reset		= phb3_hot_reset,
 	.fundamental_reset	= phb3_fundamental_reset,
+	.complete_reset		= phb3_complete_reset,
 	.poll			= phb3_poll,
 	.eeh_freeze_status	= phb3_eeh_freeze_status,
 	.eeh_freeze_clear	= phb3_eeh_freeze_clear,
 	.next_error		= phb3_eeh_next_error,
 	.get_diag_data		= NULL,
 	.get_diag_data2		= phb3_get_diag_data,
-/*
-	.complete_reset		= p7ioc_complete_reset,
-*/
 };
 
 static void phb3_setup_aib(struct phb3 *p)

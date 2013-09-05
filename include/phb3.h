@@ -197,6 +197,9 @@ enum phb3_state {
 	/* Set if the PHB is for some reason unusable */
 	PHB3_STATE_BROKEN,
 
+	/* PHB fenced */
+	PHB3_STATE_FENCED,
+
 	/* Normal PHB functional state */
 	PHB3_STATE_FUNCTIONAL,
 
