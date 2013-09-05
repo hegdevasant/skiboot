@@ -1614,7 +1614,7 @@ static int64_t phb3_eeh_freeze_status(struct phb *phb, uint64_t pe_number,
 				      uint8_t *freeze_state,
 				      uint16_t *pci_error_type,
 				      uint16_t *severity,
-				      uint64_t __unused *phb_status)
+				      uint64_t *phb_status)
 {
 	struct phb3 *p = phb_to_phb3(phb);
 	uint64_t peev_bit = PPC_BIT(pe_number & 0x3f);
@@ -1652,10 +1652,8 @@ static int64_t phb3_eeh_freeze_status(struct phb *phb, uint64_t pe_number,
 	if (!(peev & peev_bit))
 		return OPAL_SUCCESS;
 
-#if 0
 	/* Indicate that we have an ER pending */
-	p7ioc_phb_set_err_pending(p, true);
-#endif
+	phb3_set_err_pending(p, true);
 	if (severity)
 		*severity = OPAL_EEH_SEV_PE_ER;
 
@@ -1671,13 +1669,11 @@ static int64_t phb3_eeh_freeze_status(struct phb *phb, uint64_t pe_number,
 	if (pestb & IODA2_PESTB_DMA_STOPPED)
 		*freeze_state |= OPAL_EEH_STOPPED_DMA_FREEZE;
 
-	/* XXX Read the actual PEST error from the in-memory PEST */
- bail:
-#if 0
+bail:
 	if (phb_status)
-		p7ioc_eeh_read_phb_status(p, (struct OpalIoP7IOCPhbErrorData *)
-					  phb_status);
-#endif
+		phb3_read_phb_status(p,
+			(struct OpalIoPhb3ErrorData *)phb_status, 0);
+
 	return OPAL_SUCCESS;
 }
 
