@@ -93,7 +93,7 @@ struct HDIF_common_hdr *__get_hdif(struct spira_ntuple *n, const char id[],
 	return h;
 }
 
-static void add_xscom_node(uint64_t base, uint32_t id)
+static struct dt_node *add_xscom_node(uint64_t base, uint32_t id)
 {
 	struct dt_node *node;
 	uint64_t addr, size;
@@ -125,6 +125,8 @@ static void add_xscom_node(uint64_t base, uint32_t id)
 		dt_add_property_strings(node, "compatible", "ibm,xscom");
 	}
 	dt_add_property_u64s(node, "reg", addr, size);
+
+	return node;
 }
 
 struct dt_node *find_xscom_for_chip(uint32_t chip_id)
@@ -145,9 +147,11 @@ static void add_xscom(void)
 {
 	const void *ms_vpd;
 	const struct msvpd_pmover_bsr_synchro *pmbs;
-	unsigned int size, i;
+	unsigned int size, i, vpd_sz;
 	uint64_t xscom_base;
-	void *hdif;
+	struct HDIF_common_hdr *hdif;
+	const void *vpd;
+	struct dt_node *np;
 
 	ms_vpd = get_hdif(&spira.ntuples.ms_vpd, MSVPD_HDIF_SIG);
 	if (!ms_vpd) {
@@ -182,10 +186,9 @@ static void add_xscom(void)
 	for_each_ntuple_idx(&spira.ntuples.proc_chip, hdif, i,
 			    SPPCRD_HDIF_SIG) {
 		const struct sppcrd_chip_info *cinfo;
-		u32 ve;
+		u32 ve, version;
 
-		cinfo = HDIF_get_idata(hdif, SPPCRD_IDATA_CHIP_INFO,
-						NULL);
+		cinfo = HDIF_get_idata(hdif, SPPCRD_IDATA_CHIP_INFO, NULL);
 		if (!CHECK_SPPTR(cinfo)) {
 			prerror("XSCOM: Bad ChipID data %d\n", i);
 			continue;
@@ -197,7 +200,34 @@ static void add_xscom(void)
 		    ve == CHIP_VERIFY_UNUSABLE)
 			continue;
 
-		add_xscom_node(xscom_base, be32_to_cpu(cinfo->xscom_id));
+		/* Create the XSCOM node */
+		np = add_xscom_node(xscom_base, be32_to_cpu(cinfo->xscom_id));
+		if (!np)
+			continue;
+
+		version = be16_to_cpu(hdif->version);
+
+		/* Version 0A has additional OCC related stuff */
+		if (version >= 0x000a) {
+			dt_add_property_cells(np, "ibm,dbob-id",
+					      be32_to_cpu(cinfo->dbob_id));
+			dt_add_property_cells(np, "ibm,occ-functional-state",
+					      be32_to_cpu(cinfo->occ_state));
+		}
+
+		/* Add chip VPD */
+		vpd = HDIF_get_idata(hdif, SPPCRD_IDATA_KW_VPD, &vpd_sz);
+		if (CHECK_SPPTR(vpd))
+			dt_add_property(np, "ibm,chip-vpd", vpd, vpd_sz);
+
+		/* Add module VPD on version A and later */
+		if (version >= 0x000a) {
+			vpd = HDIF_get_idata(hdif, SPPCRD_IDATA_MODULE_VPD,
+					     &vpd_sz);
+			if (CHECK_SPPTR(vpd))
+				dt_add_property(np, "ibm,module-vpd", vpd,
+						vpd_sz);
+		}
 	}
 
 	if (i > 0)
@@ -232,7 +262,13 @@ static void add_xscom(void)
 		if (find_xscom_for_chip(chip_id))
 			continue;
 
-		add_xscom_node(xscom_base, chip_id);
+		/* Create the XSCOM node */
+		np = add_xscom_node(xscom_base, chip_id);
+
+		/* Add chip VPD */
+		vpd = HDIF_get_idata(hdif, SPPACA_IDATA_KW_VPD, &vpd_sz);
+		if (CHECK_SPPTR(vpd))
+			dt_add_property(np, "ibm,chip-vpd", vpd, vpd_sz);
 	}
 }
 

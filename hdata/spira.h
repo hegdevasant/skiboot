@@ -763,6 +763,10 @@ struct sppcrd_chip_info {
 	__be32 nx_state;
 	__be32 pore_state;
 	__be32 xscom_id;
+	/* Version 0xA */
+	__be32 reserved;
+	__be32 dbob_id;
+	__be32 occ_state;
 } __packed;
 
 /* Idata index 1 : Chip TOD */
@@ -774,6 +778,17 @@ struct sppcrd_chip_tod {
 	__be32 ctrl_reg_internal;
 	__be32 tod_ctrl_reg;
 } __packed;
+
+/* Idata index 2 : FRU ID */
+#define SPPCRD_IDATA_FRU_ID	2
+
+/* Idata index 3 : ASCII Keyword data */
+#define SPPCRD_IDATA_KW_VPD	3
+
+/* Idata index 4 : Module VPD */
+#define SPPCRD_IDATA_MODULE_VPD	4
+
+
 
 static inline const char *cpu_state(u32 flags)
 {
