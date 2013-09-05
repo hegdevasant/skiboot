@@ -1,25 +1,20 @@
 /*
  * PHB3 support
  *
- * XXX This is a very mimimal implementation, all of the advanced
- * functionality such as EEH support still need to be added
- *
- * XXX Additionally, PBCQ-level errors need to be handled.
- *
- *     IE.
- *
- *     In case of FFFF's the procedure typically would be to follow
- *     first the PBCQ spec, ie, try to read from PHB regs, and if that
- *     return all 1's -> fenced -> extract diags via backdoor ASB
- *     (indirect via PBCQ XSCOM on PHB3) then reset. Else -> ER.
- *
  * (C) Copyright IBM Corp., 2013 and provided pursuant to the Technology
  * Licensing Agreement between Google Inc. and International Business
  * Machines Corporation, IBM License Reference Number AA130103030256 and
  * confidentiality governed by the Parties’ Mutual Nondisclosure Agreement
  * number V032404DR, executed by the parties on November 6, 2007, and
  * Supplement V032404DR-3 dated August 16, 2012 (the “NDA”).
+ *
+ * FIXME:
+ *   More stuff for EEH support:
+ *      - PBCQ error reporting interrupt
+ *	- I2C-based power management (replacing SHPC)
+ *	- Directly detect fenced PHB through one dedicated HW reg
  */
+
 #include <skiboot.h>
 #include <io.h>
 #include <timebase.h>
