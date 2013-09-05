@@ -1509,6 +1509,59 @@ static int64_t phb3_start_link_poll(struct phb3 *p)
 	return phb3_set_sm_timeout(p, msecs_to_tb(100));
 }
 
+static int64_t phb3_sm_hot_reset(struct phb3 *p)
+{
+	uint16_t brctl;
+
+	switch (p->state) {
+	case PHB3_STATE_FUNCTIONAL:
+		/* We need do nothing with available slot */
+		if (phb3_presence_detect(&p->phb) != OPAL_SHPC_DEV_PRESENT) {
+			PHBDBG(p, "Slot hreset: no device\n");
+			return OPAL_CLOSED;
+		}
+
+		/* Prepare for link going down */
+		phb3_setup_for_link_down(p);
+
+		/* Turn on hot reset */
+		phb3_pcicfg_read16(&p->phb, 0, PCI_CFG_BRCTL, &brctl);
+		brctl |= PCI_CFG_BRCTL_SECONDARY_RESET;
+		phb3_pcicfg_write16(&p->phb, 0, PCI_CFG_BRCTL, brctl);
+		PHBDBG(p, "Slot hreset: assert reset\n");
+
+		p->state = PHB3_STATE_HRESET_DELAY;
+		return phb3_set_sm_timeout(p, secs_to_tb(1));
+	case PHB3_STATE_HRESET_DELAY:
+		/* Turn off hot reset */
+		phb3_pcicfg_read16(&p->phb, 0, PCI_CFG_BRCTL, &brctl);
+		brctl &= ~PCI_CFG_BRCTL_SECONDARY_RESET;
+		phb3_pcicfg_write16(&p->phb, 0, PCI_CFG_BRCTL, brctl);
+		PHBDBG(p, "Slot hreset: deassert reset\n");
+
+		return phb3_start_link_poll(p);
+	default:
+		PHBDBG(p, "Slot hreset: wrong state %d\n", p->state);
+		break;
+	}
+
+	p->state = PHB3_STATE_FUNCTIONAL;
+	return OPAL_HARDWARE;
+}
+
+static int64_t phb3_hot_reset(struct phb *phb)
+{
+	struct phb3 *p = phb_to_phb3(phb);
+
+	if (p->state != PHB3_STATE_FUNCTIONAL) {
+		PHBDBG(p, "phb3_hot_reset: wrong state %d\n",
+		       p->state);
+		return OPAL_HARDWARE;
+	}
+
+	return phb3_sm_hot_reset(p);
+}
+
 static int64_t phb3_sm_fundamental_reset(struct phb3 *p)
 {
 	uint64_t reg;
@@ -1595,6 +1648,8 @@ static int64_t phb3_poll(struct phb *phb)
 
 	/* Dispatch to the right state machine */
 	switch(p->state) {
+	case PHB3_STATE_HRESET_DELAY:
+		return phb3_sm_hot_reset(p);
 	case PHB3_STATE_FRESET_ASSERT_DELAY:
 	case PHB3_FRESET_DEASSERT_DELAY:
 		return phb3_sm_fundamental_reset(p);
@@ -1903,6 +1958,7 @@ static const struct phb_ops phb3_ops = {
 	.power_state		= phb3_power_state,
 	.slot_power_off		= phb3_slot_power_off,
 	.slot_power_on		= phb3_slot_power_on,
+	.hot_reset		= phb3_hot_reset,
 	.fundamental_reset	= phb3_fundamental_reset,
 	.poll			= phb3_poll,
 	.eeh_freeze_status	= phb3_eeh_freeze_status,
@@ -1912,7 +1968,6 @@ static const struct phb_ops phb3_ops = {
 	.get_diag_data2		= phb3_get_diag_data,
 /*
 	.complete_reset		= p7ioc_complete_reset,
-	.hot_reset		= p7ioc_hot_reset,
 */
 };
 

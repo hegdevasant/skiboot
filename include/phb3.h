@@ -200,6 +200,9 @@ enum phb3_state {
 	/* Normal PHB functional state */
 	PHB3_STATE_FUNCTIONAL,
 
+	/* Hot reset */
+	PHB3_STATE_HRESET_DELAY,
+
 	/* Fundamental reset */
 	PHB3_STATE_FRESET_ASSERT_DELAY,
 	PHB3_FRESET_DEASSERT_DELAY,
