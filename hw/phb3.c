@@ -1854,6 +1854,31 @@ static int64_t phb3_eeh_next_error(struct phb *phb,
 	return OPAL_SUCCESS;
 }
 
+static int64_t phb3_get_diag_data(struct phb *phb,
+				  void *diag_buffer,
+				  uint64_t diag_buffer_len)
+{
+	struct phb3 *p = phb_to_phb3(phb);
+	struct OpalIoPhb3ErrorData *data = diag_buffer;
+
+	if (diag_buffer_len < sizeof(struct OpalIoPhb3ErrorData))
+		return OPAL_PARAMETER;
+
+	phb3_read_phb_status(p, data);
+
+	/*
+	 * We're running to here probably because of errors
+	 * (INF class). For that case, we need clear the error
+	 * explicitly.
+	 */
+	if (phb3_err_pending(p) &&
+	    p->err.err_class == PHB3_ERR_CLASS_INF &&
+	    p->err.err_src == PHB3_ERR_SRC_PHB)
+		phb3_err_ER_clear(p);
+
+	return OPAL_SUCCESS;
+}
+
 static const struct phb_ops phb3_ops = {
 	.lock			= phb3_lock,
 	.unlock			= phb3_unlock,
@@ -1885,10 +1910,11 @@ static const struct phb_ops phb3_ops = {
 	.eeh_freeze_status	= phb3_eeh_freeze_status,
 	.eeh_freeze_clear	= phb3_eeh_freeze_clear,
 	.next_error		= phb3_eeh_next_error,
+	.get_diag_data		= NULL,
+	.get_diag_data2		= phb3_get_diag_data,
 /*
 	.complete_reset		= p7ioc_complete_reset,
 	.hot_reset		= p7ioc_hot_reset,
-	.get_diag_data		= p7ioc_get_diag_data,
 */
 };
 
