@@ -1844,18 +1844,15 @@ static int64_t phb3_eeh_freeze_status(struct phb *phb, uint64_t pe_number,
 		goto bail;
 	}
 
-#if 0
 	/* Check fence */
-	if (p7ioc_phb_fenced(p)) {
-		/* Should be OPAL_EEH_STOPPED_TEMP_UNAVAIL ? */
+	if (phb3_fenced(p)) {
 		*freeze_state = OPAL_EEH_STOPPED_MMIO_DMA_FREEZE;
 		*pci_error_type = OPAL_EEH_PHB_ERROR;
 		if (severity)
 			*severity = OPAL_EEH_SEV_PHB_FENCED;
-		p->state = P7IOC_PHB_STATE_FENCED;
+		p->state = PHB3_STATE_FENCED;
 		goto bail;
 	}
-#endif
 
 	/* Check the PEEV */
 	phb3_ioda_sel(p, IODA2_TBL_PEEV, pe_number / 4, true);
