@@ -65,6 +65,7 @@
  */
 struct proc_chip {
 	uint32_t	id;		/* HW Chip ID (GCID) */
+	uint32_t	dbob_id;	/* Drawer/Block/Octant/Blade (DBOBID) */
 
 	/* Used by hw/xscom.c */
 	uint64_t	xscom_base;

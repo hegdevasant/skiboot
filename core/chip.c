@@ -52,5 +52,7 @@ void init_chips(void)
 		assert(chip);
 		chip->id = id;
 		chips[id] = chip;
+		chip->dbob_id = dt_prop_get_u32_def(xn, "ibm,dbob-id",
+						    0xffffffff);
 	};
 }

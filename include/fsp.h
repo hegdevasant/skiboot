@@ -358,6 +358,16 @@
 #define FSP_CMD_FREE_VNV_STATS	0x00eb0600 /* FSP->HV */
 #define FSP_RSP_FREE_VNV_STATS	0x00eb8600
 
+/*
+ * Class F0
+ */
+#define FSP_CMD_LOAD_OCC	0x00f00100 /* FSP->HV */
+#define FSP_RSP_LOAD_OCC	0x00f08100 /* HV->FSP */
+#define FSP_CMD_LOAD_OCC_STAT	0x01f00300 /* HV->FSP */
+#define FSP_CMD_RESET_OCC	0x00f00200 /* FSP->HV */
+#define FSP_RSP_RESET_OCC	0x00f08200 /* HV->FSP */
+#define FSP_CMD_RESET_OCC_STAT	0x01f00400 /* HV->FSP */
+
 
 /*
  * Functions exposed to the rest of skiboot

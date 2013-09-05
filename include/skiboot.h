@@ -122,6 +122,7 @@ extern void probe_p7ioc(void);
 extern void probe_phb3(void);
 extern void uart_init(void);
 extern void slw_init(void);
+extern void occ_init(void);
 
 /* Flatten device-tree */
 extern void *create_dtb(const struct dt_node *root);

@@ -460,6 +460,9 @@ void main_cpu_entry(const void *fdt, u32 master_cpu)
 	 */
 	fsp_console_preinit();
 
+	/* Get ready to receive OCC related messages */
+	occ_init();
+
 	/* Start FSP/HV state controller & perform OPL */
 	fsp_opl();
 
