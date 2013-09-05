@@ -139,7 +139,7 @@ int fsp_get_sys_param(uint32_t param_id, void *buffer, uint32_t length,
 static bool fsp_sysparam_msg(u32 cmd_sub_mod, struct fsp_msg *msg)
 {
 	struct fsp_msg *rsp;
-	int rc;
+	int rc = -ENOMEM;
 
 	switch(cmd_sub_mod) {
 	case FSP_CMD_SP_SPARM_UPD_0:
@@ -147,7 +147,8 @@ static bool fsp_sysparam_msg(u32 cmd_sub_mod, struct fsp_msg *msg)
 		printf("FSP: Got sysparam update, param ID 0x%x\n",
 		       msg->data.words[0]);
 		rsp = fsp_mkmsg((cmd_sub_mod & 0xffff00) | 0x008000, 0);
-		rc = fsp_queue_msg(rsp, fsp_freemsg);
+		if (rsp)
+			rc = fsp_queue_msg(rsp, fsp_freemsg);
 		if (rc) {
 			prerror("FSP: Error %d queuing sysparam reply\n", rc);
 			/* What to do here ? R/R ? */
