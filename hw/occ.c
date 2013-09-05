@@ -48,7 +48,8 @@ static void occ_do_load(u8 scope, u32 dbob_id, u32 seq_id)
 		if (scope == 0x01 && dbob_id != chip->dbob_id)
 			continue;
 		rc = -ENOMEM;
-		stat = fsp_mkmsg(FSP_CMD_LOAD_OCC_STAT, 2, chip->id, seq_id);
+		stat = fsp_mkmsg(FSP_CMD_LOAD_OCC_STAT, 2,
+				 chip->pcid & 0xff, seq_id);
 		if (stat)
 			rc = fsp_queue_msg(stat, fsp_freemsg);
 		if (rc) {
@@ -96,7 +97,7 @@ static void occ_do_reset(u8 scope, u32 dbob_id, u32 seq_id)
 			continue;
 		rc = -ENOMEM;
 		stat = fsp_mkmsg(FSP_CMD_RESET_OCC_STAT, 2,
-				 0xfe00 | chip->id, seq_id);
+				 0xfe00 | (chip->pcid & 0xff), seq_id);
 		if (stat)
 			rc = fsp_queue_msg(stat, fsp_freemsg);
 		if (rc) {
