@@ -28,7 +28,7 @@ void sysvpd_parse(void)
 	if (!CHECK_SPPTR(sysvpd))
 		goto no_sysvpd;
 
-	dt_add_property(dt_root, "ibm,vpd", sysvpd, sysvpd_sz);
+	dt_add_property(dt_root, "ibm,system-vpd", sysvpd, sysvpd_sz);
 
 	model = vpd_find(sysvpd, sysvpd_sz, "VSYS", "TM", &sz);
 	if (!model)
