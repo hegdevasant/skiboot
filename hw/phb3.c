@@ -1576,20 +1576,20 @@ static int64_t phb3_sm_fundamental_reset(struct phb3 *p)
 
 	switch(p->state) {
 	case PHB3_STATE_FUNCTIONAL:
-		/* Prepare for link going down */
-		phb3_setup_for_link_down(p);
-
 		/* Check if there's something connected */
 		if (phb3_presence_detect(&p->phb) != OPAL_SHPC_DEV_PRESENT) {
 			PHBDBG(p, "Slot freset: no device\n");
 			return OPAL_CLOSED;
 		}
 
+		/* Prepare for link going down */
+		phb3_setup_for_link_down(p);
+
 		/* Assert PERST */
 		reg = in_be64(p->regs + PHB_RESET);
 		reg &= ~0x2000000000000000ul;
 		out_be64(p->regs + PHB_RESET, reg);
-		PHBDBG(p, "Asserting PERST...\n");
+		PHBDBG(p, "Slot freset: Asserting PERST\n");
 
 		/* XXX Check delay for PERST... doing 1s for now */
 		p->state = PHB3_STATE_FRESET_ASSERT_DELAY;
@@ -1600,7 +1600,7 @@ static int64_t phb3_sm_fundamental_reset(struct phb3 *p)
 		reg = in_be64(p->regs + PHB_RESET);
 		reg |= 0x2000000000000000ul;
 		out_be64(p->regs + PHB_RESET, reg);
-		PHBDBG(p, "Deasserting PERST...\n");
+		PHBDBG(p, "Slot freset: Deasserting PERST\n");
 
 		/* Wait 200ms before polling link */
 		p->state = PHB3_FRESET_DEASSERT_DELAY;
@@ -1611,7 +1611,7 @@ static int64_t phb3_sm_fundamental_reset(struct phb3 *p)
 		return phb3_start_link_poll(p);
 
 	default:
-		PHBDBG(p, "phb3_sm_fundamental_reset: wrong state %d\n",
+		PHBDBG(p, "Slot freset: wrong state %d\n",
 		       p->state);
 		break;
 	}
