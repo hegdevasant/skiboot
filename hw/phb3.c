@@ -1681,23 +1681,22 @@ static int64_t phb3_eeh_freeze_clear(struct phb *phb, uint64_t pe_number,
 				     uint64_t eeh_action_token)
 {
 	struct phb3 *p = phb_to_phb3(phb);
-
-	/* XXX Minimal stuff to get working vs. PCI probe, proper
-	 * EEH still needs to be done
-	 */
-	u64 err;
+	uint64_t err, peev[4];
+	int32_t i;
+	bool frozen_pe = false;
 
 	/* Summary. If nothing, move to clearing the PESTs which can
 	 * contain a freeze state from a previous error or simply set
 	 * explicitely by the user
 	 */
 	err = in_be64(p->regs + PHB_ETU_ERR_SUMMARY);
-	if (err == 0)
-		goto clear_pest;
+	if (err != 0)
+		phb3_err_ER_clear(p);
 
-	phb3_err_ER_clear(p);
-
- clear_pest:
+	/*
+	 * We have PEEV in system memory. It would give more performance
+	 * to access that directly.
+	 */
 	if (eeh_action_token & OPAL_EEH_ACTION_CLEAR_FREEZE_MMIO) {
 		phb3_ioda_sel(p, IODA2_TBL_PESTA, pe_number, false);
 		out_be64(p->regs + PHB_IODA_DATA0, 0);
@@ -1708,19 +1707,22 @@ static int64_t phb3_eeh_freeze_clear(struct phb *phb, uint64_t pe_number,
 	}
 
 
-#if 0
 	/* Update ER pending indication */
-	phb3_ioda_sel(p, IODA_TBL_PEEV, 0, true);
-	peev0 = in_be64(p->regs + PHB_IODA_DATA0);
-	peev1 = in_be64(p->regs + PHB_IODA_DATA0);
-	if (peev0 || peev1) {
-		p->err.err_src   = P7IOC_ERR_SRC_PHB0 + p->index;
-		p->err.err_class = P7IOC_ERR_CLASS_ER;
-		p->err.err_bit   = 0;
-		p7ioc_phb_set_err_pending(p, true);
+	phb3_ioda_sel(p, IODA2_TBL_PEEV, 0, true);
+	for (i = 0; i < ARRAY_SIZE(peev); i++) {
+		peev[i] = in_be64(p->regs + PHB_IODA_DATA0);
+		if (peev[i]) {
+			frozen_pe = true;
+			break;
+		}
+	}
+	if (frozen_pe) {
+		p->err.err_src	 = PHB3_ERR_SRC_PHB;
+		p->err.err_class = PHB3_ERR_CLASS_ER;
+		p->err.err_bit   = -1;
+		phb3_set_err_pending(p, true);
 	} else
-		p7ioc_phb_set_err_pending(p, false);
-#endif
+		phb3_set_err_pending(p, false);
 
 	return OPAL_SUCCESS;
 }
