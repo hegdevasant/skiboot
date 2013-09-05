@@ -1,25 +1,20 @@
 /*
  * PHB3 support
  *
- * XXX This is a very mimimal implementation, all of the advanced
- * functionality such as EEH support still need to be added
- *
- * XXX Additionally, PBCQ-level errors need to be handled.
- *
- *     IE.
- *
- *     In case of FFFF's the procedure typically would be to follow
- *     first the PBCQ spec, ie, try to read from PHB regs, and if that
- *     return all 1's -> fenced -> extract diags via backdoor ASB
- *     (indirect via PBCQ XSCOM on PHB3) then reset. Else -> ER.
- *
  * (C) Copyright IBM Corp., 2013 and provided pursuant to the Technology
  * Licensing Agreement between Google Inc. and International Business
  * Machines Corporation, IBM License Reference Number AA130103030256 and
  * confidentiality governed by the Parties’ Mutual Nondisclosure Agreement
  * number V032404DR, executed by the parties on November 6, 2007, and
  * Supplement V032404DR-3 dated August 16, 2012 (the “NDA”).
+ *
+ * FIXME:
+ *   More stuff for EEH support:
+ *      - PBCQ error reporting interrupt
+ *	- I2C-based power management (replacing SHPC)
+ *	- Directly detect fenced PHB through one dedicated HW reg
  */
+
 #include <skiboot.h>
 #include <io.h>
 #include <timebase.h>
@@ -34,6 +29,8 @@
 #include <xscom.h>
 #include <phb3.h>
 #include <phb3-regs.h>
+
+static void phb3_init_hw(struct phb3 *p);
 
 static void phb3_trace(struct phb3 *p, FILE *s, const char *fmt, ...)
 {
@@ -94,6 +91,16 @@ static inline uint64_t phb3_set_sm_timeout(struct phb3 *p, uint64_t dur)
 	return dur;
 }
 
+/* Check if AIB is fenced via PBCQ NFIR */
+static bool phb3_fenced(struct phb3 *p)
+{
+	uint64_t nfir;
+
+	/* We still probably has crazy xscom */
+	xscom_read(p->chip_id, p->pe_xscom + 0x0, &nfir);
+	return !!(nfir & PPC_BIT(16));
+}
+
 /*
  * Configuration space access
  *
@@ -131,47 +138,80 @@ static int64_t phb3_pcicfg_check(struct phb3 *p, uint32_t bdfn,
 static int64_t phb3_pcicfg_read##size(struct phb *phb, uint32_t bdfn,	\
                                       uint32_t offset, type *data)	\
 {									\
-        struct phb3 *p = phb_to_phb3(phb);				\
-        uint64_t addr;							\
-        int64_t rc;							\
-        uint8_t pe;							\
+	struct phb3 *p = phb_to_phb3(phb);				\
+	uint64_t addr, val64;						\
+	int64_t rc;							\
+	uint8_t pe;							\
+	bool use_asb = false;						\
 									\
-        /* Initialize data in case of error */				\
-        *data = (type)0xffffffff;					\
+	/* Initialize data in case of error */				\
+	*data = (type)0xffffffff;					\
 									\
-        rc = phb3_pcicfg_check(p, bdfn, offset, sizeof(type), &pe);	\
-        if (rc)								\
-                return rc;						\
+	rc = phb3_pcicfg_check(p, bdfn, offset, sizeof(type), &pe);	\
+	if (rc)								\
+		return rc;						\
 									\
-        addr = PHB_CA_ENABLE | ((uint64_t)bdfn << PHB_CA_FUNC_LSH);	\
-        addr = SETFIELD(PHB_CA_REG, addr, offset);			\
-        addr = SETFIELD(PHB_CA_PE, addr, pe);				\
-        out_be64(p->regs + PHB_CONFIG_ADDRESS, addr);			\
-        *data = in_le##size(p->regs + PHB_CONFIG_DATA +			\
-                                (offset & (4 - sizeof(type))));		\
+	if (phb3_fenced(p)) {						\
+		if (!(p->flags & PHB3_CFG_USE_ASB))			\
+			return OPAL_HARDWARE;				\
+		use_asb = true;						\
+	} else if ((p->flags & PHB3_CFG_BLOCKED) && bdfn != 0) {	\
+		return OPAL_HARDWARE;					\
+	}								\
 									\
-        return OPAL_SUCCESS;						\
+	addr = PHB_CA_ENABLE | ((uint64_t)bdfn << PHB_CA_FUNC_LSH);	\
+	addr = SETFIELD(PHB_CA_REG, addr, offset);			\
+	addr = SETFIELD(PHB_CA_PE, addr, pe);				\
+	if (use_asb) {							\
+		phb3_write_reg_asb(p, PHB_CONFIG_ADDRESS, addr);	\
+		sync();							\
+		val64 = bswap_64(phb3_read_reg_asb(p, PHB_CONFIG_DATA));	\
+		*data = (type)(val64 >> (8 * (offset & (4 - sizeof(type)))));	\
+	} else {							\
+		out_be64(p->regs + PHB_CONFIG_ADDRESS, addr);		\
+		*data = in_le##size(p->regs + PHB_CONFIG_DATA +		\
+				    (offset & (4 - sizeof(type))));	\
+	}								\
+									\
+	return OPAL_SUCCESS;						\
 }
 
 #define PHB3_PCI_CFG_WRITE(size, type)	\
 static int64_t phb3_pcicfg_write##size(struct phb *phb, uint32_t bdfn,	\
                                        uint32_t offset, type data)	\
 {									\
-        struct phb3 *p = phb_to_phb3(phb);				\
-        uint64_t addr;							\
-        int64_t rc;							\
-        uint8_t pe;							\
+	struct phb3 *p = phb_to_phb3(phb);				\
+	uint64_t addr, val64 = 0;					\
+	int64_t rc;							\
+	uint8_t pe;							\
+	bool use_asb = false;						\
 									\
-        rc = phb3_pcicfg_check(p, bdfn, offset, sizeof(type), &pe);	\
-        if (rc)								\
-                return rc;						\
+	rc = phb3_pcicfg_check(p, bdfn, offset, sizeof(type), &pe);	\
+	if (rc)								\
+		return rc;						\
 									\
-        addr = PHB_CA_ENABLE | ((uint64_t)bdfn << PHB_CA_FUNC_LSH);	\
-        addr = SETFIELD(PHB_CA_REG, addr, offset);			\
-        addr = SETFIELD(PHB_CA_PE, addr, pe);				\
-        out_be64(p->regs + PHB_CONFIG_ADDRESS, addr);			\
-        out_le##size(p->regs + PHB_CONFIG_DATA +			\
-                     (offset & (4 - sizeof(type))), data);		\
+	if (phb3_fenced(p)) {						\
+		if (!(p->flags & PHB3_CFG_USE_ASB))			\
+			return OPAL_HARDWARE;				\
+		use_asb = true;						\
+	} else if ((p->flags & PHB3_CFG_BLOCKED) && bdfn != 0) {	\
+		return OPAL_HARDWARE;					\
+	}								\
+									\
+	addr = PHB_CA_ENABLE | ((uint64_t)bdfn << PHB_CA_FUNC_LSH);	\
+	addr = SETFIELD(PHB_CA_REG, addr, offset);			\
+	addr = SETFIELD(PHB_CA_PE, addr, pe);				\
+	if (use_asb) {							\
+		val64 = data;						\
+		val64 = bswap_64(val64 << 8 * (offset & (4 - sizeof(type))));	\
+		phb3_write_reg_asb(p, PHB_CONFIG_ADDRESS, addr);	\
+		sync();							\
+		phb3_write_reg_asb(p, PHB_CONFIG_DATA, val64);		\
+	} else {							\
+		out_be64(p->regs + PHB_CONFIG_ADDRESS, addr);		\
+		out_le##size(p->regs + PHB_CONFIG_DATA +		\
+			     (offset & (4 - sizeof(type))), data);	\
+	}								\
 									\
         return OPAL_SUCCESS;						\
 }
@@ -771,6 +811,328 @@ static int64_t phb3_get_msi_64(struct phb *phb __unused,
 	return OPAL_SUCCESS;
 }
 
+static bool phb3_err_check_pbcq(struct phb3 *p)
+{
+	uint64_t nfir, mask, wof, val64;
+	int32_t class, bit;
+	uint64_t severity[PHB3_ERR_CLASS_LAST] = {
+		0x0000000000000000,	/* NONE	*/
+		0x018000F800000000,	/* DEAD */
+		0x7E7DC70000000000,	/* FENCED */
+		0x0000000000000000,	/* ER	*/
+		0x0000000000000000	/* INF	*/
+	};
+
+	/*
+	 * Read on NFIR to see if XSCOM is working properly.
+	 * If XSCOM doesn't work well, we need take the PHB
+	 * into account any more.
+	 */
+	xscom_read(p->chip_id, p->pe_xscom + 0x0, &nfir);
+	if (nfir == 0xffffffffffffffff) {
+		p->err.err_src = PHB3_ERR_SRC_NONE;
+		p->err.err_class = PHB3_ERR_CLASS_DEAD;
+		phb3_set_err_pending(p, true);
+		return true;
+	}
+
+	/*
+	 * Check WOF. We need handle unmasked errors firstly.
+	 * We probably run into the situation (on simulator)
+	 * where we have asserted FIR bits, but WOF has nothing.
+	 * For that case, we should check FIR as well.
+	 */
+	xscom_read(p->chip_id, p->pe_xscom + 0x3, &mask);
+	xscom_read(p->chip_id, p->pe_xscom + 0x8, &wof);
+	if (wof & ~mask)
+		wof &= ~mask;
+	if (!wof) {
+		if (nfir & ~mask)
+			nfir &= ~mask;
+		if (!nfir)
+			return false;
+		wof = nfir;
+	}
+
+	/* We shouldn't hit class PHB3_ERR_CLASS_NONE */
+	for (class = PHB3_ERR_CLASS_NONE;
+	     class < PHB3_ERR_CLASS_LAST;
+	     class++) {
+		val64 = wof & severity[class];
+		if (!val64)
+			continue;
+
+		for (bit = 0; bit < 64; bit++) {
+			if (val64 & PPC_BIT(bit)) {
+				p->err.err_src = PHB3_ERR_SRC_PBCQ;
+				p->err.err_class = class;
+				p->err.err_bit = 63 - bit;
+				phb3_set_err_pending(p, true);
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+
+static bool phb3_err_check_lem(struct phb3 *p)
+{
+	uint64_t fir, wof, mask, val64;
+	int32_t class, bit;
+	uint64_t severity[PHB3_ERR_CLASS_LAST] = {
+		0x0000000000000000,	/* NONE */
+		0x0000000000000000,	/* DEAD */
+		0xADB670C980ADD151,	/* FENCED */
+		0x000800107F500A2C,	/* ER   */
+		0x42018E2200002482	/* INF  */
+	};
+
+	/*
+	 * Read FIR. If XSCOM or ASB is frozen, we needn't
+	 * go forward and just mark the PHB with dead state
+	 */
+	fir = phb3_read_reg_asb(p, PHB_LEM_FIR_ACCUM);
+	if (fir == 0xffffffffffffffff) {
+		p->err.err_src = PHB3_ERR_SRC_PHB;
+		p->err.err_class = PHB3_ERR_CLASS_DEAD;
+		phb3_set_err_pending(p, true);
+		return true;
+	}
+
+	/*
+	 * Check on WOF for the unmasked errors firstly. Under
+	 * some situation where we run skiboot on simulator,
+	 * we already had FIR bits asserted, but WOF is still zero.
+	 * For that case, we check FIR directly.
+	 */
+	wof = phb3_read_reg_asb(p, PHB_LEM_WOF);
+	mask = phb3_read_reg_asb(p, PHB_LEM_ERROR_MASK);
+	if (wof & ~mask)
+		wof &= ~mask;
+	if (!wof) {
+		if (fir & ~mask)
+			fir &= ~mask;
+		if (!fir)
+			return false;
+		wof = fir;
+	}
+
+	/* We shouldn't hit PHB3_ERR_CLASS_NONE */
+	for (class = PHB3_ERR_CLASS_NONE;
+	     class < PHB3_ERR_CLASS_LAST;
+	     class++) {
+		val64 = wof & severity[class];
+		if (!val64)
+			continue;
+
+		for (bit = 0; bit < 64; bit++) {
+			if (val64 & PPC_BIT(bit)) {
+				p->err.err_src = PHB3_ERR_SRC_PHB;
+				p->err.err_class = class;
+				p->err.err_bit = 63 - bit;
+				phb3_set_err_pending(p, true);
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+
+/*
+ * The function can be called during error recovery for INF
+ * and ER class. For INF case, it's expected to be called
+ * when grabbing the error log. We will call it explicitly
+ * when clearing frozen PE state for ER case.
+ */
+static void phb3_err_ER_clear(struct phb3 *p)
+{
+	uint32_t val32;
+	uint64_t val64;
+	uint64_t fir = in_be64(p->regs + PHB_LEM_FIR_ACCUM);
+
+	/* Rec 1: Grab the PCI config lock */
+	phb3_cfg_lock(p);
+
+	/* Rec 2/3/4: Take all inbound transactions */
+	out_be64(p->regs + PHB_CONFIG_ADDRESS, 0x8000001c00000000ul);
+	out_be32(p->regs + PHB_CONFIG_DATA, 0x10000000);
+
+	/* Rec 5/6/7: Clear pending non-fatal errors */
+	out_be64(p->regs + PHB_CONFIG_ADDRESS, 0x8000005000000000ul);
+	val32 = in_be32(p->regs + PHB_CONFIG_DATA);
+	out_be32(p->regs + PHB_CONFIG_DATA, (val32 & 0xe0700000) | 0x0f000f00);
+
+	/* Rec 8/9/10: Clear pending fatal errors for AER */
+	out_be64(p->regs + PHB_CONFIG_ADDRESS, 0x8000010400000000ul);
+	out_be32(p->regs + PHB_CONFIG_DATA, 0xffffffff);
+
+	/* Rec 11/12/13: Clear pending non-fatal errors for AER */
+	out_be64(p->regs + PHB_CONFIG_ADDRESS, 0x8000011000000000ul);
+	out_be32(p->regs + PHB_CONFIG_DATA, 0xffffffff);
+
+	/* Rec 22/23/24: Clear root port errors */
+	out_be64(p->regs + PHB_CONFIG_ADDRESS, 0x8000013000000000ul);
+	out_be32(p->regs + PHB_CONFIG_DATA, 0xffffffff);
+
+	/* Rec 25/26/27: Enable IO and MMIO bar */
+	out_be64(p->regs + PHB_CONFIG_ADDRESS, 0x8000004000000000ul);
+	out_be32(p->regs + PHB_CONFIG_DATA, 0x470100f8);
+
+	/* Rec 28: Release the PCI config lock */
+	phb3_cfg_unlock(p);
+
+	/* Rec 29...34: Clear UTL errors */
+	val64 = in_be64(p->regs + UTL_SYS_BUS_AGENT_STATUS);
+	out_be64(p->regs + UTL_SYS_BUS_AGENT_STATUS, val64);
+	val64 = in_be64(p->regs + UTL_PCIE_PORT_STATUS);
+	out_be64(p->regs + UTL_PCIE_PORT_STATUS, val64);
+	val64 = in_be64(p->regs + UTL_RC_STATUS);
+	out_be64(p->regs + UTL_RC_STATUS, val64);
+
+	/* Rec 39...66: Clear PHB error trap */
+	val64 = in_be64(p->regs + PHB_ERR_STATUS);
+	out_be64(p->regs + PHB_ERR_STATUS, val64);
+	out_be64(p->regs + PHB_ERR1_STATUS, 0x0ul);
+	out_be64(p->regs + PHB_ERR_LOG_0, 0x0ul);
+	out_be64(p->regs + PHB_ERR_LOG_1, 0x0ul);
+
+	val64 = in_be64(p->regs + PHB_OUT_ERR_STATUS);
+	out_be64(p->regs + PHB_OUT_ERR_STATUS, val64);
+	out_be64(p->regs + PHB_OUT_ERR1_STATUS, 0x0ul);
+	out_be64(p->regs + PHB_OUT_ERR_LOG_0, 0x0ul);
+	out_be64(p->regs + PHB_OUT_ERR_LOG_1, 0x0ul);
+
+	val64 = in_be64(p->regs + PHB_INA_ERR_STATUS);
+	out_be64(p->regs + PHB_INA_ERR_STATUS, val64);
+	out_be64(p->regs + PHB_INA_ERR1_STATUS, 0x0ul);
+	out_be64(p->regs + PHB_INA_ERR_LOG_0, 0x0ul);
+	out_be64(p->regs + PHB_INA_ERR_LOG_1, 0x0ul);
+
+	val64 = in_be64(p->regs + PHB_INB_ERR_STATUS);
+	out_be64(p->regs + PHB_INB_ERR_STATUS, val64);
+	out_be64(p->regs + PHB_INB_ERR1_STATUS, 0x0ul);
+	out_be64(p->regs + PHB_INB_ERR_LOG_0, 0x0ul);
+	out_be64(p->regs + PHB_INB_ERR_LOG_1, 0x0ul);
+
+	/* Rec 67/68: Clear FIR/WOF */
+	out_be64(p->regs + PHB_LEM_FIR_AND_MASK, ~fir);
+	out_be64(p->regs + PHB_LEM_WOF, 0x0ul);
+}
+
+static void phb3_read_phb_status(struct phb3 *p,
+				 struct OpalIoPhb3ErrorData *stat)
+{
+	bool locked;
+	uint16_t val;
+	uint64_t *pPEST;
+	uint32_t i;
+
+	memset(stat, 0, sizeof(struct OpalIoPhb3ErrorData));
+
+	/* Error data common part */
+	stat->common.version = OPAL_PHB_ERROR_DATA_VERSION_1;
+	stat->common.ioType  = OPAL_PHB_ERROR_DATA_TYPE_PHB3;
+	stat->common.len     = sizeof(struct OpalIoPhb3ErrorData);
+
+	/*
+	 * We read some registers using config space through AIB.
+	 *
+	 * Get to other registers using ASB when possible to get to them
+	 * through a fence if one is present.
+	 */
+
+	/* Use ASB to access PCICFG if the PHB has been fenced */
+	locked = lock_recursive(&p->lock);
+	p->flags |= PHB3_CFG_USE_ASB;
+
+	/* Grab RC bridge control, make it 32-bit */
+	phb3_pcicfg_read16(&p->phb, 0, PCI_CFG_BRCTL, &val);
+	stat->brdgCtl = val;
+
+	/* Grab UTL status registers */
+	stat->portStatusReg = hi32(phb3_read_reg_asb(p, UTL_PCIE_PORT_STATUS));
+	stat->rootCmplxStatus = hi32(phb3_read_reg_asb(p, UTL_RC_STATUS));
+	stat->busAgentStatus = hi32(phb3_read_reg_asb(p, UTL_SYS_BUS_AGENT_STATUS));
+
+	/*
+	 * Grab various RC PCIe capability registers. All device, slot
+	 * and link status are 16-bit, so we grab the pair control+status
+	 * for each of them
+	 */
+	phb3_pcicfg_read32(&p->phb, 0, p->ecap + PCICAP_EXP_DEVCTL,
+			   &stat->deviceStatus);
+	phb3_pcicfg_read32(&p->phb, 0, p->ecap + PCICAP_EXP_SLOTCTL,
+			   &stat->slotStatus);
+	phb3_pcicfg_read32(&p->phb, 0, p->ecap + PCICAP_EXP_LCTL,
+			   &stat->linkStatus);
+
+	/*
+	 * I assume those are the standard config space header, cmd & status
+	 * together makes 32-bit. Secondary status is 16-bit so I'll clear
+	 * the top on that one
+	 */
+	phb3_pcicfg_read32(&p->phb, 0, PCI_CFG_CMD, &stat->devCmdStatus);
+	phb3_pcicfg_read16(&p->phb, 0, PCI_CFG_SECONDARY_STATUS, &val);
+	stat->devSecStatus = val;
+
+	/* Grab a bunch of AER regs */
+	phb3_pcicfg_read32(&p->phb, 0, p->aercap + PCIECAP_AER_RERR_STA,
+			   &stat->rootErrorStatus);
+	phb3_pcicfg_read32(&p->phb, 0, p->aercap + PCIECAP_AER_UE_STATUS,
+			   &stat->uncorrErrorStatus);
+	phb3_pcicfg_read32(&p->phb, 0, p->aercap + PCIECAP_AER_CE_STATUS,
+			   &stat->corrErrorStatus);
+	phb3_pcicfg_read32(&p->phb, 0, p->aercap + PCIECAP_AER_HDR_LOG0,
+			   &stat->tlpHdr1);
+	phb3_pcicfg_read32(&p->phb, 0, p->aercap + PCIECAP_AER_HDR_LOG1,
+			   &stat->tlpHdr2);
+	phb3_pcicfg_read32(&p->phb, 0, p->aercap + PCIECAP_AER_HDR_LOG2,
+			   &stat->tlpHdr3);
+	phb3_pcicfg_read32(&p->phb, 0, p->aercap + PCIECAP_AER_HDR_LOG3,
+			   &stat->tlpHdr4);
+	phb3_pcicfg_read32(&p->phb, 0, p->aercap + PCIECAP_AER_SRCID,
+			   &stat->sourceId);
+
+	/* Restore to AIB */
+	p->flags &= ~PHB3_CFG_USE_ASB;
+	if (locked) {
+		unlock(&p->lock);
+		pci_put_phb(&p->phb);
+	}
+
+	/* PHB3 inbound and outbound error Regs */
+	stat->phbPlssr = phb3_read_reg_asb(p, PHB_CPU_LOADSTORE_STATUS);
+	stat->phbPlssr = phb3_read_reg_asb(p, PHB_DMA_CHAN_STATUS);
+	stat->lemFir = phb3_read_reg_asb(p, PHB_LEM_FIR_ACCUM);
+	stat->lemErrorMask = phb3_read_reg_asb(p, PHB_LEM_ERROR_MASK);
+	stat->lemWOF = phb3_read_reg_asb(p, PHB_LEM_WOF);
+	stat->phbErrorStatus = phb3_read_reg_asb(p, PHB_ERR_STATUS);
+	stat->phbFirstErrorStatus = phb3_read_reg_asb(p, PHB_ERR1_STATUS);
+	stat->phbErrorLog0 = phb3_read_reg_asb(p, PHB_ERR_LOG_0);
+	stat->phbErrorLog1 = phb3_read_reg_asb(p, PHB_ERR_LOG_1);
+	stat->mmioErrorStatus = phb3_read_reg_asb(p, PHB_OUT_ERR_STATUS);
+	stat->mmioFirstErrorStatus = phb3_read_reg_asb(p, PHB_OUT_ERR1_STATUS);
+	stat->mmioErrorLog0 = phb3_read_reg_asb(p, PHB_OUT_ERR_LOG_0);
+	stat->mmioErrorLog1 = phb3_read_reg_asb(p, PHB_OUT_ERR_LOG_1);
+	stat->dma0ErrorStatus = phb3_read_reg_asb(p, PHB_INA_ERR_STATUS);
+	stat->dma0FirstErrorStatus = phb3_read_reg_asb(p, PHB_INA_ERR1_STATUS);
+	stat->dma0ErrorLog0 = phb3_read_reg_asb(p, PHB_INA_ERR_LOG_0);
+	stat->dma0ErrorLog1 = phb3_read_reg_asb(p, PHB_INA_ERR_LOG_1);
+	stat->dma1ErrorStatus = phb3_read_reg_asb(p, PHB_INB_ERR_STATUS);
+	stat->dma1FirstErrorStatus = phb3_read_reg_asb(p, PHB_INB_ERR1_STATUS);
+	stat->dma1ErrorLog0 = phb3_read_reg_asb(p, PHB_INB_ERR_LOG_0);
+	stat->dma1ErrorLog1 = phb3_read_reg_asb(p, PHB_INB_ERR_LOG_1);
+
+	/* Grab PESTA & B content */
+	pPEST = (uint64_t *)p->tbl_pest;
+	for (i = 0; i < OPAL_PHB3_NUM_PEST_REGS; i++) {
+		stat->pestA[i] = pPEST[2 * i];
+		stat->pestB[i] = pPEST[2 * i + 1];
+	}
+}
+
 static int64_t phb3_msi_get_xive(void *data,
 				 uint32_t isn,
 				 uint16_t *server,
@@ -929,6 +1291,27 @@ static int64_t phb3_lsi_set_xive(void *data,
 	return OPAL_SUCCESS;
 }
 
+static void phb3_err_interrupt(void *data, uint32_t isn)
+{
+	struct phb3 *p = data;
+
+	PHBDBG(p, "Got interrupt 0x%08x\n", isn);
+
+	/* Update pending event */
+	opal_update_pending_evt(OPAL_EVENT_PCI_ERROR,
+				OPAL_EVENT_PCI_ERROR);
+
+	/* If the PHB is broken, go away */
+	if (p->state == PHB3_STATE_BROKEN)
+		return;
+
+	/*
+	 * Mark the PHB has pending error so that the OS
+	 * can handle it at late point.
+	 */
+	phb3_set_err_pending(p, true);
+}
+
 /* MSIs (OS owned) */
 static const struct irq_source_ops phb3_msi_irq_ops = {
 	.get_xive = phb3_msi_get_xive,
@@ -939,6 +1322,13 @@ static const struct irq_source_ops phb3_msi_irq_ops = {
 static const struct irq_source_ops phb3_lsi_irq_ops = {
 	.get_xive = phb3_lsi_get_xive,
 	.set_xive = phb3_lsi_set_xive,
+};
+
+/* Error LSIs (skiboot owned) */
+static const struct irq_source_ops phb3_err_lsi_irq_ops = {
+	.get_xive = phb3_lsi_get_xive,
+	.set_xive = phb3_lsi_set_xive,
+	.interrupt = phb3_err_interrupt,
 };
 
 static int64_t phb3_set_pe(struct phb *phb,
@@ -1153,6 +1543,9 @@ static void phb3_setup_for_link_up(struct phb3 *p)
 
 	/* Mark link down */
 	p->has_link = true;
+
+	/* Don't block PCI-CFG */
+	p->flags &= ~PHB3_CFG_BLOCKED;
 }
 
 static int64_t phb3_sm_link_poll(struct phb3 *p)
@@ -1226,6 +1619,60 @@ static int64_t phb3_start_link_poll(struct phb3 *p)
 	return phb3_set_sm_timeout(p, msecs_to_tb(100));
 }
 
+static int64_t phb3_sm_hot_reset(struct phb3 *p)
+{
+	uint16_t brctl;
+
+	switch (p->state) {
+	case PHB3_STATE_FUNCTIONAL:
+		/* We need do nothing with available slot */
+		if (phb3_presence_detect(&p->phb) != OPAL_SHPC_DEV_PRESENT) {
+			PHBDBG(p, "Slot hreset: no device\n");
+			return OPAL_CLOSED;
+		}
+
+		/* Prepare for link going down */
+		phb3_setup_for_link_down(p);
+
+		/* Turn on hot reset */
+		phb3_pcicfg_read16(&p->phb, 0, PCI_CFG_BRCTL, &brctl);
+		brctl |= PCI_CFG_BRCTL_SECONDARY_RESET;
+		phb3_pcicfg_write16(&p->phb, 0, PCI_CFG_BRCTL, brctl);
+		PHBDBG(p, "Slot hreset: assert reset\n");
+
+		p->state = PHB3_STATE_HRESET_DELAY;
+		return phb3_set_sm_timeout(p, secs_to_tb(1));
+	case PHB3_STATE_HRESET_DELAY:
+		/* Turn off hot reset */
+		phb3_pcicfg_read16(&p->phb, 0, PCI_CFG_BRCTL, &brctl);
+		brctl &= ~PCI_CFG_BRCTL_SECONDARY_RESET;
+		phb3_pcicfg_write16(&p->phb, 0, PCI_CFG_BRCTL, brctl);
+		PHBDBG(p, "Slot hreset: deassert reset\n");
+
+		return phb3_start_link_poll(p);
+	default:
+		PHBDBG(p, "Slot hreset: wrong state %d\n", p->state);
+		break;
+	}
+
+	p->state = PHB3_STATE_FUNCTIONAL;
+	return OPAL_HARDWARE;
+}
+
+static int64_t phb3_hot_reset(struct phb *phb)
+{
+	struct phb3 *p = phb_to_phb3(phb);
+
+	if (p->state != PHB3_STATE_FUNCTIONAL) {
+		PHBDBG(p, "phb3_hot_reset: wrong state %d\n",
+		       p->state);
+		return OPAL_HARDWARE;
+	}
+
+	p->flags |= PHB3_CFG_BLOCKED;
+	return phb3_sm_hot_reset(p);
+}
+
 static int64_t phb3_sm_fundamental_reset(struct phb3 *p)
 {
 	uint64_t reg;
@@ -1238,20 +1685,20 @@ static int64_t phb3_sm_fundamental_reset(struct phb3 *p)
 
 	switch(p->state) {
 	case PHB3_STATE_FUNCTIONAL:
-		/* Prepare for link going down */
-		phb3_setup_for_link_down(p);
-
 		/* Check if there's something connected */
 		if (phb3_presence_detect(&p->phb) != OPAL_SHPC_DEV_PRESENT) {
 			PHBDBG(p, "Slot freset: no device\n");
 			return OPAL_CLOSED;
 		}
 
+		/* Prepare for link going down */
+		phb3_setup_for_link_down(p);
+
 		/* Assert PERST */
 		reg = in_be64(p->regs + PHB_RESET);
 		reg &= ~0x2000000000000000ul;
 		out_be64(p->regs + PHB_RESET, reg);
-		PHBDBG(p, "Asserting PERST...\n");
+		PHBDBG(p, "Slot freset: Asserting PERST\n");
 
 		/* XXX Check delay for PERST... doing 1s for now */
 		p->state = PHB3_STATE_FRESET_ASSERT_DELAY;
@@ -1262,7 +1709,7 @@ static int64_t phb3_sm_fundamental_reset(struct phb3 *p)
 		reg = in_be64(p->regs + PHB_RESET);
 		reg |= 0x2000000000000000ul;
 		out_be64(p->regs + PHB_RESET, reg);
-		PHBDBG(p, "Deasserting PERST...\n");
+		PHBDBG(p, "Slot freset: Deasserting PERST\n");
 
 		/* Wait 200ms before polling link */
 		p->state = PHB3_FRESET_DEASSERT_DELAY;
@@ -1273,7 +1720,7 @@ static int64_t phb3_sm_fundamental_reset(struct phb3 *p)
 		return phb3_start_link_poll(p);
 
 	default:
-		PHBDBG(p, "phb3_sm_fundamental_reset: wrong state %d\n",
+		PHBDBG(p, "Slot freset: wrong state %d\n",
 		       p->state);
 		break;
 	}
@@ -1291,7 +1738,74 @@ static int64_t phb3_fundamental_reset(struct phb *phb)
 		return OPAL_HARDWARE;
 	}
 
+	p->flags |= PHB3_CFG_BLOCKED;
 	return phb3_sm_fundamental_reset(p);
+}
+
+/*
+ * The OS is expected to do fundamental reset after complete
+ * reset to make sure the PHB could be recovered from the
+ * fenced state. However, the OS needn't do that explicitly
+ * since fundamental reset will be done automatically while
+ * powering on the PHB.
+ *
+ *
+ * Usually, we need power off/on the PHB. That includes the
+ * fundamental reset. However, we don't know how to control
+ * the power stuff yet. So skip that and do fundamental reset
+ * directly after reinitialization the hardware.
+ */
+static int64_t phb3_complete_reset(struct phb *phb, uint8_t assert)
+{
+	struct phb3 *p = phb_to_phb3(phb);
+	uint64_t nfir, cqsts, val;
+	int i;
+
+	if (assert == OPAL_ASSERT_RESET) {
+		if (p->state != PHB3_STATE_FUNCTIONAL &&
+		    p->state != PHB3_STATE_FENCED)
+			return OPAL_HARDWARE;
+
+		/* Block PCI-CFG access */
+		p->flags |= PHB3_CFG_BLOCKED;
+
+		/* Clear errors in NFIR and raise ETU reset */
+		xscom_read(p->chip_id, p->pe_xscom + 0x0, &nfir);
+		xscom_write(p->chip_id, p->pci_xscom + 0xa,
+			    0x8000000000000000);
+		for (i = 0; i < 500; i++) {
+			xscom_read(p->chip_id, p->pe_xscom + 0x1c, &val);
+			xscom_read(p->chip_id, p->pe_xscom + 0x1d, &val);
+			xscom_read(p->chip_id, p->pe_xscom + 0x1e, &val);
+			xscom_read(p->chip_id, p->pe_xscom + 0xf, &cqsts);
+			if (!(cqsts & 0xC000000000000000))
+				break;
+			time_wait_ms(10);
+		}
+		if (cqsts & 0xC000000000000000)
+			PHBERR(p, "Timeout waiting for pending transaction\n");
+		xscom_write(p->chip_id, p->pe_xscom + 0x1, ~nfir);
+		time_wait_ms(100);
+
+		/*
+		 * Re-initialize the PHB and issue
+		 * the fundamental reset.
+		 */
+		phb3_init_hw(p);
+		return phb3_fundamental_reset(phb);
+	} else {
+		if (p->state != PHB3_STATE_FUNCTIONAL)
+			return OPAL_HARDWARE;
+
+		/*
+		 * Issue hot reset. PCI-CFG access will be
+		 * enabled on completion of hot reset.
+		 */
+		return phb3_hot_reset(phb);
+        }
+
+	/* We shouldn't run to here */
+	return OPAL_PARAMETER;
 }
 
 static int64_t phb3_poll(struct phb *phb)
@@ -1312,6 +1826,8 @@ static int64_t phb3_poll(struct phb *phb)
 
 	/* Dispatch to the right state machine */
 	switch(p->state) {
+	case PHB3_STATE_HRESET_DELAY:
+		return phb3_sm_hot_reset(p);
 	case PHB3_STATE_FRESET_ASSERT_DELAY:
 	case PHB3_FRESET_DEASSERT_DELAY:
 		return phb3_sm_fundamental_reset(p);
@@ -1331,7 +1847,7 @@ static int64_t phb3_eeh_freeze_status(struct phb *phb, uint64_t pe_number,
 				      uint8_t *freeze_state,
 				      uint16_t *pci_error_type,
 				      uint16_t *severity,
-				      uint64_t __unused *phb_status)
+				      uint64_t *phb_status)
 {
 	struct phb3 *p = phb_to_phb3(phb);
 	uint64_t peev_bit = PPC_BIT(pe_number & 0x3f);
@@ -1350,18 +1866,15 @@ static int64_t phb3_eeh_freeze_status(struct phb *phb, uint64_t pe_number,
 		goto bail;
 	}
 
-#if 0
 	/* Check fence */
-	if (p7ioc_phb_fenced(p)) {
-		/* Should be OPAL_EEH_STOPPED_TEMP_UNAVAIL ? */
+	if (phb3_fenced(p)) {
 		*freeze_state = OPAL_EEH_STOPPED_MMIO_DMA_FREEZE;
 		*pci_error_type = OPAL_EEH_PHB_ERROR;
 		if (severity)
 			*severity = OPAL_EEH_SEV_PHB_FENCED;
-		p->state = P7IOC_PHB_STATE_FENCED;
+		p->state = PHB3_STATE_FENCED;
 		goto bail;
 	}
-#endif
 
 	/* Check the PEEV */
 	phb3_ioda_sel(p, IODA2_TBL_PEEV, pe_number / 4, true);
@@ -1369,10 +1882,8 @@ static int64_t phb3_eeh_freeze_status(struct phb *phb, uint64_t pe_number,
 	if (!(peev & peev_bit))
 		return OPAL_SUCCESS;
 
-#if 0
 	/* Indicate that we have an ER pending */
-	p7ioc_phb_set_err_pending(p, true);
-#endif
+	phb3_set_err_pending(p, true);
 	if (severity)
 		*severity = OPAL_EEH_SEV_PE_ER;
 
@@ -1388,113 +1899,34 @@ static int64_t phb3_eeh_freeze_status(struct phb *phb, uint64_t pe_number,
 	if (pestb & IODA2_PESTB_DMA_STOPPED)
 		*freeze_state |= OPAL_EEH_STOPPED_DMA_FREEZE;
 
-	/* XXX Read the actual PEST error from the in-memory PEST */
- bail:
-#if 0
+bail:
 	if (phb_status)
-		p7ioc_eeh_read_phb_status(p, (struct OpalIoP7IOCPhbErrorData *)
-					  phb_status);
-#endif
+		phb3_read_phb_status(p,
+			(struct OpalIoPhb3ErrorData *)phb_status);
+
 	return OPAL_SUCCESS;
-}
-
-static void phb3_ER_err_clear(struct phb3 *p)
-{
-	u64 err, lem;
-	u32 val;
-
-	/* XXX This is the P7IOC recovery sequence quickly hacked...
-	 *
-	 * We need to rework that based on PHB3 specifics
-	 */
-
-	/* Rec 1,2 */
-	lem = in_be64(p->regs + PHB_LEM_FIR_ACCUM);
-
-	/* Rec 3,4,5 AER registers (could use cfg space accessors) */
-	out_be64(p->regs + PHB_CONFIG_ADDRESS, 0x8000001c00000000ull);
-	out_be32(p->regs + PHB_CONFIG_DATA, 0x10000000);
-
-	/* Rec 6,7,8 XXX DOC whacks payload & req size ... we don't */
-	out_be64(p->regs + PHB_CONFIG_ADDRESS, 0x8000005000000000ull);
-	val = in_be32(p->regs + PHB_CONFIG_DATA);
-	out_be32(p->regs + PHB_CONFIG_DATA, (val & 0xe0700000) | 0x0f000f00);
-
-	/* Rec 9,10,11 */
-	out_be64(p->regs + PHB_CONFIG_ADDRESS, 0x8000010400000000ull);
-	out_be32(p->regs + PHB_CONFIG_DATA, 0xffffffff);
-
-	/* Rec 12,13,14 */
-	out_be64(p->regs + PHB_CONFIG_ADDRESS, 0x8000011000000000ull);
-	out_be32(p->regs + PHB_CONFIG_DATA, 0xffffffff);
-
-	/* Rec 23,24,25 */
-	out_be64(p->regs + PHB_CONFIG_ADDRESS, 0x8000013000000000ull);
-	out_be32(p->regs + PHB_CONFIG_DATA, 0xffffffff);
-
-	/* Rec 26,27,28 */
-	out_be64(p->regs + PHB_CONFIG_ADDRESS, 0x8000004000000000ull);
-	out_be32(p->regs + PHB_CONFIG_DATA, 0x470100f8);
-
-	/* Rec 29..34 UTL registers */
-	err = in_be64(p->regs + UTL_SYS_BUS_AGENT_STATUS);
-	out_be64(p->regs + UTL_SYS_BUS_AGENT_STATUS, err);
-	err = in_be64(p->regs + UTL_PCIE_PORT_STATUS);
-	out_be64(p->regs + UTL_PCIE_PORT_STATUS, err);
-	err = in_be64(p->regs + UTL_RC_STATUS);
-	out_be64(p->regs + UTL_RC_STATUS, err);
-
-	/* PHB error traps registers */
-	err = in_be64(p->regs + PHB_ERR_STATUS);
-	out_be64(p->regs + PHB_ERR_STATUS, err);
-	out_be64(p->regs + PHB_ERR1_STATUS, 0);
-	out_be64(p->regs + PHB_ERR_LOG_0, 0);
-	out_be64(p->regs + PHB_ERR_LOG_1, 0);
-
-	err = in_be64(p->regs + PHB_OUT_ERR_STATUS);
-	out_be64(p->regs + PHB_OUT_ERR_STATUS, err);
-	out_be64(p->regs + PHB_OUT_ERR1_STATUS, 0);
-	out_be64(p->regs + PHB_OUT_ERR_LOG_0, 0);
-	out_be64(p->regs + PHB_OUT_ERR_LOG_1, 0);
-
-	err = in_be64(p->regs + PHB_INA_ERR_STATUS);
-	out_be64(p->regs + PHB_INA_ERR_STATUS, err);
-	out_be64(p->regs + PHB_INA_ERR1_STATUS, 0);
-	out_be64(p->regs + PHB_INA_ERR_LOG_0, 0);
-	out_be64(p->regs + PHB_INA_ERR_LOG_1, 0);
-
-	err = in_be64(p->regs + PHB_INB_ERR_STATUS);
-	out_be64(p->regs + PHB_INB_ERR_STATUS, err);
-	out_be64(p->regs + PHB_INB_ERR1_STATUS, 0);
-	out_be64(p->regs + PHB_INB_ERR_LOG_0, 0);
-	out_be64(p->regs + PHB_INB_ERR_LOG_1, 0);
-
-	/* Rec 67, 68 LEM */
-	out_be64(p->regs + PHB_LEM_FIR_AND_MASK, ~lem);
-	out_be64(p->regs + PHB_LEM_WOF, 0);
 }
 
 static int64_t phb3_eeh_freeze_clear(struct phb *phb, uint64_t pe_number,
 				     uint64_t eeh_action_token)
 {
 	struct phb3 *p = phb_to_phb3(phb);
-
-	/* XXX Minimal stuff to get working vs. PCI probe, proper
-	 * EEH still needs to be done
-	 */
-	u64 err;
+	uint64_t err, peev[4];
+	int32_t i;
+	bool frozen_pe = false;
 
 	/* Summary. If nothing, move to clearing the PESTs which can
 	 * contain a freeze state from a previous error or simply set
 	 * explicitely by the user
 	 */
 	err = in_be64(p->regs + PHB_ETU_ERR_SUMMARY);
-	if (err == 0)
-		goto clear_pest;
+	if (err != 0)
+		phb3_err_ER_clear(p);
 
-	phb3_ER_err_clear(p);
-
- clear_pest:
+	/*
+	 * We have PEEV in system memory. It would give more performance
+	 * to access that directly.
+	 */
 	if (eeh_action_token & OPAL_EEH_ACTION_CLEAR_FREEZE_MMIO) {
 		phb3_ioda_sel(p, IODA2_TBL_PESTA, pe_number, false);
 		out_be64(p->regs + PHB_IODA_DATA0, 0);
@@ -1505,19 +1937,172 @@ static int64_t phb3_eeh_freeze_clear(struct phb *phb, uint64_t pe_number,
 	}
 
 
-#if 0
 	/* Update ER pending indication */
-	phb3_ioda_sel(p, IODA_TBL_PEEV, 0, true);
-	peev0 = in_be64(p->regs + PHB_IODA_DATA0);
-	peev1 = in_be64(p->regs + PHB_IODA_DATA0);
-	if (peev0 || peev1) {
-		p->err.err_src   = P7IOC_ERR_SRC_PHB0 + p->index;
-		p->err.err_class = P7IOC_ERR_CLASS_ER;
-		p->err.err_bit   = 0;
-		p7ioc_phb_set_err_pending(p, true);
+	phb3_ioda_sel(p, IODA2_TBL_PEEV, 0, true);
+	for (i = 0; i < ARRAY_SIZE(peev); i++) {
+		peev[i] = in_be64(p->regs + PHB_IODA_DATA0);
+		if (peev[i]) {
+			frozen_pe = true;
+			break;
+		}
+	}
+	if (frozen_pe) {
+		p->err.err_src	 = PHB3_ERR_SRC_PHB;
+		p->err.err_class = PHB3_ERR_CLASS_ER;
+		p->err.err_bit   = -1;
+		phb3_set_err_pending(p, true);
 	} else
-		p7ioc_phb_set_err_pending(p, false);
-#endif
+		phb3_set_err_pending(p, false);
+
+	return OPAL_SUCCESS;
+}
+
+static int64_t phb3_eeh_next_error(struct phb *phb,
+				   uint64_t *first_frozen_pe,
+				   uint16_t *pci_error_type,
+				   uint16_t *severity)
+{
+	struct phb3 *p = phb_to_phb3(phb);
+	uint64_t fir, peev[4];
+	uint32_t cfg32;
+	int32_t i, j;
+
+	/* If the PHB is broken, we needn't go forward */
+	if (p->state == PHB3_STATE_BROKEN) {
+		*pci_error_type = OPAL_EEH_PHB_ERROR;
+		*severity = OPAL_EEH_SEV_PHB_DEAD;
+		return OPAL_SUCCESS;
+	}
+
+	/*
+	 * Check if we already have pending errors. If that's
+	 * the case, then to get more information about the
+	 * pending errors. Here we try PBCQ prior to PHB.
+	 */
+	if (phb3_err_pending(p)) {
+		if (!phb3_err_check_pbcq(p) &&
+		    !phb3_err_check_lem(p)) {
+			p->err.err_src   = PHB3_ERR_SRC_NONE;
+			p->err.err_class = PHB3_ERR_CLASS_NONE;
+			p->err.err_bit   = -1;
+			phb3_set_err_pending(p, false);
+		}
+	}
+
+	/* Clear result */
+	*pci_error_type  = OPAL_EEH_NO_ERROR;
+	*severity	 = OPAL_EEH_SEV_NO_ERROR;
+	*first_frozen_pe = (uint64_t)-1;
+
+	/* Check frozen PEs */
+	if (!phb3_err_pending(p)) {
+		phb3_ioda_sel(p, IODA2_TBL_PEEV, 0, true);
+		for (i = 0; i < ARRAY_SIZE(peev); i++) {
+			peev[i] = in_be64(p->regs + PHB_IODA_DATA0);
+			if (peev[i]) {
+				p->err.err_src	 = PHB3_ERR_SRC_PHB;
+				p->err.err_class = PHB3_ERR_CLASS_ER;
+				p->err.err_bit	 = -1;
+				phb3_set_err_pending(p, true);
+				break;
+			}
+		}
+        }
+
+	/* Mapping errors */
+	if (phb3_err_pending(p)) {
+		/*
+		 * If the frozen PE is caused by a malfunctioning TLP, we
+		 * need reset the PHB. So convert ER to PHB-fatal error
+		 * for the case.
+		 */
+		if (p->err.err_class == PHB3_ERR_CLASS_ER) {
+			fir = phb3_read_reg_asb(p, PHB_LEM_FIR_ACCUM);
+			if (fir & PPC_BIT(60)) {
+				phb3_pcicfg_read32(&p->phb, 0,
+					p->aercap + PCIECAP_AER_UE_STATUS, &cfg32);
+				if (cfg32 & PCIECAP_AER_UE_MALFORMED_TLP)
+					p->err.err_class = PHB3_ERR_CLASS_FENCED;
+			}
+		}
+
+		switch (p->err.err_class) {
+		case PHB3_ERR_CLASS_DEAD:
+			*pci_error_type = OPAL_EEH_PHB_ERROR;
+			*severity = OPAL_EEH_SEV_PHB_DEAD;
+			break;
+		case PHB3_ERR_CLASS_FENCED:
+			*pci_error_type = OPAL_EEH_PHB_ERROR;
+			*severity = OPAL_EEH_SEV_PHB_FENCED;
+			break;
+		case PHB3_ERR_CLASS_ER:
+			*pci_error_type = OPAL_EEH_PE_ERROR;
+			*severity = OPAL_EEH_SEV_PE_ER;
+
+			phb3_ioda_sel(p, IODA2_TBL_PEEV, 0, true);
+			for (i = 0; i < ARRAY_SIZE(peev); i++)
+				peev[i] = in_be64(p->regs + PHB_IODA_DATA0);
+			for (i = ARRAY_SIZE(peev) - 1; i >= 0; i--) {
+				for (j = 0; j < 64; j++) {
+					if (peev[i] & PPC_BIT(j)) {
+						*first_frozen_pe = i * 64 + j;
+						break;
+					}
+				}
+
+				if (*first_frozen_pe != (uint64_t)(-1))
+					break;
+			}
+
+			/* No frozen PE ? */
+			if (*first_frozen_pe == (uint64_t)-1) {
+				*pci_error_type = OPAL_EEH_NO_ERROR;
+				*severity = OPAL_EEH_SEV_NO_ERROR;
+				p->err.err_src	 = PHB3_ERR_SRC_NONE;
+				p->err.err_class = PHB3_ERR_CLASS_NONE;
+				p->err.err_bit	 = -1;
+				phb3_set_err_pending(p, false);
+			}
+
+                        break;
+		case PHB3_ERR_CLASS_INF:
+			*pci_error_type = OPAL_EEH_PHB_ERROR;
+			*severity = OPAL_EEH_SEV_INF;
+			break;
+		default:
+			*pci_error_type = OPAL_EEH_NO_ERROR;
+			*severity = OPAL_EEH_SEV_NO_ERROR;
+			p->err.err_src   = PHB3_ERR_SRC_NONE;
+			p->err.err_class = PHB3_ERR_CLASS_NONE;
+			p->err.err_bit   = -1;
+			phb3_set_err_pending(p, false);
+		}
+	}
+
+	return OPAL_SUCCESS;
+}
+
+static int64_t phb3_get_diag_data(struct phb *phb,
+				  void *diag_buffer,
+				  uint64_t diag_buffer_len)
+{
+	struct phb3 *p = phb_to_phb3(phb);
+	struct OpalIoPhb3ErrorData *data = diag_buffer;
+
+	if (diag_buffer_len < sizeof(struct OpalIoPhb3ErrorData))
+		return OPAL_PARAMETER;
+
+	phb3_read_phb_status(p, data);
+
+	/*
+	 * We're running to here probably because of errors
+	 * (INF class). For that case, we need clear the error
+	 * explicitly.
+	 */
+	if (phb3_err_pending(p) &&
+	    p->err.err_class == PHB3_ERR_CLASS_INF &&
+	    p->err.err_src == PHB3_ERR_SRC_PHB)
+		phb3_err_ER_clear(p);
 
 	return OPAL_SUCCESS;
 }
@@ -1549,16 +2134,15 @@ static const struct phb_ops phb3_ops = {
 	.power_state		= phb3_power_state,
 	.slot_power_off		= phb3_slot_power_off,
 	.slot_power_on		= phb3_slot_power_on,
+	.hot_reset		= phb3_hot_reset,
 	.fundamental_reset	= phb3_fundamental_reset,
+	.complete_reset		= phb3_complete_reset,
 	.poll			= phb3_poll,
 	.eeh_freeze_status	= phb3_eeh_freeze_status,
 	.eeh_freeze_clear	= phb3_eeh_freeze_clear,
-/*
-	.complete_reset		= p7ioc_complete_reset,
-	.hot_reset		= p7ioc_hot_reset,
-	.get_diag_data		= p7ioc_get_diag_data,
-	.next_error		= p7ioc_eeh_next_error,
-*/
+	.next_error		= phb3_eeh_next_error,
+	.get_diag_data		= NULL,
+	.get_diag_data2		= phb3_get_diag_data,
 };
 
 static void phb3_setup_aib(struct phb3 *p)
@@ -2218,11 +2802,12 @@ static void phb3_create(struct dt_node *np)
 	/* Clear IODA2 cache */
 	phb3_init_ioda_cache(p);
 
-	/* Register OS interrupt sources */
+	/* Register interrupt sources */
 	register_irq_source(&phb3_msi_irq_ops, p, p->base_msi,
 			    PHB3_MSI_IRQ_COUNT);
-	register_irq_source(&phb3_lsi_irq_ops, p, p->base_lsi,
-			    PHB3_LSI_IRQ_COUNT);
+	register_irq_source(&phb3_lsi_irq_ops, p, p->base_lsi, 4);
+	register_irq_source(&phb3_err_lsi_irq_ops, p,
+			    p->base_lsi + PHB3_LSI_PCIE_INF, 2);
 
 	phb3_init_hw(p);
 }

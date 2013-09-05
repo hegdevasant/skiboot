@@ -197,8 +197,14 @@ enum phb3_state {
 	/* Set if the PHB is for some reason unusable */
 	PHB3_STATE_BROKEN,
 
+	/* PHB fenced */
+	PHB3_STATE_FENCED,
+
 	/* Normal PHB functional state */
 	PHB3_STATE_FUNCTIONAL,
+
+	/* Hot reset */
+	PHB3_STATE_HRESET_DELAY,
 
 	/* Fundamental reset */
 	PHB3_STATE_FRESET_ASSERT_DELAY,
@@ -209,12 +215,39 @@ enum phb3_state {
 	PHB3_STATE_WAIT_LINK,
 };
 
+/*
+ * PHB3 error descriptor. Errors from all components (PBCQ, PHB)
+ * will be cached to PHB3 instance. However, PBCQ errors would
+ * have higher priority than those from PHB
+ */
+#define PHB3_ERR_SRC_NONE	0
+#define PHB3_ERR_SRC_PBCQ	1
+#define PHB3_ERR_SRC_PHB	2
+
+#define PHB3_ERR_CLASS_NONE	0
+#define PHB3_ERR_CLASS_DEAD	1
+#define PHB3_ERR_CLASS_FENCED	2
+#define PHB3_ERR_CLASS_ER	3
+#define PHB3_ERR_CLASS_INF	4
+#define PHB3_ERR_CLASS_LAST	5
+
+struct phb3_err {
+	uint32_t err_src;
+	uint32_t err_class;
+	uint32_t err_bit;
+};
+
 /* Link timeouts, increments of 100ms */
 #define PHB3_LINK_WAIT_RETRIES		90
 #define PHB3_LINK_ELECTRICAL_RETRIES	10
 
+/* PHB3 flags */
+#define PHB3_CFG_USE_ASB	0x00000001
+#define PHB3_CFG_BLOCKED	0x00000002
+
 struct phb3 {
 	unsigned int		index;	    /* 0..2 index inside P8 */
+	unsigned int		flags;
 	unsigned int		chip_id;    /* Chip ID (== GCID on P8) */
 	unsigned int		rev;        /* 00MMmmmm */
 #define PHB3_REV_MURANO_DD10	0xa30001
@@ -256,12 +289,56 @@ struct phb3 {
 	uint64_t		m32d_cache[256];
 	uint64_t		m64b_cache[16];
 
+	bool			err_pending;
+	struct phb3_err		err;
+
 	struct phb		phb;
 };
 
 static inline struct phb3 *phb_to_phb3(struct phb *phb)
 {
 	return container_of(phb, struct phb3, phb);
+}
+
+static inline void phb3_cfg_lock(struct phb3 *p)
+{
+	uint64_t lock;
+
+	do {
+		lock = in_be64(p->regs + 0x138);
+	} while(lock);
+}
+
+static inline void phb3_cfg_unlock(struct phb3 *p)
+{
+	out_be64(p->regs + 0x138, 0x0ul);
+}
+
+static inline uint64_t phb3_read_reg_asb(struct phb3 *p, uint64_t offset)
+{
+	uint64_t val;
+
+	xscom_write(p->chip_id, p->spci_xscom, offset);
+	xscom_read(p->chip_id, p->spci_xscom + 0x2, &val);
+
+	return val;
+}
+
+static inline void phb3_write_reg_asb(struct phb3 *p,
+				      uint64_t offset, uint64_t val)
+{
+	xscom_write(p->chip_id, p->spci_xscom, offset);
+	xscom_write(p->chip_id, p->spci_xscom + 0x2, val);
+}
+
+static inline bool phb3_err_pending(struct phb3 *p)
+{
+	return p->err_pending;
+}
+
+static inline void phb3_set_err_pending(struct phb3 *p, bool val)
+{
+	p->err_pending = val;
 }
 
 #endif /* __PHB3_H */
