@@ -65,7 +65,10 @@
  */
 struct proc_chip {
 	uint32_t	id;		/* HW Chip ID (GCID) */
+
+	/* Those two values are only populated on machines with an FSP */
 	uint32_t	dbob_id;	/* Drawer/Block/Octant/Blade (DBOBID) */
+	uint32_t	pcid;		/* HDAT proc_chip_id */
 
 	/* Used by hw/xscom.c */
 	uint64_t	xscom_base;
