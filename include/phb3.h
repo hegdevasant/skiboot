@@ -285,6 +285,23 @@ static inline struct phb3 *phb_to_phb3(struct phb *phb)
 	return container_of(phb, struct phb3, phb);
 }
 
+static inline uint64_t phb3_read_reg_asb(struct phb3 *p, uint64_t offset)
+{
+	uint64_t val;
+
+	xscom_write(p->chip_id, p->spci_xscom, offset);
+	xscom_read(p->chip_id, p->spci_xscom + 0x2, &val);
+
+	return val;
+}
+
+static inline void phb3_write_reg_asb(struct phb3 *p,
+				      uint64_t offset, uint64_t val)
+{
+	xscom_write(p->chip_id, p->spci_xscom, offset);
+	xscom_write(p->chip_id, p->spci_xscom + 0x2, val);
+}
+
 static inline bool phb3_err_pending(struct phb3 *p)
 {
 	return p->err_pending;
