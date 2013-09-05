@@ -393,6 +393,19 @@ struct fsp_msg *fsp_mkmsg(u32 cmd_sub_mod, u8 add_words, ...)
 	return msg;
 }
 
+/*
+ * IMPORTANT NOTE: This is *guaranteed* to not call the completion
+ *                 routine recusrively for *any* fsp message, either the
+ *                 queued one or a previous one. Thus it is *ok* to call
+ *                 this function with a lock held which will itself be
+ *                 taken by the completion function.
+ *
+ *                 Any change to this implementation must respect this
+ *                 rule. This will be especially true of things like
+ *                 reset/reload and error handling, if we fail to queue
+ *                 we must just return an error, not call any completion
+ *                 from the scope of fsp_queue_msg().
+ */
 int fsp_queue_msg(struct fsp_msg *msg, void (*comp)(struct fsp_msg *msg))
 {
 	struct fsp_cmdclass *cmdclass;
