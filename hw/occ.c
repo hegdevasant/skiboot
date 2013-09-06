@@ -12,10 +12,9 @@
 #include <mem_region.h>
 #include <fsp.h>
 
-static void occ_do_load(u8 scope, u32 dbob_id, u32 seq_id)
+static void occ_do_load(u8 scope, u32 dbob_id __unused, u32 seq_id)
 {
 	struct fsp_msg *rsp, *stat;
-	struct proc_chip *chip;
 	int rc = -ENOMEM;
 	u8 err = 0;
 
@@ -40,23 +39,13 @@ static void occ_do_load(u8 scope, u32 dbob_id, u32 seq_id)
 	if (err)
 		return;
 
-	/*
-	 * Then send a matching OCC Load Status message with an ok
-	 * response code as well to all matching chip
-	 */
-	for_each_chip(chip) {
-		if (scope == 0x01 && dbob_id != chip->dbob_id)
-			continue;
-		rc = -ENOMEM;
-		stat = fsp_mkmsg(FSP_CMD_LOAD_OCC_STAT, 2,
-				 chip->pcid & 0xff, seq_id);
-		if (stat)
-			rc = fsp_queue_msg(stat, fsp_freemsg);
-		if (rc) {
-			/* XXX Generate error logs */
-			prerror("OCC: Error %d queueing FSP OCC LOAD STATUS"
-					" message\n", rc);
-		}
+	/* Send a single response for all chips */
+	stat = fsp_mkmsg(FSP_CMD_LOAD_OCC_STAT, 2, 0, seq_id);
+	if (stat)
+		rc = fsp_queue_msg(stat, fsp_freemsg);
+	if (rc) {
+		/* XXX Generate error logs */
+		prerror("OCC: Error %d queueing FSP OCC LOAD STATUS msg", rc);
 	}
 }
 
@@ -90,7 +79,7 @@ static void occ_do_reset(u8 scope, u32 dbob_id, u32 seq_id)
 
 	/*
 	 * Then send a matching OCC Reset Status message with an 0xFE
-	 * response code as well to all matching chip
+	 * response code as well to the first matching chip
 	 */
 	for_each_chip(chip) {
 		if (scope == 0x01 && dbob_id != chip->dbob_id)
@@ -105,6 +94,7 @@ static void occ_do_reset(u8 scope, u32 dbob_id, u32 seq_id)
 			prerror("OCC: Error %d queueing FSP OCC RESET STATUS"
 					" message\n", rc);
 		}
+		break;
 	}
 }
 
