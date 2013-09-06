@@ -1793,6 +1793,7 @@ static int64_t phb3_complete_reset(struct phb *phb, uint8_t assert)
 		 * the fundamental reset.
 		 */
 		phb3_init_hw(p);
+		time_wait_ms(100);
 		return phb3_fundamental_reset(phb);
 	} else {
 		if (p->state != PHB3_STATE_FUNCTIONAL)
