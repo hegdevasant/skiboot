@@ -242,8 +242,9 @@ struct phb3_err {
 #define PHB3_LINK_ELECTRICAL_RETRIES	10
 
 /* PHB3 flags */
-#define PHB3_CFG_USE_ASB	0x00000001
-#define PHB3_CFG_BLOCKED	0x00000002
+#define PHB3_AIB_FENCED		0x00000001
+#define PHB3_CFG_USE_ASB	0x00000002
+#define PHB3_CFG_BLOCKED	0x00000004
 
 struct phb3 {
 	unsigned int		index;	    /* 0..2 index inside P8 */

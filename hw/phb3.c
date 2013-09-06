@@ -152,7 +152,7 @@ static int64_t phb3_pcicfg_read##size(struct phb *phb, uint32_t bdfn,	\
 	if (rc)								\
 		return rc;						\
 									\
-	if (phb3_fenced(p)) {						\
+	if (p->flags & PHB3_AIB_FENCED) {				\
 		if (!(p->flags & PHB3_CFG_USE_ASB))			\
 			return OPAL_HARDWARE;				\
 		use_asb = true;						\
@@ -191,7 +191,7 @@ static int64_t phb3_pcicfg_write##size(struct phb *phb, uint32_t bdfn,	\
 	if (rc)								\
 		return rc;						\
 									\
-	if (phb3_fenced(p)) {						\
+	if (p->flags & PHB3_AIB_FENCED) {				\
 		if (!(p->flags & PHB3_CFG_USE_ASB))			\
 			return OPAL_HARDWARE;				\
 		use_asb = true;						\
@@ -1793,6 +1793,7 @@ static int64_t phb3_complete_reset(struct phb *phb, uint8_t assert)
 		 * the fundamental reset.
 		 */
 		phb3_init_hw(p);
+		p->flags &= ~PHB3_AIB_FENCED;
 		time_wait_ms(100);
 		return phb3_fundamental_reset(phb);
 	} else {
@@ -1870,6 +1871,8 @@ static int64_t phb3_eeh_freeze_status(struct phb *phb, uint64_t pe_number,
 
 	/* Check fence */
 	if (phb3_fenced(p)) {
+		p->flags |= PHB3_AIB_FENCED;
+
 		*freeze_state = OPAL_EEH_STOPPED_MMIO_DMA_FREEZE;
 		*pci_error_type = OPAL_EEH_PHB_ERROR;
 		if (severity)
