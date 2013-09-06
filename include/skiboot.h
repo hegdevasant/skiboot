@@ -121,6 +121,7 @@ extern void probe_p5ioc2(void);
 extern void probe_p7ioc(void);
 extern void probe_phb3(void);
 extern void uart_init(void);
+extern void homer_init(void);
 extern void slw_init(void);
 extern void occ_init(void);
 

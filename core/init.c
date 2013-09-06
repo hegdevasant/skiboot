@@ -437,6 +437,9 @@ void main_cpu_entry(const void *fdt, u32 master_cpu)
 	/* Initialize XSCOM */
 	xscom_init();
 
+	/* Reserve HOMER and OCC area */
+	homer_init();
+
 	/*
 	 * Fix missing bits from device-tree. This is done after
 	 * xscom_init as we might need to use xscom to read some
