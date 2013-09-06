@@ -1103,6 +1103,11 @@ static void phb3_read_phb_status(struct phb3 *p,
 		pci_put_phb(&p->phb);
 	}
 
+	/* PEC NFIR */
+	xscom_read(p->chip_id, p->pe_xscom + 0x0, &stat->nFir);
+	xscom_read(p->chip_id, p->pe_xscom + 0x3, &stat->nFirMask);
+	xscom_read(p->chip_id, p->pe_xscom + 0x8, &stat->nFirWOF);
+
 	/* PHB3 inbound and outbound error Regs */
 	stat->phbPlssr = phb3_read_reg_asb(p, PHB_CPU_LOADSTORE_STATUS);
 	stat->phbPlssr = phb3_read_reg_asb(p, PHB_DMA_CHAN_STATUS);

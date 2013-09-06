@@ -549,6 +549,9 @@ struct OpalIoPhb3ErrorData {
 	uint64_t correlator;
 
 	/* PHB3 MMIO Error Regs */
+	uint64_t nFir;			/* 000 */
+	uint64_t nFirMask;		/* 003 */
+	uint64_t nFirWOF;		/* 008 */
 	uint64_t phbPlssr;		/* 120 */
 	uint64_t phbCsr;		/* 110 */
 	uint64_t lemFir;		/* C00 */
