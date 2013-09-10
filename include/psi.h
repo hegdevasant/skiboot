@@ -50,8 +50,10 @@
 #define   PSIHB_CR_PSI_LINK_ENABLE	PPC_BIT(5)
 #define   PSIHB_CR_FSP_RESET		PPC_BIT(6)
 #define   PSIHB_CR_PSIHB_RESET		PPC_BIT(7)
-#define   PSIHB_CR_PSI_IRQ		PPC_BIT(16)	/* PSIHB interrupt */
-#define   PSIHB_CR_FSP_IRQ		PPC_BIT(17)	/* FSP interrupt */
+#define   PSIHB_CR_P7_PSI_IRQ		PPC_BIT(12)	/* PSIHB interrupt */
+#define   PSIHB_CR_P7_FSP_IRQ		PPC_BIT(13)	/* FSP interrupt */
+#define   PSIHB_CR_P8_PSI_IRQ		PPC_BIT(16)	/* PSIHB interrupt */
+#define   PSIHB_CR_P8_FSP_IRQ		PPC_BIT(17)	/* FSP interrupt */
 
 /* PSI Status / Error Mask Register */
 #define PSIHB_SEMR			0x28
