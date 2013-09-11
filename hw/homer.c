@@ -38,7 +38,7 @@ static bool read_pba_bar(struct proc_chip *chip, unsigned int bar_no,
 	*base = bar & 0x0ffffffffffffffful;
 	*size = (mask | 0xfffff) + 1;
 
-	return base != 0;
+	return (*base) != 0;
 }
 
 static void homer_init_chip(struct proc_chip *chip)
