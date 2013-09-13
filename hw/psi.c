@@ -87,46 +87,15 @@ static void handle_extra_interrupt(struct psi *psi)
 	 */
 }
 
-static bool is_fsp_irq(u64 val)
-{
-	switch (proc_gen) {
-	case proc_gen_p7:
-		if (val & PSIHB_CR_P7_FSP_IRQ)
-			return true;
-	case proc_gen_p8:
-		if (val & PSIHB_CR_P8_FSP_IRQ)
-			return true;
-	default:
-		break;
-	}
-	return false;
-}
-
-static bool is_psi_irq(u64 val)
-{
-	switch (proc_gen) {
-	case proc_gen_p7:
-		if (val & PSIHB_CR_P7_PSI_IRQ)
-			return true;
-	case proc_gen_p8:
-		if (val & PSIHB_CR_P8_PSI_IRQ)
-			return true;
-	default:
-		break;
-	}
-	return false;
-}
-
-
 static void psi_interrupt(void *data, uint32_t isn __unused)
 {
 	struct psi *psi = data;
 	u64 val;
 
 	val = in_be64(psi->gxhb_regs + PSIHB_CR);
-	if (is_fsp_irq(val)) /* FSP mailbox interrupt? */
+	if (val & PSIHB_CR_FSP_IRQ) /* FSP mailbox interrupt? */
 		fsp_interrupt();
-	else if (is_psi_irq(val)) /* CEC PSI interrupt? */
+	else if (val & PSIHB_CR_PSI_IRQ) /* CEC PSI interrupt? */
 		handle_psi_interrupt(psi);
 	else if (proc_gen == proc_gen_p8) /* P8 additional interrupt? */
 		handle_extra_interrupt(psi);
