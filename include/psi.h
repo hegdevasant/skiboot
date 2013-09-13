@@ -52,6 +52,7 @@
 #define   PSIHB_CR_PSIHB_RESET		PPC_BIT(7)
 #define   PSIHB_CR_PSI_IRQ		PPC_BIT(16)	/* PSIHB interrupt */
 #define   PSIHB_CR_FSP_IRQ		PPC_BIT(17)	/* FSP interrupt */
+#define   PSIHB_CR_FSP_LINK_ACTIVE	PPC_BIT(18)	/* FSP link active */
 
 /* PSI Status / Error Mask Register */
 #define PSIHB_SEMR			0x28

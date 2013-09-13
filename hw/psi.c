@@ -15,6 +15,14 @@
 #include <interrupts.h>
 #include <cpu.h>
 #include <trace.h>
+#include <xscom.h>
+#include <chip.h>
+
+#define PSI_P7_GXHB_BASE	0X2010c09
+#define PSI_P7_GXHB_ENABLED	PPC_BIT(28)
+
+#define PSI_P8_GXHB_BASE	0X201090a
+#define PSI_P8_GXHB_ENABLED	PPC_BIT(63)
 
 //#define DBG(fmt...)	printf(fmt)
 #define DBG(fmt...)	do { } while(0)
@@ -428,48 +436,115 @@ static int psi_init_phb(struct psi *psi)
 	return 0;
 }
 
-static bool psi_create(char *compat)
+static struct psi *alloc_psi(void)
 {
-	struct dt_node *psi_node;
 	struct psi *psi;
-	bool inited = false;
 
-	dt_for_each_compatible(dt_root, psi_node, compat) {
-		psi = zalloc(sizeof(struct psi));
-		if (!psi) {
-			prerror("PSI: Can't allocate memory!\n");
-			goto out;
-		}
-		psi->link = first_psi;
-		first_psi = psi;
-		inited = true;
-
-		psi->gxhb_regs =
-			(void *)dt_translate_address(psi_node, 0, NULL);
-		psi->chip_id = dt_get_chip_id(psi_node);
-		psi->interrupt = dt_prop_get_u32(psi_node, "interrupts");
-
-		if (!strcmp(dt_prop_get(psi_node, "status"), "ok"))
-			psi->working = true;
-		if (psi->working &&
-			dt_find_property(psi_node, "current-link") != NULL)
-			psi->active = true;
-
-		printf("PSI: PHB[%p] status: working %d, active %d\n",
-			psi, psi->working, psi->active);
-
-		psi_init_phb(psi);
+	psi = zalloc(sizeof(struct psi));
+	if (!psi) {
+		prerror("PSI: Could not allocate memory\n");
+		return NULL;
 	}
-out:
-	return inited;
+	return psi;
+}
+
+static struct psi *psi_p7_init(struct proc_chip *chip)
+{
+	struct psi *psi = NULL;
+	uint64_t rc, val;
+
+	rc = xscom_read(chip->id, PSI_P7_GXHB_BASE, &val);
+	if (rc) {
+		prerror("PSI: Error %llx reading PSI GXHB on chip %d\n",
+				rc, chip->id);
+		return NULL;
+	}
+	if (val & PSI_P7_GXHB_ENABLED) {
+		psi = alloc_psi();
+		if (!psi)
+			return NULL;
+		psi->working = true;
+		rc = val >> 36;	/* Bits 0:1 = 0x00; 2:27 Bridge BAR... */
+		rc <<= 20;	/* ... corresponds to bits 18:43 of base addr */
+		psi->gxhb_regs = (void *)rc;
+	} else
+		printf("PSI: Working link not found on chip %d\n", chip->id);
+
+	return psi;
+}
+
+static struct psi *psi_p8_init(struct proc_chip *chip)
+{
+	struct psi *psi = NULL;
+	uint64_t rc, val;
+
+	rc = xscom_read(chip->id, PSI_P8_GXHB_BASE, &val);
+	if (rc) {
+		prerror("PSI: Error %llx reading PSI GXHB on chip %d\n",
+				rc, chip->id);
+		return NULL;
+	}
+	if (val & PSI_P8_GXHB_ENABLED) {
+		psi = alloc_psi();
+		if (!psi)
+			return NULL;
+		psi->working = true;
+		psi->gxhb_regs = (void *)(val & ~PSI_P8_GXHB_ENABLED);
+	} else
+		printf("PSI: Working link not found on chip %d\n", chip->id);
+
+	return psi;
+}
+
+static bool psi_create_xscom(struct proc_chip *chip)
+{
+	struct psi *psi = NULL;
+	u64 val;
+
+	switch (proc_gen) {
+	case proc_gen_p7:
+		psi = psi_p7_init(chip);
+		break;
+	case proc_gen_p8:
+		psi = psi_p8_init(chip);
+		break;
+	case proc_gen_unknown:
+		prerror("PSI: Unknown processor type\n");
+		break;
+	}
+	if (!psi)
+		return false;
+
+	psi->link = first_psi;
+	first_psi = psi;
+
+	val = in_be64(psi->gxhb_regs + PSIHB_CR);
+	if (val & PSIHB_CR_FSP_LINK_ACTIVE)
+		psi->active = true;
+
+	psi->chip_id = chip->id;
+	psi->interrupt = get_psi_interrupt(chip->id);
+	psi_init_phb(psi);
+
+	printf("PSI: PHB[%p] status: working %d, active %d\n",
+			psi, psi->working, psi->active);
+	return true;
 }
 
 void psi_init(void)
 {
+	struct proc_chip *chip;
+	unsigned int num_inited = 0;
+	bool rc;
+
 	printf("PSI init...\n");
-	if (!psi_create("ibm,psi")) {
-		printf("PSI: No PSI link initialized\n");
-		return;
+	for_each_chip(chip) {
+		rc = psi_create_xscom(chip);
+		if (rc)
+			num_inited++;
 	}
-	printf("PSI init... done\n");
+	if (!num_inited)
+		printf("PSI: No PSI link initialized\n");
+	else
+		printf("PSI init... %d links initialized\n", num_inited);
 }
