@@ -143,6 +143,41 @@ struct dt_node *find_xscom_for_chip(uint32_t chip_id)
 	return NULL;
 }
 
+static void add_psihb_node(struct dt_node *np)
+{
+	u32 psi_scom, psi_slen;
+	const char *psi_comp;
+
+	/*
+	 * We add a few things under XSCOM that aren't added
+	 * by any other HDAT path
+	 */
+
+	/* PSI host bridge */
+	switch(proc_gen) {
+	case proc_gen_p7:
+		psi_scom = 0x2010c00;
+		psi_slen = 0x10;
+		psi_comp = "ibm,power7-psihb-x";
+		break;
+	case proc_gen_p8:
+		psi_scom = 0x2010900;
+		psi_slen = 0x20;
+		psi_comp = "ibm,power8-psihb-x";
+		break;
+	default:
+		psi_comp = NULL;
+	}
+	if (psi_comp) {
+		struct dt_node *psi_np;
+
+		psi_np = dt_new_addr(np, "psihb", psi_scom);
+		dt_add_property_cells(psi_np, "reg", psi_scom, psi_slen);
+		dt_add_property_strings(psi_np, "compatible", psi_comp,
+					"ibm,psihb-x");
+	}
+}
+
 static bool add_xscom_sppcrd(uint64_t xscom_base)
 {
 	struct HDIF_common_hdr *hdif;
@@ -197,6 +232,9 @@ static bool add_xscom_sppcrd(uint64_t xscom_base)
 				dt_add_property(np, "ibm,module-vpd", vpd,
 						vpd_sz);
 		}
+
+		/* Add PSI Host bridge */
+		add_psihb_node(np);
 	}
 
 	return i > 0;
@@ -245,6 +283,9 @@ static void add_xscom_sppaca(uint64_t xscom_base)
 		vpd = HDIF_get_idata(hdif, SPPACA_IDATA_KW_VPD, &vpd_sz);
 		if (CHECK_SPPTR(vpd))
 			dt_add_property(np, "ibm,chip-vpd", vpd, vpd_sz);
+
+		/* Add PSI Host bridge */
+		add_psihb_node(np);
 	}
 }
 
