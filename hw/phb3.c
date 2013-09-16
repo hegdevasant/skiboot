@@ -487,12 +487,12 @@ static int64_t phb3_set_phb_mem_window(struct phb *phb,
 		data64 = SETFIELD(IODA2_M64BT_SINGLE_BASE, data64,
 				  addr >> 25);
 		data64 = SETFIELD(IODA2_M64BT_SINGLE_MASK, data64,
-				  0x10000000 - (size >> 25));
+				  0x20000000 - (size >> 25));
 	} else {
 		data64 = SETFIELD(IODA2_M64BT_BASE, data64,
 				  addr >> 20);
 		data64 = SETFIELD(IODA2_M64BT_MASK, data64,
-				  0x10000000 - (size >> 20));
+				  0x40000000 - (size >> 20));
 	}
 	p->m64b_cache[window_num] = data64;
 
