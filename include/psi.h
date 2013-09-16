@@ -14,7 +14,7 @@
 #include <skiboot.h>
 
 /*
- * PSI Host Bridge Registers
+ * PSI Host Bridge Registers (MMIO)
  *
  * The PSI interface is the bridge to the FPS, it has its own
  * registers. The FSP registers appear at an offset within the
@@ -80,6 +80,16 @@
 #define PSIHB_PHBSCR			0x90
 
 /*
+ * PSI Host Bridge Registers (XSCOM)
+ */
+#define PSIHB_XSCOM_P7_HBBAR		0x9
+#define   PSIHB_XSCOM_P7_HBBAR_EN	PPC_BIT(28)
+
+#define PSIHB_XSCOM_P8_BASE		0xa
+#define   PSIHB_XSCOM_P8_HBBAR_EN	PPC_BIT(63)
+
+
+/*
  * Layout of the PSI DMA address space
  *
  * We instanciate a TCE table of 16K mapping 64M
@@ -124,7 +134,8 @@
 
 struct psi {
 	struct psi		*link;
-	void			*gxhb_regs;
+	uint64_t		xscom_base;
+	void			*regs;
 	unsigned int		chip_id;
 	unsigned int		interrupt;
 	bool			working;
@@ -133,7 +144,7 @@ struct psi {
 
 extern struct psi *first_psi;
 extern void psi_init(void);
-extern struct psi *psi_find_link(void *addr);
+extern struct psi *psi_find_link(uint32_t chip_id);
 
 /* Interrupts */
 extern void psi_irq_reset(void);

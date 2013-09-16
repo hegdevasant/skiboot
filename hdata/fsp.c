@@ -44,7 +44,8 @@ static struct dt_node *fsp_create_node(const void *spss, int i,
 
 	if (sp_impl->hw_version == 1) {
 		dt_add_property_strings(node, "compatible", "ibm,fsp1");
-		/* Offset into the FSP MMIO space where the mailbox registers are */
+		/* Offset into the FSP MMIO space where the mailbox
+		 * registers are */
 		/* seen in the FSP1 spec */
 		dt_add_property_cells(node, "reg-offset", 0xb0016000);
 	} else if (sp_impl->hw_version == 2) {
@@ -60,7 +61,7 @@ static struct dt_node *fsp_create_node(const void *spss, int i,
 	return node;
 }
 
-struct dt_node *fsp_create_link(const struct spss_iopath *iopath, int index,
+static uint32_t fsp_create_link(const struct spss_iopath *iopath, int index,
 				int fsp_index)
 {
 	struct dt_node *node;
@@ -68,7 +69,6 @@ struct dt_node *fsp_create_link(const struct spss_iopath *iopath, int index,
 	bool current = false;
 	bool working = false;
 	uint32_t chip_id;
-	uint64_t addr;
 
 	switch(iopath->psi.link_status) {
 	case SPSS_IO_PATH_PSI_LINK_BAD_FRU:
@@ -88,37 +88,23 @@ struct dt_node *fsp_create_link(const struct spss_iopath *iopath, int index,
 	printf("FSP #%d: IO PATH %d is %s PSI Link, GXHB at %llx\n",
 	       fsp_index, index, ststr, (long long)iopath->psi.gxhb_base);
 
-	addr = cleanup_addr(iopath->psi.gxhb_base);
 	chip_id = pcid_to_chip_id(iopath->psi.proc_chip_id);
-
-	node = dt_new_addr(dt_root, "psi", addr);
-	assert(node);
-
-	/* XXX Read PSI BAR to determine size ? */
-	dt_add_property_cells(node, "reg", hi32(addr), lo32(addr), 1, 0);
-	switch (proc_gen) {
-	case proc_gen_p7:
-		dt_add_property_strings(node, "compatible", "ibm,psi",
-					"ibm,power7-psi");
-		break;
-	case proc_gen_p8:
-		dt_add_property_strings(node, "compatible", "ibm,psi",
-					"ibm,power8-psi");
-		break;
-	default:
-		dt_add_property_strings(node, "compatible", "ibm,psi");
+	node = dt_find_compatible_node_on_chip(dt_root, NULL, "ibm,psihb-x",
+					       chip_id);
+	if (!node) {
+		prerror("FSP #%d: Can't find psihb node for link %d\n",
+			fsp_index, index);
+	} else {
+		if (current)
+			dt_add_property(node, "boot-link", NULL, 0);
+		dt_add_property_strings(node, "status", working ? "ok" : "bad");
 	}
-	dt_add_property_cells(node, "interrupt-parent", get_ics_phandle());
-	dt_add_property_cells(node, "interrupts", get_psi_interrupt(chip_id));
-	dt_add_property_cells(node, "ibm,chip-id", chip_id);
-	if (current)
-		dt_add_property(node, "current-link", NULL, 0);
-	dt_add_property_strings(node, "status", working ? "ok" : "bad");
 
-	return node;
+	return chip_id;
 }
 
-static void fsp_create_links(const void *spss, int index, struct dt_node *fsp_node)
+static void fsp_create_links(const void *spss, int index,
+			     struct dt_node *fsp_node)
 {
 	uint32_t *links = NULL;
 	unsigned int i, lp, lcount = 0;
@@ -135,7 +121,7 @@ static void fsp_create_links(const void *spss, int index, struct dt_node *fsp_no
 	for (i = 0; i < count; i++) {
 		const struct spss_iopath *iopath;
 		unsigned int iopath_sz;
-		struct dt_node *link;
+		uint32_t chip;
 
 		iopath = HDIF_get_iarray_item(spss, SPSS_IDATA_SP_IOPATH,
 					      i, &iopath_sz);
@@ -149,15 +135,13 @@ static void fsp_create_links(const void *spss, int index, struct dt_node *fsp_no
 			continue;
 		}
 
-		link = fsp_create_link(iopath, i, index);
-		if (!link)
-			continue;
+		chip = fsp_create_link(iopath, i, index);
 		lp = lcount++;
 		links = realloc(links, 4 * lcount);
-		links[lp] = link->phandle;
+		links[lp] = chip;
 	}
 	if (links)
-		dt_add_property(fsp_node, "links", links, lcount * 4);
+		dt_add_property(fsp_node, "ibm,psi-links", links, lcount * 4);
 }
 
 void fsp_parse(void)
@@ -169,14 +153,17 @@ void fsp_parse(void)
 	/*
 	 * Note on DT representation of the PSI links and FSPs:
 	 *
-	 * We create a node for each functional PSI host bridge. However
-	 * we do not put the FSP as children of these. Instead, we create
+	 * We create a XSCOM node for each PSI host bridge(one per chip),
+	 *
+	 * This is done in spira.c
+	 *
+	 * We do not create the /psi MMIO variant at this stage, it will
+	 * be added by the psi driver in skiboot.
+	 *
+	 * We do not put the FSP(s) as children of these. Instead, we create
 	 * a top-level /fsps node with the FSPs as children.
 	 *
-	 * Each FSP then has a "links" property which is an array of
-	 * phandles to the corresponding PSI HBs.
-	 *
-	 * This handles link redudancy better.
+	 * Each FSP then has a "links" property which is an array of chip IDs
 	 */
 	
 	/* Find SPSS in SPIRA */

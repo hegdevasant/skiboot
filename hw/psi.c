@@ -18,27 +18,18 @@
 #include <xscom.h>
 #include <chip.h>
 
-#define PSI_P7_GXHB_BASE	0X2010c09
-#define PSI_P7_GXHB_ENABLED	PPC_BIT(28)
-
-#define PSI_P8_GXHB_BASE	0X201090a
-#define PSI_P8_GXHB_ENABLED	PPC_BIT(63)
-
 //#define DBG(fmt...)	printf(fmt)
 #define DBG(fmt...)	do { } while(0)
 //#define FSP_TRACE
 
 struct psi *first_psi;
 
-struct psi *psi_find_link(void *addr)
+struct psi *psi_find_link(uint32_t chip_id)
 {
 	struct psi *psi;
 
-	if (!addr)
-		return NULL;
-
 	for (psi = first_psi; psi; psi = psi->link) {
-		if (psi->gxhb_regs == addr)
+		if (psi->chip_id == chip_id)
 			return psi;
 	}
 	return NULL;
@@ -50,8 +41,8 @@ void psi_enable_fsp_interrupt(struct psi *psi)
 		return;
 
 	/* Enable FSP interrupts in the GXHB */
-	out_be64(psi->gxhb_regs + PSIHB_CR,
-		 in_be64(psi->gxhb_regs + PSIHB_CR) | PSIHB_CR_FSP_IRQ_ENABLE);
+	out_be64(psi->regs + PSIHB_CR,
+		 in_be64(psi->regs + PSIHB_CR) | PSIHB_CR_FSP_IRQ_ENABLE);
 }
 
 static void handle_psi_interrupt(struct psi *psi __unused)
@@ -65,7 +56,7 @@ static void handle_extra_interrupt(struct psi *psi)
 {
 	u64 val;
 
-	val = in_be64(psi->gxhb_regs + PSIHB_IRQ_STATUS);
+	val = in_be64(psi->regs + PSIHB_IRQ_STATUS);
 
 	/*
 	 * Decode interrupt type, call appropriate handlers
@@ -100,7 +91,7 @@ static void psi_interrupt(void *data, uint32_t isn __unused)
 	struct psi *psi = data;
 	u64 val;
 
-	val = in_be64(psi->gxhb_regs + PSIHB_CR);
+	val = in_be64(psi->regs + PSIHB_CR);
 	if (val & PSIHB_CR_FSP_IRQ) /* FSP mailbox interrupt? */
 		fsp_interrupt();
 	else if (val & PSIHB_CR_PSI_IRQ) /* CEC PSI interrupt? */
@@ -130,7 +121,7 @@ static int64_t psi_p7_set_xive(void *data, uint32_t isn __unused,
 	xivr |= (uint64_t)priority << 32;
 	xivr |=	P7_IRQ_BUID(psi->interrupt) << 16;
 
-	out_be64(psi->gxhb_regs + PSIHB_XIVR, xivr);
+	out_be64(psi->regs + PSIHB_XIVR, xivr);
 
 	return OPAL_SUCCESS;
 }
@@ -145,7 +136,7 @@ static int64_t psi_p7_get_xive(void *data, uint32_t isn __unused,
 		return OPAL_HARDWARE;
 
 	/* Read & decode the XIVR */
-	xivr = in_be64(psi->gxhb_regs + PSIHB_XIVR);
+	xivr = in_be64(psi->regs + PSIHB_XIVR);
 
 	*server = (xivr >> 40) & 0x7ff;
 	*priority = (xivr >> 32) & 0xff;
@@ -187,7 +178,7 @@ static int64_t psi_p8_set_xive(void *data, uint32_t isn,
 	xivr |= (uint64_t)priority << 32;
 	xivr |= (uint64_t)(isn & 7) << 29;
 
-	out_be64(psi->gxhb_regs + xivr_p, xivr);
+	out_be64(psi->regs + xivr_p, xivr);
 
 	return OPAL_SUCCESS;
 }
@@ -222,7 +213,7 @@ static int64_t psi_p8_get_xive(void *data, uint32_t isn __unused,
 	}
 
 	/* Read & decode the XIVR */
-	xivr = in_be64(psi->gxhb_regs + xivr_p);
+	xivr = in_be64(psi->regs + xivr_p);
 
 	*server = (xivr >> 40) & 0xffff;
 	*priority = (xivr >> 32) & 0xff;
@@ -246,7 +237,7 @@ void psi_irq_reset(void)
 		/* Mask the interrupt & clean the XIVR */
 		xivr = 0x000000ff00000000;
 		xivr |=	P7_IRQ_BUID(psi->interrupt) << 16;
-		out_be64(psi->gxhb_regs + PSIHB_XIVR, xivr);
+		out_be64(psi->regs + PSIHB_XIVR, xivr);
 
 #if 0 /* Seems to checkstop ... */
 		/*
@@ -284,10 +275,10 @@ static void psi_tce_enable(struct psi *psi, bool enable)
 
 	switch (proc_gen) {
 	case proc_gen_p7:
-		addr = psi->gxhb_regs + PSIHB_CR;
+		addr = psi->regs + PSIHB_CR;
 		break;
 	case proc_gen_p8:
-		addr = psi->gxhb_regs + PSIHB_PHBSCR;
+		addr = psi->regs + PSIHB_PHBSCR;
 		break;
 	default:
 		prerror("%s: Unknown CPU type\n", __func__);
@@ -311,22 +302,22 @@ static int psi_init_phb(struct psi *psi)
 	 */
 	psi_tce_enable(psi, false);
 
-	out_be64(psi->gxhb_regs + PSIHB_TAR, PSI_TCE_TABLE_BASE |
+	out_be64(psi->regs + PSIHB_TAR, PSI_TCE_TABLE_BASE |
 		 PSIHB_TAR_16K_ENTRIES);
 
 	/* Disable interrupt emission in the control register,
 	 * it will be re-enabled later, after the mailbox one
 	 * will have been enabled.
 	 */
-	reg = in_be64(psi->gxhb_regs + PSIHB_CR);
+	reg = in_be64(psi->regs + PSIHB_CR);
 	reg &= ~PSIHB_CR_FSP_IRQ_ENABLE;
-	out_be64(psi->gxhb_regs + PSIHB_CR, reg);
+	out_be64(psi->regs + PSIHB_CR, reg);
 
 	/* Configure the interrupt BUID and mask it */
 	switch (proc_gen) {
 	case proc_gen_p7:
 		/* On P7, we get a single interrupt */
-		out_be64(psi->gxhb_regs + PSIHB_XIVR,
+		out_be64(psi->regs + PSIHB_XIVR,
 			 P7_IRQ_BUID(psi->interrupt) << 16 |
 			 0xffull << 32);
 
@@ -342,20 +333,20 @@ static int psi_init_phb(struct psi *psi)
 		/* On P8 we get a block of 8, set up the base/mask
 		 * and mask all the sources for now
 		 */
-		out_be64(psi->gxhb_regs + PSIHB_IRQ_SRC_COMP,
+		out_be64(psi->regs + PSIHB_IRQ_SRC_COMP,
 			 (((u64)psi->interrupt) << 45) |
 			 ((0x7fff8ul) << 13) | (0x3ull << 32));
-		out_be64(psi->gxhb_regs + PSIHB_XIVR_FSP,
+		out_be64(psi->regs + PSIHB_XIVR_FSP,
 			 (0xffull << 32) | (P8_IRQ_PSI_FSP << 29));
-		out_be64(psi->gxhb_regs + PSIHB_XIVR_OCC,
+		out_be64(psi->regs + PSIHB_XIVR_OCC,
 			 (0xffull << 32) | (P8_IRQ_PSI_OCC << 29));
-		out_be64(psi->gxhb_regs + PSIHB_XIVR_FSI,
+		out_be64(psi->regs + PSIHB_XIVR_FSI,
 			 (0xffull << 32) | (P8_IRQ_PSI_FSI << 29));
-		out_be64(psi->gxhb_regs + PSIHB_XIVR_LPC,
+		out_be64(psi->regs + PSIHB_XIVR_LPC,
 			 (0xffull << 32) | (P8_IRQ_PSI_LPC << 29));
-		out_be64(psi->gxhb_regs + PSIHB_XIVR_LOCAL_ERR,
+		out_be64(psi->regs + PSIHB_XIVR_LOCAL_ERR,
 			 (0xffull << 32) | (P8_IRQ_PSI_LOCAL_ERR << 29));
-		out_be64(psi->gxhb_regs + PSIHB_XIVR_HOST_ERR,
+		out_be64(psi->regs + PSIHB_XIVR_HOST_ERR,
 			 (0xffull << 32) | (P8_IRQ_PSI_HOST_ERR << 29));
 
 		/*
@@ -391,7 +382,7 @@ static int psi_init_phb(struct psi *psi)
 	 * seems to be masked under OPAL.
 	 */
 	reg = 0x0000010000100000ull;
-	out_be64(psi->gxhb_regs + PSIHB_SEMR, reg);
+	out_be64(psi->regs + PSIHB_SEMR, reg);
 
 	/* Enable various other configuration register bits based
 	 * on what pHyp does. We keep interrupts disabled until
@@ -408,35 +399,61 @@ static int psi_init_phb(struct psi *psi)
 	 * XXX: Only on the active link for now
 	 */
 	if (psi->active) {
-		reg = in_be64(psi->gxhb_regs + PSIHB_CR);
+		reg = in_be64(psi->regs + PSIHB_CR);
 		reg |= PSIHB_CR_FSP_CMD_ENABLE;
 		reg |= PSIHB_CR_FSP_MMIO_ENABLE;
 		reg |= PSIHB_CR_FSP_ERR_RSP_ENABLE;
 		reg &= ~0x00000000ffffffffull;
-		out_be64(psi->gxhb_regs + PSIHB_CR, reg);
+		out_be64(psi->regs + PSIHB_CR, reg);
 		psi_tce_enable(psi, true);
 	}
 
 	/* Dump the GXHB registers */
 	printf("  PSIHB_BBAR   : %llx\n",
-	       in_be64(psi->gxhb_regs + PSIHB_BBAR));
+	       in_be64(psi->regs + PSIHB_BBAR));
 	printf("  PSIHB_FSPBAR : %llx\n",
-	       in_be64(psi->gxhb_regs + PSIHB_FSPBAR));
+	       in_be64(psi->regs + PSIHB_FSPBAR));
 	printf("  PSIHB_FSPMMR : %llx\n",
-	       in_be64(psi->gxhb_regs + PSIHB_FSPMMR));
+	       in_be64(psi->regs + PSIHB_FSPMMR));
 	printf("  PSIHB_TAR    : %llx\n",
-	       in_be64(psi->gxhb_regs + PSIHB_TAR));
+	       in_be64(psi->regs + PSIHB_TAR));
 	printf("  PSIHB_CR     : %llx\n",
-	       in_be64(psi->gxhb_regs + PSIHB_CR));
+	       in_be64(psi->regs + PSIHB_CR));
 	printf("  PSIHB_SEMR   : %llx\n",
-	       in_be64(psi->gxhb_regs + PSIHB_SEMR));
+	       in_be64(psi->regs + PSIHB_SEMR));
 	printf("  PSIHB_XIVR   : %llx\n",
-	       in_be64(psi->gxhb_regs + PSIHB_XIVR));
+	       in_be64(psi->regs + PSIHB_XIVR));
 
 	return 0;
 }
 
-static struct psi *alloc_psi(void)
+static void psi_create_mm_dtnode(struct psi *psi)
+{
+	struct dt_node *np;
+	uint64_t addr = (uint64_t)psi->regs;
+
+	np = dt_new_addr(dt_root, "psi", addr);
+
+	/* Hard wire size to 4G */
+	dt_add_property_cells(np, "reg", hi32(addr), lo32(addr), 1, 0);
+	switch (proc_gen) {
+	case proc_gen_p7:
+		dt_add_property_strings(np, "compatible", "ibm,psi",
+					"ibm,power7-psi");
+		break;
+	case proc_gen_p8:
+		dt_add_property_strings(np, "compatible", "ibm,psi",
+					"ibm,power8-psi");
+		break;
+	default:
+		dt_add_property_strings(np, "compatible", "ibm,psi");
+	}
+	dt_add_property_cells(np, "interrupt-parent", get_ics_phandle());
+	dt_add_property_cells(np, "interrupts", psi->interrupt);
+	dt_add_property_cells(np, "ibm,chip-id", psi->chip_id);
+}
+
+static struct psi *alloc_psi(uint64_t base)
 {
 	struct psi *psi;
 
@@ -445,72 +462,79 @@ static struct psi *alloc_psi(void)
 		prerror("PSI: Could not allocate memory\n");
 		return NULL;
 	}
+	psi->xscom_base = base;
 	return psi;
 }
 
-static struct psi *psi_p7_init(struct proc_chip *chip)
+static struct psi *psi_probe_p7(struct proc_chip *chip, u64 base)
 {
 	struct psi *psi = NULL;
 	uint64_t rc, val;
 
-	rc = xscom_read(chip->id, PSI_P7_GXHB_BASE, &val);
+	rc = xscom_read(chip->id, base + PSIHB_XSCOM_P7_HBBAR, &val);
 	if (rc) {
-		prerror("PSI: Error %llx reading PSI GXHB on chip %d\n",
+		prerror("PSI: Error %llx reading PSIHB BAR on chip %d\n",
 				rc, chip->id);
 		return NULL;
 	}
-	if (val & PSI_P7_GXHB_ENABLED) {
-		psi = alloc_psi();
+	if (val & PSIHB_XSCOM_P7_HBBAR_EN) {
+		psi = alloc_psi(base);
 		if (!psi)
 			return NULL;
 		psi->working = true;
 		rc = val >> 36;	/* Bits 0:1 = 0x00; 2:27 Bridge BAR... */
 		rc <<= 20;	/* ... corresponds to bits 18:43 of base addr */
-		psi->gxhb_regs = (void *)rc;
+		psi->regs = (void *)rc;
 	} else
 		printf("PSI: Working link not found on chip %d\n", chip->id);
 
 	return psi;
 }
 
-static struct psi *psi_p8_init(struct proc_chip *chip)
+static struct psi *psi_probe_p8(struct proc_chip *chip, u64 base)
 {
 	struct psi *psi = NULL;
 	uint64_t rc, val;
 
-	rc = xscom_read(chip->id, PSI_P8_GXHB_BASE, &val);
+	rc = xscom_read(chip->id, base + PSIHB_XSCOM_P8_BASE, &val);
 	if (rc) {
-		prerror("PSI: Error %llx reading PSI GXHB on chip %d\n",
+		prerror("PSI: Error %llx reading PSIHB BAR on chip %d\n",
 				rc, chip->id);
 		return NULL;
 	}
-	if (val & PSI_P8_GXHB_ENABLED) {
-		psi = alloc_psi();
+	if (val & PSIHB_XSCOM_P8_HBBAR_EN) {
+		psi = alloc_psi(base);
 		if (!psi)
 			return NULL;
 		psi->working = true;
-		psi->gxhb_regs = (void *)(val & ~PSI_P8_GXHB_ENABLED);
+		psi->regs = (void *)(val & ~PSIHB_XSCOM_P8_HBBAR_EN);
 	} else
 		printf("PSI: Working link not found on chip %d\n", chip->id);
 
 	return psi;
 }
 
-static bool psi_create_xscom(struct proc_chip *chip)
+static bool psi_init_psihb(struct dt_node *psihb)
 {
+	uint32_t chip_id = dt_get_chip_id(psihb);
+	struct proc_chip *chip = get_chip(chip_id);
 	struct psi *psi = NULL;
-	u64 val;
+	u64 base, val;
 
-	switch (proc_gen) {
-	case proc_gen_p7:
-		psi = psi_p7_init(chip);
-		break;
-	case proc_gen_p8:
-		psi = psi_p8_init(chip);
-		break;
-	case proc_gen_unknown:
+	if (!chip) {
+		prerror("PSI: Can't find chip !\n");
+		return false;
+	}
+
+	base = dt_get_address(psihb, 0, NULL);
+
+	if (dt_node_is_compatible(psihb, "ibm,power7-psihb-x"))
+		psi = psi_probe_p7(chip, base);
+	else if (dt_node_is_compatible(psihb, "ibm,power8-psihb-x"))
+		psi = psi_probe_p8(chip, base);
+	else {
 		prerror("PSI: Unknown processor type\n");
-		break;
+		return false;
 	}
 	if (!psi)
 		return false;
@@ -518,12 +542,14 @@ static bool psi_create_xscom(struct proc_chip *chip)
 	psi->link = first_psi;
 	first_psi = psi;
 
-	val = in_be64(psi->gxhb_regs + PSIHB_CR);
+	val = in_be64(psi->regs + PSIHB_CR);
 	if (val & PSIHB_CR_FSP_LINK_ACTIVE)
 		psi->active = true;
 
 	psi->chip_id = chip->id;
 	psi->interrupt = get_psi_interrupt(chip->id);
+
+	psi_create_mm_dtnode(psi);
 	psi_init_phb(psi);
 
 	printf("PSI: PHB[%p] status: working %d, active %d\n",
@@ -533,18 +559,10 @@ static bool psi_create_xscom(struct proc_chip *chip)
 
 void psi_init(void)
 {
-	struct proc_chip *chip;
-	unsigned int num_inited = 0;
-	bool rc;
+	struct dt_node *np;
 
-	printf("PSI init...\n");
-	for_each_chip(chip) {
-		rc = psi_create_xscom(chip);
-		if (rc)
-			num_inited++;
-	}
-	if (!num_inited)
-		printf("PSI: No PSI link initialized\n");
-	else
-		printf("PSI init... %d links initialized\n", num_inited);
+	printf("PSI: init...\n");
+	dt_for_each_compatible(dt_root, np, "ibm,psihb-x")
+		psi_init_psihb(np);
+	printf("PSI: init... done\n");
 }

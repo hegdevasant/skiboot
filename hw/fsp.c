@@ -1012,7 +1012,7 @@ static void fsp_create_fsp(struct dt_node *fsp_node)
 	index = dt_prop_get_u32(fsp_node, "reg");
 	prerror("FSP #%d: Found in device-tree, setting up...\n", index);
 
-	linksprop = dt_find_property(fsp_node, "links");
+	linksprop = dt_find_property(fsp_node, "ibm,psi-links");
 	if (!linksprop || linksprop->len < 4) {	
 		prerror("FSP #%d: No links !\n", index);
 		return;
@@ -1039,33 +1039,19 @@ static void fsp_create_fsp(struct dt_node *fsp_node)
 
 	/* Iterate all links */
 	for (i = 0; i < count; i++) {
-		struct dt_node *link;
 		u64 reg;
-		u32 lph;
+		u32 link;
 
-		lph = ((const u32 *)linksprop->prop)[i];
-		link = dt_find_by_phandle(dt_root, lph);
-		if (!link) {
-			prerror("FSP #%d: Can't find link 0x%x\n", index, lph);
-			fsp->iopath_count = i;
-			break;
-		}
-
-		if (!dt_node_is_compatible(link, "ibm,psi")) {
-			prerror("FSP #%d: Unsupported link type at %s\n",
-				index, link->name);
-			continue;
-		}
-
-		reg = dt_translate_address(link, 0, NULL);
+		link = ((const u32 *)linksprop->prop)[i];
 		fiop = &fsp->iopath[i];
-		fiop->psi = psi_find_link((void *)reg);
+		fiop->psi = psi_find_link(link);
 		if (fiop->psi == NULL) {
 			prerror("FSP #%d: Couldn't find PSI link\n", index);
 			continue;
 		}
 
-		printf("FSP #%d: Found PSI HB link %p\n", index, fiop->psi);
+		printf("FSP #%d: Found PSI HB link to chip %d\n",
+		       index, link);
 		if (!fiop->psi->working)
 			fiop->state = fsp_path_bad;
 		else if (fiop->psi->active) {
@@ -1075,7 +1061,7 @@ static void fsp_create_fsp(struct dt_node *fsp_node)
 			fiop->state = fsp_path_backup;
 
 		/* Get the FSP register window */
-		reg = in_be64(fiop->psi->gxhb_regs + PSIHB_FSPBAR);
+		reg = in_be64(fiop->psi->regs + PSIHB_FSPBAR);
 		fiop->fsp_regs = (void *)(reg | (1ULL << 63) |
 				dt_prop_get_u32(fsp_node, "reg-offset"));
 	}
