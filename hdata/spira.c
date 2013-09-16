@@ -112,14 +112,12 @@ static struct dt_node *add_xscom_node(uint64_t base, uint32_t hw_id,
 	dt_add_property_cells(node, "#size-cells", 1);
 	dt_add_property(node, "scom-controller", NULL, 0);
 
-	/* XXX Use boot CPU PVR to decide on XSCOM type... */
-	switch(cpu_type) {
-	case PVR_TYPE_P7:
-	case PVR_TYPE_P7P:
+	switch(proc_gen) {
+	case proc_gen_p7:
 		dt_add_property_strings(node, "compatible",
 					"ibm,xscom", "ibm,power7-xscom");
 		break;
-	case PVR_TYPE_P8:
+	case proc_gen_p8:
 		dt_add_property_strings(node, "compatible",
 					"ibm,xscom", "ibm,power8-xscom");
 		break;
@@ -217,7 +215,7 @@ static void add_xscom_sppaca(uint64_t xscom_base)
 		int ve;
 
 		/* We only suport old style PACA on P7 ! */
-		assert(cpu_type == PVR_TYPE_P7);
+		assert(proc_gen == proc_gen_p7);
 
 		id = HDIF_get_idata(hdif, SPPACA_IDATA_CPU_ID, NULL);
 
@@ -314,12 +312,11 @@ static void add_chiptod_node(unsigned int chip_id, int flags)
 	addr = 0x40000;
 	len = 0x34;
 
-	switch(cpu_type) {
-	case PVR_TYPE_P7:
-	case PVR_TYPE_P7P:
+	switch(proc_gen) {
+	case proc_gen_p7:
 		compat_str = "ibm,power7-chiptod";
 		break;
-	case PVR_TYPE_P8:
+	case proc_gen_p8:
 		compat_str = "ibm,power8-chiptod";
 		break;
 	default:
@@ -445,12 +442,11 @@ static void add_nx_node(u32 gcid)
 	addr = 0x2010000;
 	size = 0x0004000;
 
-	switch (cpu_type) {
-	case PVR_TYPE_P7:
-	case PVR_TYPE_P7P:
+	switch (proc_gen) {
+	case proc_gen_p7:
 		cp_str = "ibm,power7-nx";
 		break;
-	case PVR_TYPE_P8:
+	case proc_gen_p8:
 		cp_str = "ibm,power8-nx";
 		break;
 	default:
@@ -628,7 +624,7 @@ uint32_t pcid_to_chip_id(uint32_t proc_chip_id)
 		const struct sppaca_cpu_id *id;
 
 		/* We only suport old style PACA on P7 ! */
-		assert(cpu_type == PVR_TYPE_P7);
+		assert(proc_gen == proc_gen_p7);
 
 		id = HDIF_get_idata(hdif, SPPACA_IDATA_CPU_ID, NULL);
 

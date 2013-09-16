@@ -38,24 +38,19 @@ static void nx_create_node(struct dt_node *node)
 	u32 gcid;
 	u64 rng_addr, rng_len, len;
 	struct dt_node *rng;
-	unsigned long cpu_type = PVR_TYPE(mfspr(SPR_PVR));
 	int rc;
 
 	gcid = dt_get_chip_id(node);
 	pb_base = dt_get_address(node, 0, NULL);
 
-	/* Arguably we should use the compatible property.. */
-	switch (cpu_type) {
-	case PVR_TYPE_P7P:
+	if (dt_node_is_compatible(node, "ibm,power7-nx")) {
 		xbar = pb_base + NX_P7_RNG_BAR;
 		xcfg = pb_base + NX_P7_RNG_CFG;
-		break;
-	case PVR_TYPE_P8:
+	} else if (dt_node_is_compatible(node, "ibm,power8-nx")) {
 		xbar = pb_base + NX_P8_RNG_BAR;
 		xcfg = pb_base + NX_P8_RNG_CFG;
-		break;
-	default:
-		prerror("NX%d: Unknown cpu type %lx!\n", gcid, cpu_type);
+	} else {
+		prerror("NX%d: Unknown NX type!\n", gcid);
 		return;
 	}
 
