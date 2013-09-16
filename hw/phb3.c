@@ -2820,7 +2820,7 @@ static void phb3_probe_pbcq(struct dt_node *pbcq)
 	struct dt_node *np;
 	char *path;
 
-	gcid = dt_prop_get_u32(pbcq->parent, "ibm,chip-id");
+	gcid = dt_get_chip_id(pbcq);
 	pno = dt_prop_get_u32(pbcq, "ibm,phb-index");
 	path = dt_get_path(pbcq);
 	printf("Chip %d Found PBCQ%d at %s\n", gcid, pno, path);
