@@ -152,8 +152,13 @@ boot_entry:
 	cmpwi	cr0,%r3,PVR_TYPE_P7P
 	beq	1f
 	cmpwi	cr0,%r3,PVR_TYPE_P8
-	bne	.	/* Unsupported CPU type... what do we do ? */
-	li	%r26,7	/* SMT 8 */
+	beq	2f
+	cmpwi	cr0,%r3,PVR_TYPE_P8E
+	beq	2f
+	attn		/* Unsupported CPU type... what do we do ? */
+
+	/* P8 -> 8 threads */
+2:	li	%r26,7
 
 	/* Get our reloc offset into r30 */
 1:	bcl	20,31,$+4
@@ -396,6 +401,8 @@ init_shared_sprs:
 	beq	1f
 	cmpwi	cr0,%r3,PVR_TYPE_P7P
 	beq	2f
+	cmpwi	cr0,%r3,PVR_TYPE_P8E
+	beq	3f
 	cmpwi	cr0,%r3,PVR_TYPE_P8
 	beq	3f
 	/* Unsupported CPU type... what do we do ? */
@@ -413,7 +420,7 @@ init_shared_sprs:
 	mtspr	SPR_TSCR, %r3
 	b	9f
 
-3:	/* P8 */
+3:	/* P8E/P8 */
 	/* TSCR: Recommended value by HW folks */
 	LOAD_IMM32(%r3,0x8ACC6880)
 	mtspr	SPR_TSCR, %r3

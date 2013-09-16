@@ -34,10 +34,10 @@ struct dt_node * add_core_common(struct dt_node *cpus,
 		name = "PowerPC,POWER7+";
 		version = 0x0f000003;
 		break;
+	case PVR_TYPE_P8E:
 	case PVR_TYPE_P8:
 		name = "PowerPC,POWER8";
 		version = 0x0f000004;
-		/* XXX Not really supported with PACA, use PCIA */
 		break;
 	default:
 		name = "PowerPC,Unknown";

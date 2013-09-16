@@ -310,6 +310,7 @@ void init_boot_cpu(void)
 		proc_gen = proc_gen_p7;
 		printf("CPU: P7 generation processor\n");
 		break;
+	case PVR_TYPE_P8E:
 	case PVR_TYPE_P8:
 		cpu_thread_count = 8;
 		cpu_max_pir = SPR_PIR_P8_MASK;
