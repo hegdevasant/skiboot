@@ -273,6 +273,13 @@ struct dt_property *dt_add_property(struct dt_node *node,
 	return p;
 }
 
+void dt_resize_property(struct dt_property *prop, size_t len)
+{
+	size_t new_len = sizeof(*prop) + len;
+
+	realloc(prop->prop, new_len);
+}
+
 struct dt_property *dt_add_property_string(struct dt_node *node,
 					   const char *name,
 					   const char *value)
@@ -394,6 +401,16 @@ struct dt_node *dt_next(const struct dt_node *root,
 		prev = prev->parent;
 	} while (prev != root);
 
+	return NULL;
+}
+
+struct dt_property *__dt_find_property(struct dt_node *node, const char *name)
+{
+	struct dt_property *i;
+
+	list_for_each(&node->properties, i, list)
+		if (strcmp(i->name, name) == 0)
+			return i;
 	return NULL;
 }
 

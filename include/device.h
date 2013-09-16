@@ -109,6 +109,8 @@ static inline struct dt_property *dt_add_property_u64(struct dt_node *node,
 
 void dt_del_property(struct dt_node *node, struct dt_property *prop);
 
+void dt_resize_property(struct dt_property *prop, size_t len);
+
 u32 dt_property_get_cell(const struct dt_property *prop, u32 index);
 
 /* First child of this node. */
@@ -162,6 +164,9 @@ const struct dt_property *dt_find_property(const struct dt_node *node,\
 					   const char *name);
 const struct dt_property *dt_require_property(const struct dt_node *node,
 					      const char *name, int wanted_len);
+
+/* non-const variant */
+struct dt_property *__dt_find_property(struct dt_node *node, const char *name);
 
 /* Find a property by name, check if it's the same as val. */
 bool dt_has_node_property(const struct dt_node *node,
