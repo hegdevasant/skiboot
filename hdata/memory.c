@@ -130,6 +130,30 @@ paca:
 	}
 }
 
+static void append_chip_id(struct dt_node *mem, u32 id)
+{
+	struct dt_property *prop;
+	size_t len, i;
+	u32 *p;
+
+	prop = __dt_find_property(mem, "ibm,chip-id");
+	if (!prop)
+		return;
+	len = prop->len >> 2;
+	p = (u32 *)prop->prop;
+
+	/* Check if it exists already */
+	for (i = 0; i < len; i++) {
+		if (be32_to_cpu(p[i]) == id)
+			return;
+	}
+
+	/* Add it to the list */
+	dt_resize_property(prop, (len + 1) << 2);
+	p = (u32 *)prop->prop;
+	p[len] = cpu_to_be32(id);
+}
+
 static bool add_address_range(struct dt_node *root,
 			      const struct HDIF_ms_area_id *id,
 			      const struct HDIF_ms_area_address_range *arange)
@@ -137,6 +161,7 @@ static bool add_address_range(struct dt_node *root,
 	struct dt_node *mem;
 	u64 reg[2];
 	char name[sizeof("memory@") + STR_MAX_CHARS(reg[0])];
+	u32 chip_id;
 
 	printf("  Range: 0x%016llx..0x%016llx on Chip 0x%x mattr: 0x%x\n",
 	       (long long)arange->start, (long long)arange->end,
@@ -146,16 +171,22 @@ static bool add_address_range(struct dt_node *root,
 	reg[0] = cleanup_addr(be64_to_cpu(arange->start));
 	reg[1] = cleanup_addr(be64_to_cpu(arange->end)) - reg[0];
 
+	chip_id = pcid_to_chip_id(be32_to_cpu(arange->chip));
+
 	if (be16_to_cpu(id->flags) & MS_AREA_SHARED) {
 		/* Only enter shared nodes once. */ 
-		if (find_shared(root, be16_to_cpu(id->share_id), reg[0], reg[1]))
+		mem = find_shared(root, be16_to_cpu(id->share_id),
+				  reg[0], reg[1]);
+		if (mem) {
+			append_chip_id(mem, chip_id);
 			return true;
+		}
 	}
 	sprintf(name, "memory@%llx", (long long)reg[0]);
 
 	mem = dt_new(root, name);
 	dt_add_property_string(mem, "device_type", "memory");
-
+	dt_add_property_cells(mem, "ibm,chip-id", chip_id);
 	dt_add_property_u64s(mem, "reg", reg[0], reg[1]);
 	if (be16_to_cpu(id->flags) & MS_AREA_SHARED)
 		dt_add_property_cells(mem, DT_PRIVATE "share-id",
