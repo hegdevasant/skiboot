@@ -466,6 +466,9 @@ void main_cpu_entry(const void *fdt, u32 master_cpu)
 	/* Get ready to receive OCC related messages */
 	occ_init();
 
+	/* Initialize elog access */
+	fsp_elog_init();
+
 	/* Start FSP/HV state controller & perform OPL */
 	fsp_opl();
 

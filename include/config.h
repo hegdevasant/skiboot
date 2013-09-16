@@ -123,8 +123,12 @@
 #define NVRAM_BASE		(SKIBOOT_BASE + 0x01c00000)
 #define NVRAM_MAX_SIZE		0x00100000
 
+/* Error Log Buffer at base + 25M, it is set to be 1M in size */
+#define ELOG_BUFFER_BASE	(SKIBOOT_BASE + 0x01d00000)
+#define ELOG_BUFFER_SIZE	0x00100000
+
 /* Total size of the above area */
-#define SKIBOOT_SIZE		0x01d00000
+#define SKIBOOT_SIZE		0x01e00000
 
 /* We start laying out the CPU stacks from here, indexed by PIR
  * each stack is STACK_SIZE in size (naturally aligned power of

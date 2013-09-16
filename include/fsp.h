@@ -43,6 +43,11 @@
 #define FSP_STATUS_BAD_STATE		0x2e
 #define FSP_STATUS_NOT_SUPPORTED	0x2f
 #define FSP_STATUS_GENERIC_ERROR	0xfe
+#define FSP_STATUS_EOF_ERROR		0x02
+#define FSP_STATUS_DMA_ERROR		0x24
+#define FSP_STATUS_FLASH_BUSY		0x3f
+#define FSP_STATUS_INVALID_SUBID	0x41
+#define FSP_STATUS_LENGTH_ERROR		0x42
 
 /*
  * FSP registers
@@ -273,6 +278,19 @@
 #define FSP_CMD_PANELSTATUS	0x0ce5c00 /* FSP->HV */
 #define FSP_CMD_PANELSTATUS_EX1	0x0ce5c02 /* FSP->HV */
 #define FSP_CMD_PANELSTATUS_EX2	0x0ce5c03 /* FSP->HV */
+#define FSP_CMD_ERRLOG_PHYP_ACK	0x1ce0800 /* HV->FSP */
+#define FSP_RSP_ERRLOG_PHYP_ACK	0x0ce8800 /* FSP->HV */
+#define FSP_CMD_ERRLOG_GET_PLID	0x0ce0900 /* FSP->HV: Get PLID */
+#define FSP_RSP_ERRLOG_GET_PLID	0x0ce8900 /* HV->FSP */
+
+/*
+ * Class 0xD2
+ */
+#define FSP_CMD_CREATE_ERRLOG		0x1d21000 /* HV->FSP */
+#define FSP_RSP_CREATE_ERRLOG		0x0d29000 /* FSP->HV */
+#define FSP_CMD_ERRLOG_NOTIFICATION	0x0d25a00 /* FSP->HV */
+#define FSP_RSP_ERRLOG_NOTIFICATION	0x0d2da00 /* HV->FSP */
+#define FSP_RSP_ELOG_NOTIFICATION_ERROR	0x1d2dafe /* HV->FSP */
 
 /*
  * Class 0xD4
@@ -534,6 +552,9 @@ extern void fsp_nvram_wait_open(void);
 
 /* RTC */
 extern void fsp_rtc_init(void);
+
+/* ELOG */
+extern void fsp_elog_init(void);
 
 /* Surveillance */
 extern void fsp_init_surveillance(void);

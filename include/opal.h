@@ -94,7 +94,12 @@
 #define OPAL_LPC_READ				67
 #define OPAL_LPC_WRITE				68
 #define OPAL_RETURN_CPU				69
-#define OPAL_LAST				69
+#define OPAL_ELOG_READ				70
+#define OPAL_ELOG_WRITE				71
+#define OPAL_ELOG_ACK				72
+#define OPAL_ELOG_RESEND			73
+#define OPAL_ELOG_SIZE				74
+#define OPAL_LAST				74
 
 #ifndef __ASSEMBLY__
 
