@@ -700,9 +700,9 @@ struct sppcia_core_unique {
 	__be32 reserved8;
 	__be32 ccm_node_id;
 	__be32 hw_card_id;
-	__be32 fabric_id;
-	__be32 drawer_id;
-	__be32 mem_interleave_scope;
+	__be32 internal_drawer_node_id;
+	__be32 drawer_book_octant_blade_id;
+	__be32 memory_interleaving_scope;
 	__be32 lco_target;
 	__be32 reserved9;
 } __packed;

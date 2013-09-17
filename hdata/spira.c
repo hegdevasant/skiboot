@@ -178,6 +178,44 @@ static void add_psihb_node(struct dt_node *np)
 	}
 }
 
+static void add_xscom_add_pcia_assoc(struct dt_node *np, uint32_t pcid)
+{
+	const struct HDIF_common_hdr *hdr;
+	u32 size;
+
+
+	/*
+	 * The SPPCRD doesn't contain all the affinity data, we have
+	 * to dig it out of a core. I assume this is so that node
+	 * affinity can be different for groups of cores within the
+	 * chip, but for now we are going to ignore that
+	 */
+	hdr = get_hdif(&spira.ntuples.pcia, SPPCIA_HDIF_SIG);
+	if (!hdr)
+		return;
+
+	for_each_pcia(hdr) {
+		const struct sppcia_core_unique *id;
+
+		id = HDIF_get_idata(hdr, SPPCIA_IDATA_CORE_UNIQUE, &size);
+		if (!id || size < sizeof(*id))
+			continue;
+
+		if (be32_to_cpu(id->proc_chip_id) != pcid)
+			continue;
+
+		dt_add_property_cells(np, "ibm,hw-card-id",
+				      be32_to_cpu(id->hw_card_id));
+		dt_add_property_cells(np, "ibm,hw-module-id",
+				      be32_to_cpu(id->hw_module_id));
+		dt_add_property_cells(np, "ibm,dbob-id",
+				  be32_to_cpu(id->drawer_book_octant_blade_id));
+		dt_add_property_cells(np, "ibm,mem-interleave-scope",
+			          be32_to_cpu(id->memory_interleaving_scope));
+		return;
+	}
+}
+
 static bool add_xscom_sppcrd(uint64_t xscom_base)
 {
 	struct HDIF_common_hdr *hdif;
@@ -233,6 +271,12 @@ static bool add_xscom_sppcrd(uint64_t xscom_base)
 						vpd_sz);
 		}
 
+		/*
+		 * Extract additional associativity information from
+		 * the core data. Pick one core on that chip
+		 */
+		add_xscom_add_pcia_assoc(np, be32_to_cpu(cinfo->proc_chip_id));
+
 		/* Add PSI Host bridge */
 		add_psihb_node(np);
 	}
@@ -249,13 +293,13 @@ static void add_xscom_sppaca(uint64_t xscom_base)
 
 	for_each_ntuple_idx(&spira.ntuples.paca, hdif, i, PACA_HDIF_SIG) {
 		const struct sppaca_cpu_id *id;
-		unsigned int chip_id;
+		unsigned int chip_id, size;
 		int ve;
 
 		/* We only suport old style PACA on P7 ! */
 		assert(proc_gen == proc_gen_p7);
 
-		id = HDIF_get_idata(hdif, SPPACA_IDATA_CPU_ID, NULL);
+		id = HDIF_get_idata(hdif, SPPACA_IDATA_CPU_ID, &size);
 
 		if (!CHECK_SPPTR(id)) {
 			prerror("XSCOM: Bad processor data %d\n", i);
@@ -283,6 +327,20 @@ static void add_xscom_sppaca(uint64_t xscom_base)
 		vpd = HDIF_get_idata(hdif, SPPACA_IDATA_KW_VPD, &vpd_sz);
 		if (CHECK_SPPTR(vpd))
 			dt_add_property(np, "ibm,chip-vpd", vpd, vpd_sz);
+
+		/* Add chip associativity data */
+		dt_add_property_cells(np, "ibm,ccm-node-id",
+				      be32_to_cpu(id->ccm_node_id));
+		if (size > SPIRA_CPU_ID_MIN_SIZE) {
+			dt_add_property_cells(np, "ibm,hw-card-id",
+					      be32_to_cpu(id->hw_card_id));
+			dt_add_property_cells(np, "ibm,hw-module-id",
+					  be32_to_cpu(id->hardware_module_id));
+			dt_add_property_cells(np, "ibm,dbob-id",
+				 be32_to_cpu(id->drawer_book_octant_blade_id));
+			dt_add_property_cells(np, "ibm,mem-interleave-scope",
+				 be32_to_cpu(id->memory_interleaving_scope));
+		}
 
 		/* Add PSI Host bridge */
 		add_psihb_node(np);
