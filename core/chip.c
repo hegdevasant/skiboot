@@ -51,6 +51,7 @@ void init_chips(void)
 		chip = zalloc(sizeof(struct proc_chip));
 		assert(chip);
 		chip->id = id;
+		chip->devnode = xn;
 		chips[id] = chip;
 		chip->dbob_id = dt_prop_get_u32_def(xn, "ibm,dbob-id",
 						    0xffffffff);

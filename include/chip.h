@@ -57,6 +57,8 @@
  */
 #define P8_PIR2GCID(pir) (((pir) >> 7) & 0x3f)
 
+struct dt_node;
+
 /*
  * For each chip in the system, we maintain this structure
  *
@@ -65,6 +67,7 @@
  */
 struct proc_chip {
 	uint32_t	id;		/* HW Chip ID (GCID) */
+	struct dt_node	*devnode;	/* "xscom" chip node */
 
 	/* Those two values are only populated on machines with an FSP */
 	uint32_t	dbob_id;	/* Drawer/Block/Octant/Blade (DBOBID) */
