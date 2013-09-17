@@ -16,6 +16,7 @@
 #include <console.h>
 #include <trace.h>
 #include <timebase.h>
+#include <affinity.h>
 
 /* Pending events to signal via opal_poll_events */
 uint64_t opal_pending_events;
@@ -93,16 +94,6 @@ static void add_opal_firmware_node(struct dt_node *opal)
 	dt_add_property_string(firmware, "compatible", "ibm,opal-firmware");
 	dt_add_property_string(firmware, "name", "firmware");
 	dt_add_property_string(firmware, "git-id", gitid);
-}
-
-static void add_associativity_ref_point(struct dt_node *opal)
-{
-	/* XXX Hardcoding reference point to Processor Chip ID.
-	 * We should consider physical node boundary (CCM Node ID)
-	 * to support multi node system.
-	 */
-	dt_add_property_cells(opal, "ibm,associativity-reference-points",
-			      0x4, 0x4);
 }
 
 void add_opal_nodes(void)
