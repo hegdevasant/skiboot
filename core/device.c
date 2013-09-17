@@ -674,7 +674,7 @@ static u32 __dt_get_chip_id(const struct dt_node *node)
 
 u32 dt_get_chip_id(const struct dt_node *node)
 {
-	u32 id = __dt_get_chip_id(node);\
+	u32 id = __dt_get_chip_id(node);
 	assert(id != 0xffffffff);
 	return id;
 }
