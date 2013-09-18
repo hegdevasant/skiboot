@@ -22,4 +22,11 @@ void *__memalign(size_t boundary, size_t size, const char *location);
 #define realloc(ptr, size) __realloc(ptr, size, __location__)
 #define free(ptr) __free(ptr, __location__)
 #define memalign(boundary, size) __memalign(boundary, size, __location__)
+
+struct cpu_thread;
+void *__local_alloc(struct cpu_thread *cpu, size_t size, size_t align,
+		    const char *location);
+#define local_alloc(cpu, size, align)				\
+	__local_alloc((cpu), (size), (align), __location__)
+
 #endif /* __MEM_REGION_MALLOC_H */

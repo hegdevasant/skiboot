@@ -12,6 +12,8 @@
 #include <device.h>
 #include <cpu.h>
 #include <affinity.h>
+#include <types.h>
+#include <ccan/endian/endian.h>
 
 struct lock mem_region_lock = LOCK_UNLOCKED;
 
@@ -560,6 +562,49 @@ void mem_reserve(const char *name, uint64_t start, uint64_t len)
 	added = add_region(region);
 	assert(added);
 	unlock(&mem_region_lock);
+}
+
+static bool matches_chip_id(const __be32 ids[], size_t num, u32 chip_id)
+{
+	size_t i;
+
+	for (i = 0; i < num; i++)
+		if (be32_to_cpu(ids[i]) == chip_id)
+			return true;
+
+	return false;
+}
+
+void *__local_alloc(struct cpu_thread *cpu, size_t size, size_t align,
+		    const char *location)
+{
+	struct mem_region *region;
+	void *p = NULL;
+
+	lock(&mem_region_lock);
+	list_for_each(&regions, region, list) {
+		const struct dt_property *prop;
+		const __be32 *ids;
+
+		if (region->type != REGION_SKIBOOT_HEAP)
+			continue;
+
+		/* Don't allocate from normal heap. */
+		if (!region->mem_node)
+			continue;
+
+		prop = dt_find_property(region->mem_node, "ibm,chip-id");
+		ids = (const __be32 *)prop->prop;
+		if (!matches_chip_id(ids, prop->len/sizeof(u32), cpu->chip_id))
+			continue;
+
+		p = mem_alloc(region, size, align, location);
+		if (p)
+			break;
+	}
+	unlock(&mem_region_lock);
+
+	return p;
 }
 
 /* Trawl through device tree, create memory regions from nodes. */
