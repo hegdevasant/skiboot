@@ -144,14 +144,14 @@ void trace_add_node(void)
 
 	/* Count CPUs. */
 	for (cpu = first_cpu(), i = 0; cpu; cpu = next_cpu(cpu)) {
-		if (cpu->trace)
+		if (cpu->trace && !cpu->is_secondary)
 			i++;
 	}
 	prop = malloc(sizeof(u64) * 2 * i);
 
 	/* Now fill in start, len */
 	for (cpu = first_cpu(), i = 0; cpu; cpu = next_cpu(cpu)) {
-		if (cpu->trace) {
+		if (cpu->trace && !cpu->is_secondary) {
 			prop[i*2] = cpu_to_fdt64((unsigned long)&cpu->trace->tb);
 			prop[i*2+1] = cpu_to_fdt64(sizeof(cpu->trace->tb) +
 						   tracebuf_extra());
