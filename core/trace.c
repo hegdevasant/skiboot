@@ -156,19 +156,21 @@ void trace_add_node(void)
 	unsigned int i;
 	u64 *prop;
 
-	/* Count CPUs. */
-	for (cpu = first_cpu(), i = 0; cpu; cpu = next_cpu(cpu)) {
+	/* Count primary CPUs. */
+	for (cpu = first_cpu(), i = 1; cpu; cpu = next_cpu(cpu)) {
 		if (cpu->trace && !cpu->is_secondary)
 			i++;
 	}
 	prop = malloc(sizeof(u64) * 2 * i);
 
-	/* Now fill in start, len */
-	for (cpu = first_cpu(), i = 0; cpu; cpu = next_cpu(cpu)) {
+	/* Now fill in start, len, including boot trace buffer. */
+	prop[0] = cpu_to_fdt64((unsigned long)&boot_tracebuf.trace_info.tb);
+	prop[1] = cpu_to_fdt64(sizeof(boot_tracebuf.buf));
+	for (cpu = first_cpu(), i = 1; cpu; cpu = next_cpu(cpu)) {
 		if (cpu->trace && !cpu->is_secondary) {
 			prop[i*2] = cpu_to_fdt64((unsigned long)&cpu->trace->tb);
-			prop[i*2+1] = cpu_to_fdt64(sizeof(cpu->trace->tb) +
-						   tracebuf_extra());
+			prop[i*2+1] = cpu_to_fdt64(sizeof(cpu->trace->tb)
+						   + tracebuf_extra());
 			i++;
 		}
 	}
