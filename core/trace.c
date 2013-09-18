@@ -16,11 +16,13 @@
 
 #define MAX_SIZE sizeof(union trace)
 
+/* Smaller trace buffer for early booting */
+#define BOOT_TBUF_SZ 65536
 static struct {
 	struct trace_info trace_info;
-	char buf[TBUF_SZ + MAX_SIZE];
+	char buf[BOOT_TBUF_SZ + MAX_SIZE];
 } boot_tracebuf = { { LOCK_UNLOCKED, 
-		      { .mask = TBUF_SZ - 1, .max_size = MAX_SIZE } },
+		      { .mask = BOOT_TBUF_SZ - 1, .max_size = MAX_SIZE } },
 		    { 0 } };
 
 void init_boot_tracebuf(struct cpu_thread *boot_cpu)
