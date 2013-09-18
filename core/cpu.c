@@ -15,6 +15,7 @@
 #include <opal.h>
 #include <stack.h>
 #include <trace.h>
+#include <affinity.h>
 #include <ccan/str/str.h>
 #include <ccan/container_of/container_of.h>
 
@@ -387,6 +388,9 @@ void init_all_cpus(void)
 		t->primary = t;
 		t->node = cpu;
 		t->chip_id = chip_id;
+
+		/* Add associativity properties */
+		add_core_associativity(t);
 
 		/* Adjust max PIR */
 		if (new_max_pir < (pir + cpu_thread_count - 1))

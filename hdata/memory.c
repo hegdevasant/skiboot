@@ -72,64 +72,6 @@ static struct dt_node *find_shared(struct dt_node *root, u16 id, u64 start, u64 
 	return i;
 }
 
-static void add_mem_associativity(struct dt_node *mem, uint32_t phy_chip)
-{
-	const struct HDIF_common_hdr *hdr;
-	u32 size, chip_id;
-
-	hdr = get_hdif(&spira.ntuples.pcia, SPPCIA_HDIF_SIG);
-	if (!hdr)
-		goto paca;
-
-	for_each_pcia(hdr) {
-		const struct sppcia_core_unique *id;
-
-		id = HDIF_get_idata(hdr, SPPCIA_IDATA_CORE_UNIQUE, &size);
-		if (!id || size < sizeof(*id))
-			continue;
-
-		if (be32_to_cpu(id->proc_chip_id) != phy_chip)
-			continue;
-
-		chip_id = pcid_to_chip_id(be32_to_cpu(id->proc_chip_id));
-
-		dt_add_property_cells(mem, "ibm,associativity",
-				      be32_to_cpu(0x04),
-				      be32_to_cpu(id->ccm_node_id),
-				      be32_to_cpu(id->hw_card_id),
-				      be32_to_cpu(id->hw_module_id),
-				      chip_id);
-		return;
-	}
-	return;
-
-paca:
-	hdr = get_hdif(&spira.ntuples.paca, PACA_HDIF_SIG);
-	if (!hdr)
-		return;
-
-	for_each_paca(hdr) {
-		const struct sppaca_cpu_id *id;
-
-		id = HDIF_get_idata(hdr, SPPACA_IDATA_CPU_ID, &size);
-		if (!id || size < SPIRA_CPU_ID_MIN_SIZE)
-			continue;
-
-		if (be32_to_cpu(id->processor_chip_id) != phy_chip)
-			continue;
-
-		chip_id = pcid_to_chip_id(be32_to_cpu(id->processor_chip_id));
-
-		dt_add_property_cells(mem, "ibm,associativity",
-				      be32_to_cpu(0x04),
-				      be32_to_cpu(id->ccm_node_id),
-				      be32_to_cpu(id->hw_card_id),
-				      be32_to_cpu(id->hardware_module_id),
-				      chip_id);
-		return;
-	}
-}
-
 static void append_chip_id(struct dt_node *mem, u32 id)
 {
 	struct dt_property *prop;
@@ -191,9 +133,6 @@ static bool add_address_range(struct dt_node *root,
 	if (be16_to_cpu(id->flags) & MS_AREA_SHARED)
 		dt_add_property_cells(mem, DT_PRIVATE "share-id",
 				      be16_to_cpu(id->share_id));
-
-	/* Add memory associativity */
-	add_mem_associativity(mem, be32_to_cpu(arange->chip));
 
 	return true;
 }

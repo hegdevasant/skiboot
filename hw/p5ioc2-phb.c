@@ -9,6 +9,7 @@
 #include <p5ioc2-regs.h>
 #include <io.h>
 #include <timebase.h>
+#include <affinity.h>
 #include <pci.h>
 #include <pci-cfg.h>
 #include <interrupts.h>
@@ -1037,6 +1038,9 @@ static void p5ioc2_pcie_add_node(struct p5ioc2_phb *p)
 			      0x02000000, 0x00000000, MM_PCI_START,
 			      hi32(mmb), lo32(mmb), 0, MM_PCI_SIZE);
 
+	/* Add associativity properties */
+	add_chip_dev_associativity(np);
+
 	/* The interrupt maps will be generated in the RC node by the
 	 * PCI code based on the content of this structure:
 	 */
@@ -1090,6 +1094,9 @@ static void p5ioc2_pcix_add_node(struct p5ioc2_phb *p)
 			      /* M32 space */
 			      0x02000000, 0x00000000, MM_PCI_START,
 			      hi32(mmb), lo32(mmb), 0, MM_PCI_SIZE);
+
+	/* Add associativity properties */
+	add_chip_dev_associativity(np);
 
 	/* The interrupt maps will be generated in the RC node by the
 	 * PCI code based on the content of this structure:

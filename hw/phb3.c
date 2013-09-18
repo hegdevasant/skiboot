@@ -27,6 +27,7 @@
 #include <ccan/str/str.h>
 #include <ccan/array_size/array_size.h>
 #include <xscom.h>
+#include <affinity.h>
 #include <phb3.h>
 #include <phb3-regs.h>
 
@@ -2917,6 +2918,7 @@ static void phb3_probe_pbcq(struct dt_node *pbcq)
 	dt_add_property_cells(np, "ibm,chip-id", gcid);
 	if (dt_has_node_property(pbcq, "ibm,use-ab-detect", NULL))
 		dt_add_property(np, "ibm,use-ab-detect", NULL, 0);
+	add_chip_dev_associativity(np);
 }
 
 void probe_phb3(void)

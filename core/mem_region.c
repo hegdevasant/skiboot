@@ -11,6 +11,7 @@
 #include <lock.h>
 #include <device.h>
 #include <cpu.h>
+#include <affinity.h>
 
 struct lock mem_region_lock = LOCK_UNLOCKED;
 
@@ -567,6 +568,19 @@ void mem_region_init(void)
 	const struct dt_property *names, *ranges;
 	struct mem_region *region;
 	struct dt_node *i;
+
+	/*
+	 * Add associativity properties outside of the lock
+	 * to avoid recursive locking caused by allocations
+	 * done by add_chip_dev_associativity()
+	 */
+	dt_for_each_node(dt_root, i) {
+		if (!dt_has_node_property(i, "device_type", "memory"))
+			continue;
+
+		/* Add associativity properties */
+		add_chip_dev_associativity(i);
+	}
 
 	lock(&mem_region_lock);
 

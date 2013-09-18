@@ -12,8 +12,12 @@
 #ifndef __AFFINITY_H
 #define __AFFINITY_H
 
-#include <device.h>
+struct dt_node;
+struct cpu_thread;
 
 extern void add_associativity_ref_point(struct dt_node *opal);
+
+extern void add_chip_dev_associativity(struct dt_node *dev);
+extern void add_core_associativity(struct cpu_thread *cpu);
 
 #endif /* __AFFINITY_H */

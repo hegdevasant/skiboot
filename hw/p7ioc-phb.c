@@ -9,6 +9,7 @@
 #include <p7ioc-regs.h>
 #include <io.h>
 #include <timebase.h>
+#include <affinity.h>
 #include <pci.h>
 #include <pci-cfg.h>
 #include <interrupts.h>
@@ -2318,6 +2319,9 @@ static void p7ioc_pcie_add_node(struct p7ioc_phb *p)
 	tkill = reg[0] + PHB_TCE_KILL;
 	dt_add_property_cells(np, "ibm,opal-tce-kill",
 			      hi32(tkill), lo32(tkill));
+
+	/* Add associativity properties */
+	add_chip_dev_associativity(np);
 
 	/* The interrupt maps will be generated in the RC node by the
 	 * PCI code based on the content of this structure:

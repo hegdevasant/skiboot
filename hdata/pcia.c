@@ -165,14 +165,6 @@ static struct dt_node *add_core_node(struct dt_node *cpus,
 
 	dt_add_property(cpu, "ibm,ppc-interrupt-server#s", iserv, 4 * threads);
 
-	dt_add_property_cells(cpu, "ibm,associativity",
-			      be32_to_cpu(0x05),
-			      be32_to_cpu(id->ccm_node_id),
-			      be32_to_cpu(id->hw_card_id),
-			      be32_to_cpu(id->hw_module_id),
-			      chip_id,
-			      be32_to_cpu(id->hw_proc_id));
-
 	/* Add the ICP node for this CPU */
 	add_icp(pcia, threads, icp_compat);
 
