@@ -40,16 +40,6 @@
 #include <chip.h>
 #include <cpu.h>
 
-void add_associativity_ref_point(struct dt_node *opal)
-{
-	/* XXX Hardcoding reference point to be the chip ID.
-	 * We should consider physical node boundary (CCM Node ID)
-	 * to support multi node system.
-	 */
-	dt_add_property_cells(opal, "ibm,associativity-reference-points",
-			      0x4, 0x4);
-}
-
 static uint32_t get_chip_node_id(struct proc_chip *chip)
 {
 	/* If the xscom node has an ibm,ccm-node-id property, use it */
@@ -61,6 +51,35 @@ static uint32_t get_chip_node_id(struct proc_chip *chip)
 	 * the node on both P7 and P8
 	 */
 	return chip->id >> 3;
+}
+
+void add_associativity_ref_point(struct dt_node *opal)
+{
+	/*
+	 * Note about our use of reference points:
+	 *
+	 * Linux always uses the first reference point as it's NID, current
+	 * kernels do not support multi-level NUMA.
+	 *
+	 * So for now, we just instruct Linux to use "4" which is the chip
+	 * ID as the node ID always. We use two identical entries here instead
+	 * of jut one, which is allowed by PAPR and mimmics pHyp, which I
+	 * assume helps old/broken tools who might not cope with single
+	 * entry properties.
+	 *
+	 * If we wish to do so, we *could* detect multi-node machines and
+	 * in that case change the property to "1,4" instead of "4,4"
+	 * essentially instructing Linux to use the HW node ID instead
+	 * of chip ID.
+	 *
+	 * I am not certain however that this is a good idea unless the
+	 * memory is interleaved accross chips on the node (can P8 do
+	 * that ? P7 could ...).
+	 *
+	 * So this might need to be revisited.
+	 */
+	dt_add_property_cells(opal, "ibm,associativity-reference-points",
+			      0x4, 0x4);
 }
 
 void add_chip_dev_associativity(struct dt_node *dev)
