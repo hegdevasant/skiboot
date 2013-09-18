@@ -19,6 +19,8 @@ struct cpu_thread;
 void init_boot_tracebuf(struct cpu_thread *boot_cpu);
 
 struct trace_info {
+	/* Lock for writers. */
+	struct lock lock;
 	/* Exposed to kernel. */
 	struct tracebuf tb;
 };

@@ -19,7 +19,8 @@
 static struct {
 	struct trace_info trace_info;
 	char buf[TBUF_SZ + MAX_SIZE];
-} boot_tracebuf = { { {.mask = TBUF_SZ - 1, .max_size = MAX_SIZE } },
+} boot_tracebuf = { { LOCK_UNLOCKED, 
+		      { .mask = TBUF_SZ - 1, .max_size = MAX_SIZE } },
 		    { 0 } };
 
 void init_boot_tracebuf(struct cpu_thread *boot_cpu)
@@ -38,6 +39,7 @@ struct trace_info *trace_new_info(void)
 	struct trace_info *ti;
 
 	ti = zalloc(sizeof(*ti) + tracebuf_extra());
+	init_lock(&ti->lock);
 	ti->tb.mask = TBUF_SZ - 1;
 	ti->tb.max_size = MAX_SIZE;
 	return ti;
@@ -108,6 +110,8 @@ void trace_add(union trace *trace)
 	trace->hdr.timestamp = mftb();
 	trace->hdr.cpu = this_cpu()->server_no;
 
+	lock(&ti->lock);
+
 	/* Throw away old entries before we overwrite them. */
 	while (ti->tb.start + TBUF_SZ < ti->tb.end + trace->hdr.len_div_8 * 8) {
 		struct trace_hdr *hdr;
@@ -128,6 +132,7 @@ void trace_add(union trace *trace)
 		lwsync(); /* write barrier: write entry before exposing */
 		ti->tb.end += trace->hdr.len_div_8 * 8;
 	}
+	unlock(&ti->lock);
 }
 
 void trace_add_node(void)
