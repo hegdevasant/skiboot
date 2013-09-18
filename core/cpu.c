@@ -354,7 +354,6 @@ void init_all_cpus(void)
 		enum cpu_thread_state state;
 		const struct dt_property *p;
 		struct cpu_thread *t, *pt;
-		struct trace_info *ti;
 
 		/* Skip cache nodes */
 		if (strcmp(dt_prop_get(cpu, "device_type"), "cpu"))
@@ -383,9 +382,9 @@ void init_all_cpus(void)
 		t = pt = &cpu_stacks[pir].cpu;
 		if (t != boot_cpu) {
 			init_cpu_thread(t, state, pir);
-			t->trace = trace_new_info();
+			/* Each cpu gets its own later in init_trace_buffers */
+			t->trace = boot_cpu->trace;
 		}
-		ti = t->trace;
 		t->server_no = server_no;
 		t->primary = t;
 		t->node = cpu;
@@ -406,7 +405,7 @@ void init_all_cpus(void)
 			printf("CPU:   secondary thread %d found\n", thread);
 			t = &cpu_stacks[pir + thread].cpu;
 			init_cpu_thread(t, state, pir + thread);
-			t->trace = ti;
+			t->trace = boot_cpu->trace;
 			t->server_no = ((u32 *)p->prop)[thread];
 			t->is_secondary = true;
 			t->primary = pt;

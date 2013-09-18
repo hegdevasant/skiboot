@@ -25,7 +25,8 @@ struct trace_info {
 	struct tracebuf tb;
 };
 
-struct trace_info *trace_new_info(void);
+/* Allocate trace buffers once we know memory topology */
+void init_trace_buffers(void);
 
 /* This will fill in timestamp and cpu; you must do type and len. */
 void trace_add(union trace *trace);

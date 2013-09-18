@@ -34,17 +34,6 @@ static size_t tracebuf_extra(void)
 	return TBUF_SZ + MAX_SIZE;
 }
 
-struct trace_info *trace_new_info(void)
-{
-	struct trace_info *ti;
-
-	ti = zalloc(sizeof(*ti) + tracebuf_extra());
-	init_lock(&ti->lock);
-	ti->tb.mask = TBUF_SZ - 1;
-	ti->tb.max_size = MAX_SIZE;
-	return ti;
-}
-
 /* To avoid bloating each entry, repeats are actually specific entries.
  * tb->last points to the last (non-repeat) entry. */
 static bool handle_repeat(struct tracebuf *tb, const union trace *trace)
@@ -133,6 +122,31 @@ void trace_add(union trace *trace)
 		ti->tb.end += trace->hdr.len_div_8 * 8;
 	}
 	unlock(&ti->lock);
+}
+
+/* Allocate trace buffers once we know memory topology */
+void init_trace_buffers(void)
+{
+	struct cpu_thread *t;
+
+	/* Allocate a trace buffer for each primary cpu. */
+	for_each_cpu(t) {
+		if (t->is_secondary)
+			continue;
+		
+		t->trace = local_alloc(t, sizeof(*t->trace) + tracebuf_extra(),
+				       __alignof__(*t->trace));
+		init_lock(&t->trace->lock);
+		t->trace->tb.mask = TBUF_SZ - 1;
+		t->trace->tb.max_size = MAX_SIZE;
+	}
+
+	/* And copy those to the secondaries. */
+	for_each_cpu(t) {
+		if (!t->is_secondary)
+			continue;
+		t->trace = t->primary->trace;
+	}
 }
 
 void trace_add_node(void)

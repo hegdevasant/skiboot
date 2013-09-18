@@ -434,6 +434,9 @@ void main_cpu_entry(const void *fdt, u32 master_cpu)
 	/* Mark out memory areas. */
 	mem_region_init();
 
+	/* Separate out trace buffers now. */
+	init_trace_buffers();
+
 	/* Initialize XSCOM */
 	xscom_init();
 
