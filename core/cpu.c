@@ -382,7 +382,7 @@ void init_all_cpus(void)
 		t = pt = &cpu_stacks[pir].cpu;
 		if (t != boot_cpu) {
 			init_cpu_thread(t, state, pir);
-			t->tracebuf = trace_newbuf();
+			t->trace = trace_new_info();
 		}
 		t->server_no = server_no;
 		t->primary = t;
@@ -404,7 +404,7 @@ void init_all_cpus(void)
 			printf("CPU:   secondary thread %d found\n", thread);
 			t = &cpu_stacks[pir + thread].cpu;
 			init_cpu_thread(t, state, pir + thread);
-			t->tracebuf = trace_newbuf();
+			t->trace = trace_new_info();
 			t->server_no = ((u32 *)p->prop)[thread];
 			t->is_secondary = true;
 			t->primary = pt;

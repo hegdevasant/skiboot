@@ -17,29 +17,30 @@
 #define MAX_SIZE sizeof(union trace)
 
 static struct {
-	struct tracebuf tracebuf;
+	struct trace_info trace_info;
 	char buf[TBUF_SZ + MAX_SIZE];
-} boot_tracebuf = { { .mask = TBUF_SZ - 1, .max_size = MAX_SIZE }, { 0 } };
+} boot_tracebuf = { { {.mask = TBUF_SZ - 1, .max_size = MAX_SIZE } },
+		    { 0 } };
 
 void init_boot_tracebuf(struct cpu_thread *boot_cpu)
 {
-	boot_cpu->tracebuf = &boot_tracebuf.tracebuf;
+	boot_cpu->trace = &boot_tracebuf.trace_info;
 }
 
-static size_t tracebuf_size(void)
+static size_t tracebuf_extra(void)
 {
 	/* We make room for the largest possible record */
-	return sizeof(struct tracebuf) + TBUF_SZ + MAX_SIZE;
+	return TBUF_SZ + MAX_SIZE;
 }
 
-struct tracebuf *trace_newbuf(void)
+struct trace_info *trace_new_info(void)
 {
-	struct tracebuf *tb;
+	struct trace_info *ti;
 
-	tb = zalloc(tracebuf_size());
-	tb->mask = TBUF_SZ - 1;
-	tb->max_size = MAX_SIZE;
-	return tb;
+	ti = zalloc(sizeof(*ti) + tracebuf_extra());
+	ti->tb.mask = TBUF_SZ - 1;
+	ti->tb.max_size = MAX_SIZE;
+	return ti;
 }
 
 /* To avoid bloating each entry, repeats are actually specific entries.
@@ -97,7 +98,7 @@ static bool handle_repeat(struct tracebuf *tb, const union trace *trace)
 
 void trace_add(union trace *trace)
 {
-	struct tracebuf *tb = this_cpu()->tracebuf;
+	struct trace_info *ti = this_cpu()->trace;
 
 	assert(trace->hdr.len_div_8 * 8 >= sizeof(trace->hdr));
 	assert(trace->hdr.len_div_8 * 8 <= sizeof(*trace));
@@ -108,24 +109,24 @@ void trace_add(union trace *trace)
 	trace->hdr.cpu = this_cpu()->server_no;
 
 	/* Throw away old entries before we overwrite them. */
-	while (tb->start + TBUF_SZ < tb->end + trace->hdr.len_div_8 * 8) {
+	while (ti->tb.start + TBUF_SZ < ti->tb.end + trace->hdr.len_div_8 * 8) {
 		struct trace_hdr *hdr;
 
-		hdr = (void *)tb->buf + (tb->start % TBUF_SZ);
-		tb->start += hdr->len_div_8 * 8;
+		hdr = (void *)ti->tb.buf + (ti->tb.start % TBUF_SZ);
+		ti->tb.start += hdr->len_div_8 * 8;
 	}
 
 	/* Must update ->start before we rewrite new entries. */
 	lwsync(); /* write barrier */
 
 	/* Check for duplicates... */
-	if (!handle_repeat(tb, trace)) {
-		/* This may go off end, and that's why tb->buf is oversize. */
-		memcpy(tb->buf + (tb->end % TBUF_SZ), trace,
+	if (!handle_repeat(&ti->tb, trace)) {
+		/* This may go off end, and that's why ti->tb.buf is oversize. */
+		memcpy(ti->tb.buf + (ti->tb.end % TBUF_SZ), trace,
 		       trace->hdr.len_div_8 * 8);
-		tb->last = tb->end;
+		ti->tb.last = ti->tb.end;
 		lwsync(); /* write barrier: write entry before exposing */
-		tb->end += trace->hdr.len_div_8 * 8;
+		ti->tb.end += trace->hdr.len_div_8 * 8;
 	}
 }
 
@@ -138,16 +139,17 @@ void trace_add_node(void)
 
 	/* Count CPUs. */
 	for (cpu = first_cpu(), i = 0; cpu; cpu = next_cpu(cpu)) {
-		if (cpu->tracebuf)
+		if (cpu->trace)
 			i++;
 	}
 	prop = malloc(sizeof(u64) * 2 * i);
 
 	/* Now fill in start, len */
 	for (cpu = first_cpu(), i = 0; cpu; cpu = next_cpu(cpu)) {
-		if (cpu->tracebuf) {
-			prop[i*2] = cpu_to_fdt64((unsigned long)cpu->tracebuf);
-			prop[i*2+1] = cpu_to_fdt64(tracebuf_size());
+		if (cpu->trace) {
+			prop[i*2] = cpu_to_fdt64((unsigned long)&cpu->trace->tb);
+			prop[i*2+1] = cpu_to_fdt64(sizeof(cpu->trace->tb) +
+						   tracebuf_extra());
 			i++;
 		}
 	}

@@ -18,7 +18,12 @@ struct cpu_thread;
 /* Here's one we prepared earlier. */
 void init_boot_tracebuf(struct cpu_thread *boot_cpu);
 
-struct tracebuf *trace_newbuf(void);
+struct trace_info {
+	/* Exposed to kernel. */
+	struct tracebuf tb;
+};
+
+struct trace_info *trace_new_info(void);
 
 /* This will fill in timestamp and cpu; you must do type and len. */
 void trace_add(union trace *trace);
