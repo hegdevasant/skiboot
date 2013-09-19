@@ -47,8 +47,6 @@
 #include <errno.h>
 #include <psi.h>
 
-#define DBG(fmt...)     do { } while (0)
-
 /*
  * Maximum number of entries that are pre-allocated
  * to keep track of pending elogs to be fetched.
@@ -107,12 +105,9 @@ static void fsp_elog_ack_complete(struct fsp_msg *msg)
 	if (!msg->resp)
 		return;
 	val = (msg->resp->word1 >> 8) & 0xff;
-	if (val == 0)
-		DBG("Acknowledgment sent succesully\n");
-	else
-		prerror("ELOG Received Invalid data\n");
+	if (val != 0)
+		prerror("ELOG: Acknowledgment error\n");
 	fsp_freemsg(msg);
-	return;
 }
 
 /* send Error Log PHYP Acknowledgment to FSP with entry ID */
@@ -123,13 +118,13 @@ static int64_t fsp_send_elog_ack(uint32_t log_id)
 
 	ack_msg = fsp_mkmsg(FSP_CMD_ERRLOG_PHYP_ACK, 1, log_id);
 	if (!ack_msg) {
-		prerror("ELOG: failed to allocate ack message\n");
+		prerror("ELOG: Failed to allocate ack message\n");
 		return OPAL_INTERNAL_ERROR;
 	}
 	if (fsp_queue_msg(ack_msg, fsp_elog_ack_complete)) {
 		fsp_freemsg(ack_msg);
 		ack_msg = NULL;
-		prerror("FSP: Error queueing elog update\n");
+		prerror("ELOG: Error queueing elog ack complete\n");
 		return OPAL_INTERNAL_ERROR;
 	}
 	return OPAL_SUCCESS;
@@ -139,20 +134,32 @@ static int64_t fsp_send_elog_ack(uint32_t log_id)
 static void fsp_elog_check_and_fetch_head(void)
 {
 	lock(&elog_lock);
-	if (elog_head_state != ELOG_STATE_NONE) {
-		unlock(&elog_lock);
-		return;
-	}
-	/* Sanity Check */
-	if (list_empty(&elog_pending)) {
+
+	if (elog_head_state != ELOG_STATE_NONE || list_empty(&elog_pending)) {
 		unlock(&elog_lock);
 		return;
 	}
 
 	elog_read_retries = 0;
-	/* read first entry from the list */
+
+	/* Start fetching first entry from the pending list */
 	fsp_elog_queue_fetch();
+
 	unlock(&elog_lock);
+}
+
+/* this function should be called with the lock held */
+static void fsp_elog_set_head_state(enum elog_head_state state)
+{
+	enum elog_head_state old_state = elog_head_state;
+
+	elog_head_state = state;
+
+	if (state == ELOG_STATE_FETCHED && old_state != ELOG_STATE_FETCHED)
+		opal_update_pending_evt(OPAL_EVENT_ERROR_LOG_AVAIL,
+					OPAL_EVENT_ERROR_LOG_AVAIL);
+	if (state != ELOG_STATE_FETCHED && old_state == ELOG_STATE_FETCHED)
+		opal_update_pending_evt(OPAL_EVENT_ERROR_LOG_AVAIL, 0);
 }
 
 /*
@@ -171,17 +178,7 @@ void fsp_elog_fetch_failure(void)
 	list_del(&log_data->link);
 	list_add(&elog_free, &log_data->link);
 	prerror("ELOG: received invalid data: %x\n", log_data->log_id);
-	elog_head_state = ELOG_STATE_NONE;
-}
-
-/* this function should be called with the lock held */
-static void fsp_elog_set_head_state(void)
-{
-	elog_head_state = ELOG_STATE_FETCHED;
-
-	/*Update new log event to linux*/
-	opal_update_pending_evt(OPAL_EVENT_ERROR_LOG_AVAIL,
-				OPAL_EVENT_ERROR_LOG_AVAIL);
+	fsp_elog_set_head_state(ELOG_STATE_NONE);
 }
 
 /* Read response value from FSP for fetch sp data mbox command */
@@ -196,7 +193,7 @@ static void fsp_elog_read_complete(struct fsp_msg *read_msg)
 
 	switch (val) {
 	case FSP_STATUS_SUCCESS:
-		fsp_elog_set_head_state();
+		fsp_elog_set_head_state(ELOG_STATE_FETCHED);
 		break;
 
 	case FSP_STATUS_DMA_ERROR:
@@ -217,7 +214,7 @@ static void fsp_elog_read_complete(struct fsp_msg *read_msg)
 		fsp_elog_fetch_failure();
 	}
 	if (elog_head_state == ELOG_STATE_REJECTED)
-		elog_head_state = ELOG_STATE_NONE;
+		fsp_elog_set_head_state(ELOG_STATE_NONE);
 	unlock(&elog_lock);
 
 	/* Check if a new log needs fetching */
@@ -233,7 +230,7 @@ static void fsp_elog_queue_fetch(void)
 	struct fsp_log_entry *entry;
 
 	entry = list_top(&elog_pending, struct fsp_log_entry, link);
-	elog_head_state = ELOG_STATE_FETCHING;
+	fsp_elog_set_head_state(ELOG_STATE_FETCHING);
 	elog_head_id =  entry->log_id;
 	elog_head_size = entry->log_size;
 
@@ -242,14 +239,14 @@ static void fsp_elog_queue_fetch(void)
 			0, PSI_DMA_ERRLOG_BUF, elog_head_size);
 	if (!elog_msg) {
 		prerror("ELOG: failed to allocate read message\n");
-		elog_head_state = ELOG_STATE_NONE;
+		fsp_elog_set_head_state(ELOG_STATE_NONE);
 		return;
 	}
 	rc = fsp_queue_msg(elog_msg, fsp_elog_read_complete);
 	if (rc) {
 		fsp_freemsg(elog_msg);
 		prerror("ELOG: failed to queue read message: %d\n", rc);
-		elog_head_state = ELOG_STATE_NONE;
+		fsp_elog_set_head_state(ELOG_STATE_NONE);
 	}
 	return;
 }
@@ -277,7 +274,7 @@ static int64_t fsp_opal_elog_info(uint64_t *opla_elog_id,
 
 /* opal interface for powrnv to read log from sapphire */
 static int64_t fsp_opal_elog_read(uint64_t *buffer, size_t opal_elog_size,
-				uint64_t opla_elog_id)
+				  uint64_t opla_elog_id)
 {
 	struct fsp_log_entry *log_data;
 
@@ -293,12 +290,13 @@ static int64_t fsp_opal_elog_read(uint64_t *buffer, size_t opal_elog_size,
 
 	log_data = list_top(&elog_pending, struct fsp_log_entry, link);
 
-	/*check log ID and log size are same and then read log from buffer */
+	/* Check log ID and log size are same and then read log from buffer */
 	if ((opla_elog_id != log_data->log_id) &&
 				(opal_elog_size != log_data->log_size))
 		return OPAL_PARAMETER;
 
 	memcpy((void *)buffer, elog_buffer, opal_elog_size);
+
 	/*
 	 * once log is read from linux move record from pending
 	 * to processed list and delete record from pending list
@@ -306,13 +304,9 @@ static int64_t fsp_opal_elog_read(uint64_t *buffer, size_t opal_elog_size,
 	 */
 	list_del(&log_data->link);
 	list_add(&elog_processed, &log_data->link);
-	elog_head_state = ELOG_STATE_NONE;
+	fsp_elog_set_head_state(ELOG_STATE_NONE);
 	unlock(&elog_lock);
-	/*
-	 * update log available event,here there is no need for a
-	 * lock as opal interface takes a lock while updating an event.
-	 */
-	opal_update_pending_evt(OPAL_EVENT_ERROR_LOG_AVAIL, 0);
+
 
 	/* read error log from FSP */
 	fsp_elog_check_and_fetch_head();
@@ -324,9 +318,9 @@ static int64_t fsp_opal_elog_read(uint64_t *buffer, size_t opal_elog_size,
 static void elog_reject_head(void)
 {
 	if (elog_head_state == ELOG_STATE_FETCHING)
-		elog_head_state =  ELOG_STATE_REJECTED;
+		fsp_elog_set_head_state(ELOG_STATE_REJECTED);
 	if (elog_head_state == ELOG_STATE_FETCHED)
-		elog_head_state =  ELOG_STATE_NONE;
+		fsp_elog_set_head_state(ELOG_STATE_NONE);
 }
 
 /* opal Interface for powernv to send ack to fsp with log ID */
@@ -342,11 +336,11 @@ static int64_t fsp_opal_elog_ack(uint64_t ack_id)
 		return rc;
 	}
 	lock(&elog_lock);
+	if (ack_id == elog_head_id)
+		elog_reject_head();
 	list_for_each_safe(&elog_pending, record, next_record, link) {
 		if (record->log_id != ack_id)
 			continue;
-		if (ack_id == elog_head_id)
-			elog_reject_head();
 		list_del(&record->link);
 		list_add(&elog_free, &record->link);
 	}
@@ -371,12 +365,6 @@ static void fsp_opal_resend_pending_logs(void)
 
 	lock(&elog_lock);
 
-	/* reject fetching head of the pending list log */
-	if (!list_empty(&elog_processed) && !list_empty(&elog_pending)) {
-		entry = list_top(&elog_pending, struct fsp_log_entry, link);
-		if (entry->log_id == elog_head_id)
-			elog_reject_head();
-	}
 	/*
 	 * If processed list is not empty add all record from
 	 * processed list to pending list at head of the list
@@ -386,9 +374,20 @@ static void fsp_opal_resend_pending_logs(void)
 		entry = list_pop(&elog_processed, struct fsp_log_entry, link);
 		list_add(&elog_pending, &entry->link);
 	}
+
+	/*
+	 * If the current fetched or fetching log doesn't match our
+	 * new pending list head, then reject it
+	 */
+	if (!list_empty(&elog_pending)) {
+		entry = list_top(&elog_pending, struct fsp_log_entry, link);
+		if (entry->log_id != elog_head_id)
+			elog_reject_head();
+	}
+
 	unlock(&elog_lock);
 
-	/* read error log from FSP */
+	/* Read error log from FSP if needed */
 	fsp_elog_check_and_fetch_head();
 }
 
@@ -397,36 +396,43 @@ static bool fsp_elog_msg(uint32_t cmd_sub_mod, struct fsp_msg *msg)
 {
 	int rc = 0;
 	struct fsp_log_entry  *record;
+	uint32_t log_id;
+	uint32_t log_size;
+
 
 	if (cmd_sub_mod != FSP_CMD_ERRLOG_NOTIFICATION)
 		return false;
 
+	log_id = msg->data.words[0];
+	log_size = msg->data.words[1];
+
+	printf("ELOG: Notified of log 0x%08x (size: %d)\n",
+	       log_id, log_size);
+
 	/* take a lock until we take out the node from elog_free */
 	lock(&elog_lock);
 	if (!list_empty(&elog_free)) {
-
+		/* Create a new entry in the pending list */
 		record = list_pop(&elog_free, struct fsp_log_entry, link);
 		list_del(&record->link);
-
-		/* Read entry ID from FSP message */
-		record->log_id = msg->data.words[0];
-
-		/* Read Length of Log ID */
-		record->log_size = msg->data.words[1];
-
+		record->log_id = log_id;
+		record->log_size = log_size;
 		list_add_tail(&elog_pending, &record->link);
 		unlock(&elog_lock);
 
 		/* Send response back to FSP for a new elog notify message */
 		rc = fsp_queue_msg(fsp_mkmsg(FSP_RSP_ERRLOG_NOTIFICATION,
-					1, record->log_id), fsp_freemsg);
+					1, log_id), fsp_freemsg);
 		if (rc)
-			prerror("ELOG: failed to queue read message: %d\n", rc);
+			prerror("ELOG: Failed to queue errlog notification"
+				" response: %d\n", rc);
 
 		/* read error log from FSP */
 		fsp_elog_check_and_fetch_head();
 
 	} else {
+		printf("ELOG: Log entry 0x%08x discarded\n", log_id);
+
 		/* unlock if elog_free is empty */
 		unlock(&elog_lock);
 		/*
@@ -435,9 +441,10 @@ static bool fsp_elog_msg(uint32_t cmd_sub_mod, struct fsp_msg *msg)
 		 * empty we can read the log again.
 		 */
 		rc = fsp_queue_msg(fsp_mkmsg(FSP_CMD_ERRLOG_PHYP_ACK | 0x01,
-				1, msg->data.words[0]), fsp_freemsg);
+				1, log_id), fsp_freemsg);
 		if (rc)
-			prerror("ELOG: failed to queue read message: %d\n", rc);
+			prerror("ELOG: Failed to queue errlog notification"
+				" response: %d\n", rc);
 	}
 
 	return true;
