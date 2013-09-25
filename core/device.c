@@ -273,11 +273,15 @@ struct dt_property *dt_add_property(struct dt_node *node,
 	return p;
 }
 
-void dt_resize_property(struct dt_property *prop, size_t len)
+void dt_resize_property(struct dt_property **prop, size_t len)
 {
-	size_t new_len = sizeof(*prop) + len;
+	size_t new_len = sizeof(**prop) + len;
 
-	realloc(prop->prop, new_len);
+	*prop = realloc(*prop, new_len);
+
+	/* Fix up linked lists in case we moved. (note: not an empty list). */
+	(*prop)->list.next->prev = &(*prop)->list;
+	(*prop)->list.prev->next = &(*prop)->list;
 }
 
 struct dt_property *dt_add_property_string(struct dt_node *node,

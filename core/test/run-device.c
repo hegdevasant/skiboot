@@ -20,12 +20,14 @@ static inline bool fake_is_rodata(const void *p)
 #define zalloc(bytes) calloc((bytes), 1)
 
 #include "../device.c"
+#include "../../ccan/list/list.c" /* For list_check */
 #include <assert.h>
 
 int main(void)
 {
 	struct dt_node *root, *c1, *c2, *gc1, *gc2, *gc3, *ggc1, *i;
 	const struct dt_property *p;
+	struct dt_property *p2;
 	unsigned int n;
 
 	root = dt_new_root("root");
@@ -84,6 +86,21 @@ int main(void)
 	assert(!dt_has_node_property(ggc1, "somestrin", "someval"));
 	assert(!dt_has_node_property(ggc1, "somestring", "someva"));
 	assert(!dt_has_node_property(ggc1, "somestring", "somevale"));
+
+	/* Test resizing property. */
+	p = p2 = __dt_find_property(c1, "some-property");
+	assert(p);
+	n = p2->len;
+	while (p2 == p) {
+		n *= 2;
+		dt_resize_property(&p2, n);
+	}
+
+	assert(dt_find_property(c1, "some-property") == p2);
+	list_check(&c1->properties, "properties after resizing");
+
+	dt_del_property(c1, p2);
+	list_check(&c1->properties, "properties after delete");
 
 	/* No leaks for valgrind! */
 	dt_free(root);

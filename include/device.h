@@ -109,7 +109,8 @@ static inline struct dt_property *dt_add_property_u64(struct dt_node *node,
 
 void dt_del_property(struct dt_node *node, struct dt_property *prop);
 
-void dt_resize_property(struct dt_property *prop, size_t len);
+/* Warning: moves *prop! */
+void dt_resize_property(struct dt_property **prop, size_t len);
 
 u32 dt_property_get_cell(const struct dt_property *prop, u32 index);
 

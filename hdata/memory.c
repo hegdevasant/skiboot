@@ -91,7 +91,7 @@ static void append_chip_id(struct dt_node *mem, u32 id)
 	}
 
 	/* Add it to the list */
-	dt_resize_property(prop, (len + 1) << 2);
+	dt_resize_property(&prop, (len + 1) << 2);
 	p = (u32 *)prop->prop;
 	p[len] = cpu_to_be32(id);
 }
