@@ -84,6 +84,10 @@ static void add_mem_node(uint64_t start, uint64_t len)
 	dt_add_property(mem, "reg", reg, sizeof(reg));
 }
 
+void add_chip_dev_associativity(struct dt_node *dev __attribute__((unused)))
+{
+}
+
 int main(void)
 {
 	uint64_t end;

@@ -18,6 +18,11 @@ static void *__malloc(size_t size, const char *location __attribute__((unused)))
 	return malloc(size);
 }
 
+static void *__realloc(void *ptr, size_t size, const char *location __attribute__((unused)))
+{
+	return realloc(ptr, size);
+}
+
 static void *__zalloc(size_t size, const char *location __attribute__((unused)))
 {
 	return calloc(size, 1);
@@ -70,6 +75,10 @@ static void add_mem_node(uint64_t start, uint64_t len)
 	mem = dt_new(dt_root, name);
 	dt_add_property_string(mem, "device_type", "memory");
 	dt_add_property(mem, "reg", reg, sizeof(reg));
+}
+
+void add_chip_dev_associativity(struct dt_node *dev __attribute__((unused)))
+{
 }
 
 int main(void)

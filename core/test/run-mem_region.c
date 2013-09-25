@@ -20,6 +20,11 @@ static void *__malloc(size_t size, const char *location __attribute__((unused)))
 	return malloc(size);
 }
 
+static void *__realloc(void *ptr, size_t size, const char *location __attribute__((unused)))
+{
+	return realloc(ptr, size);
+}
+
 static inline void __free(void *p, const char *location __attribute__((unused)))
 {
 	return free(p);
