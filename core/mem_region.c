@@ -647,7 +647,7 @@ void mem_region_init(void)
 	}
 
 	/* Now we know how many CPU stacks we have, fix that up. */
-	skiboot_cpu_stacks.len = cpu_max_pir * STACK_SIZE;
+	skiboot_cpu_stacks.len = (cpu_max_pir + 1) * STACK_SIZE;
 
 	/* Now carve out our own reserved areas. */
 	if (!add_region(&skiboot_os_reserve) ||
