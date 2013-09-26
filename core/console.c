@@ -14,6 +14,23 @@
 #include <console.h>
 #include <opal.h>
 #include <device.h>
+#include <processor.h>
+
+/*
+ * Our internal console uses the format of BML new-style in-memory
+ * console and supports input for setups without a physical console
+ * facility or FSP
+ */
+struct memcons {
+	char *ostart, *ocur, *oend;
+	char *istart, *icur, *iend;
+	uint64_t magic;
+#define MEMCONS_MAGIC	0x6630696567726173
+};
+
+
+#define INMEM_CON_IN_LEN	16
+#define INMEM_CON_OUT_LEN	(INMEM_CON_LEN - INMEM_CON_IN_LEN)
 
 static char *con_buf = (char *)INMEM_CON_START;
 static size_t con_in;
@@ -21,6 +38,16 @@ static size_t con_out;
 static struct con_ops *con_driver;
 
 struct lock con_lock = LOCK_UNLOCKED;
+
+struct memcons memcons = {
+	.ostart	= (char *)INMEM_CON_START,
+	.ocur	= (char *)INMEM_CON_START,
+	.oend	= (char *)INMEM_CON_START + INMEM_CON_OUT_LEN,
+	.istart	= (char *)INMEM_CON_START + INMEM_CON_OUT_LEN,
+	.icur	= (char *)INMEM_CON_START + INMEM_CON_OUT_LEN,
+	.iend	= (char *)INMEM_CON_START + INMEM_CON_LEN,
+	.magic	= MEMCONS_MAGIC,
+};
 
 #ifdef MAMBO_CONSOLE
 static void mambo_write(const char *buf, size_t count)
@@ -36,6 +63,11 @@ static void mambo_write(const char *buf, size_t count)
 #else
 static void mambo_write(const char *buf __unused, size_t count __unused) { }
 #endif /* MAMBO_CONSOLE */
+
+void clear_console(void)
+{
+	memset(con_buf, 0, INMEM_CON_LEN);
+}
 
 /* Flush the console buffer into the driver, returns true
  * if there is more to go
@@ -62,15 +94,15 @@ bool __flush_console(void)
 	do {
 		more_flush = false;
 		if (con_out > con_in) {
-			req = INMEM_CON_LEN - con_out;
-			len = con_driver->write(con_buf + con_out, req);				con_out = (con_out + len) % INMEM_CON_LEN;
+			req = INMEM_CON_OUT_LEN - con_out;
+			len = con_driver->write(con_buf + con_out, req);				con_out = (con_out + len) % INMEM_CON_OUT_LEN;
 			if (len < req)
 				goto bail;
 		}
 		if (con_out < con_in) {
 			len = con_driver->write(con_buf + con_out,
 						con_in - con_out);
-			con_out = (con_out + len) % INMEM_CON_LEN;
+			con_out = (con_out + len) % INMEM_CON_OUT_LEN;
 		}
 	} while(more_flush);
 bail:
@@ -91,13 +123,36 @@ bool flush_console(void)
 
 static void inmem_write(char c)
 {
+	if (!c)
+		return;
 	con_buf[con_in++] = c;
-	if (con_in >= INMEM_CON_LEN)
+	if (con_in >= INMEM_CON_OUT_LEN)
 		con_in = 0;
+	lwsync();
+	memcons.ocur = con_buf + con_in;
 
 	/* If head reaches tail, push tail around & drop chars */
 	if (con_in == con_out)
-		con_out = (con_in + 1) % INMEM_CON_LEN;
+		con_out = (con_in + 1) % INMEM_CON_OUT_LEN;
+}
+
+static size_t inmem_read(char *buf, size_t req)
+{
+	size_t read = 0;
+	char *next, *cur = memcons.icur;
+	
+	while (req && *cur) {
+		*(buf++) = *cur;
+		read++;
+		next = cur + 1;
+		if (next == memcons.iend || *next == 0)
+			next = memcons.istart;
+		memcons.icur = next;
+		lwsync();
+		*cur = 0;
+		cur = next;
+	}
+	return read;
 }
 
 static void write_char(char c)
@@ -132,11 +187,12 @@ ssize_t write(int fd __unused, const void *buf, size_t count)
 ssize_t read(int fd __unused, void *buf, size_t req_count)
 {
 	bool need_unlock = lock_recursive(&con_lock);
-	ssize_t count = 0;
+	size_t count = 0;
 
 	if (con_driver && con_driver->read)
 		count = con_driver->read(buf, req_count);
-
+	if (!count)
+		count = inmem_read(buf, req_count);
 	if (need_unlock)
 		unlock(&con_lock);
 	return count;
@@ -147,6 +203,14 @@ void set_console(struct con_ops *driver)
 	con_driver = driver;
 	if (driver)
 		flush_console();
+}
+
+void memcons_add_properties(struct dt_node *opal)
+{
+	uint64_t addr = (u64)&memcons;
+
+	dt_add_property_cells(opal, "ibm,opal-memcons",
+			      hi32(addr), lo32(addr));
 }
 
 /*
@@ -169,7 +233,7 @@ static int64_t dummy_console_write_buffer_space(int64_t term_number,
 	if (term_number != 0)
 		return OPAL_PARAMETER;
 	if (length)
-		*length = INMEM_CON_LEN;
+		*length = INMEM_CON_OUT_LEN;
 
 	return OPAL_SUCCESS;
 }
@@ -198,7 +262,7 @@ void dummy_console_add_nodes(struct dt_node *opal)
 	con = dt_new_addr(consoles, "serial", 0);
 	assert(con);
 	dt_add_property_string(con, "compatible", "ibm,opal-console-raw");
-	dt_add_property_cells(con, "#write-buffer-size", INMEM_CON_LEN);
+	dt_add_property_cells(con, "#write-buffer-size", INMEM_CON_OUT_LEN);
 	dt_add_property_cells(con, "reg", 0);
 	dt_add_property_string(con, "device_type", "serial");
 

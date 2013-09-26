@@ -25,6 +25,7 @@
 #include <interrupts.h>
 #include <mem_region.h>
 #include <trace.h>
+#include <console.h>
 #include <libfdt/libfdt.h>
 
 /*
@@ -389,6 +390,12 @@ static void dt_fixups(void)
 
 void main_cpu_entry(const void *fdt, u32 master_cpu)
 {
+	/*
+	 * Before first printk, ensure console buffer is clear or
+	 * reading tools might think it has wrapped
+	 */
+	clear_console();
+
 	printf("SkiBoot %s starting...\n", gitid);
 
 	/* Initialize boot cpu's cpu_thread struct */

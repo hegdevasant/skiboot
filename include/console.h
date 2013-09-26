@@ -21,6 +21,8 @@ extern bool flush_console(void);
 extern bool __flush_console(void);
 extern void set_console(struct con_ops *driver);
 
+extern void clear_console(void);
+extern void memcons_add_properties(struct dt_node *opal);
 extern void dummy_console_add_nodes(struct dt_node *opal);
 
 #endif /* __CONSOLE_H */

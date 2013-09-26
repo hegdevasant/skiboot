@@ -128,6 +128,7 @@ void add_opal_nodes(void)
 	add_opal_oppanel_node(opal);
 	add_opal_firmware_node(opal);
 	add_associativity_ref_point(opal);
+	memcons_add_properties(opal);
 
 	if (fsp_present())
 		fsp_console_add_nodes(opal);
@@ -135,8 +136,6 @@ void add_opal_nodes(void)
 	else
 		dummy_console_add_nodes(opal);
 #endif
-
-	//add_opal_errlog_node();
 }
 
 void opal_update_pending_evt(uint64_t evt_mask, uint64_t evt_values)
