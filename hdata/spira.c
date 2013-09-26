@@ -254,8 +254,9 @@ static bool add_xscom_sppcrd(uint64_t xscom_base)
 
 		/* Version 0A has additional OCC related stuff */
 		if (version >= 0x000a) {
-			dt_add_property_cells(np, "ibm,dbob-id",
-					      be32_to_cpu(cinfo->dbob_id));
+			if (!dt_find_property(np, "ibm,dbob-id"))
+				dt_add_property_cells(np, "ibm,dbob-id",
+					be32_to_cpu(cinfo->dbob_id));
 			dt_add_property_cells(np, "ibm,occ-functional-state",
 					      be32_to_cpu(cinfo->occ_state));
 		}
@@ -339,8 +340,9 @@ static void add_xscom_sppaca(uint64_t xscom_base)
 					      be32_to_cpu(id->hw_card_id));
 			dt_add_property_cells(np, "ibm,hw-module-id",
 					  be32_to_cpu(id->hardware_module_id));
-			dt_add_property_cells(np, "ibm,dbob-id",
-				 be32_to_cpu(id->drawer_book_octant_blade_id));
+			if (!dt_find_property(np, "ibm,dbob-id"))
+				dt_add_property_cells(np, "ibm,dbob-id",
+				  be32_to_cpu(id->drawer_book_octant_blade_id));
 			dt_add_property_cells(np, "ibm,mem-interleave-scope",
 				 be32_to_cpu(id->memory_interleaving_scope));
 		}
