@@ -427,29 +427,32 @@ static void add_chiptod_node(unsigned int chip_id, int flags)
 		return;
 	}
 
+	printf("CHIPTOD: Found on chip 0x%x %s\n", chip_id,
+	       (flags & CHIPTOD_ID_FLAGS_PRIMARY) ? "primary" :
+	       ((flags & CHIPTOD_ID_FLAGS_SECONDARY) ? "secondary" : ""));
+
 	node = dt_new_addr(xscom_node, "chiptod", addr);
 	dt_add_property_cells(node, "reg", addr, len);
 	dt_add_property_strings(node, "compatible", "ibm,power-chiptod",
 			       compat_str);
 
 	if (flags & CHIPTOD_ID_FLAGS_PRIMARY)
-		dt_add_property(node, "primary", NULL, 0);
+		dt_add_property(node, "[primary]", NULL, 0);
 	if (flags & CHIPTOD_ID_FLAGS_SECONDARY)
-		dt_add_property(node, "secondary", NULL, 0);
+		dt_add_property(node, "[secondary]", NULL, 0);
 }
 
-static void add_chiptod_old(void)
+static bool add_chiptod_old(void)
 {
 	const void *hdif;
 	unsigned int i;
+	bool found = false;
 
 	/*
 	 * Locate chiptod ID structures in SPIRA
 	 */
-	if (!get_hdif(&spira.ntuples.chip_tod, "TOD   ")) {
-		prerror("CHIPTOD: Cannot locate old style SPIRA TOD info\n");
-		return;
-	}
+	if (!get_hdif(&spira.ntuples.chip_tod, "TOD   "))
+		return found;
 
 	for_each_ntuple_idx(&spira.ntuples.chip_tod, hdif, i, "TOD   ") {
 		const struct chiptod_chipid *id;
@@ -462,21 +465,22 @@ static void add_chiptod_old(void)
 
 		add_chiptod_node(pcid_to_chip_id(be32_to_cpu(id->chip_id)),
 				 be32_to_cpu(id->flags));
+		found = true;
 	}
+	return found;
 }
 
-static void add_chiptod_new(uint32_t master_cpu)
+static bool add_chiptod_new(uint32_t master_cpu)
 {
 	const void *hdif;
 	unsigned int i, master_chip;
+	bool found = false;
 
 	/*
 	 * Locate Proc Chip ID structures in SPIRA
 	 */
-	if (!get_hdif(&spira.ntuples.proc_chip, SPPCRD_HDIF_SIG)) {
-		prerror("CHIPTOD: Cannot locate new style SPIRA TOD info\n");
-		return;
-	}
+	if (!get_hdif(&spira.ntuples.proc_chip, SPPCRD_HDIF_SIG))
+		return found;
 
 	master_chip = pir_to_chip_id(master_cpu);
 
@@ -520,7 +524,9 @@ static void add_chiptod_new(uint32_t master_cpu)
 		}
 
 		add_chiptod_node(be32_to_cpu(cinfo->xscom_id), flags);
+		found = true;
 	}
+	return found;
 }
 
 static void add_nx_node(u32 gcid)
@@ -792,8 +798,8 @@ void parse_hdat(bool is_opal, uint32_t master_cpu)
 	fsp_parse();
 
 	/* Add ChipTOD's */
-	add_chiptod_old();
-	add_chiptod_new(master_cpu);
+	if (!add_chiptod_old() && !add_chiptod_new(master_cpu))
+		prerror("CHIPTOD: No ChipTOD found !\n");
 
 	/* Add NX */
 	add_nx();
