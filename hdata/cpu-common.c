@@ -14,6 +14,7 @@ struct dt_node * add_core_common(struct dt_node *cpus,
 	const char *name;
 	struct dt_node *cpu;
 	uint32_t version;
+	uint64_t freq;
 
 	printf("    Cache: I=%u D=%u/%u/%u/%u\n",
 	       be32_to_cpu(cache->icache_size_kb),
@@ -78,10 +79,20 @@ struct dt_node * add_core_common(struct dt_node *cpus,
 	dt_add_property_cells(cpu, "ibm,purr", 0x1);
 	dt_add_property_cells(cpu, "ibm,spurr", 0x1);
 
-	dt_add_property_cells(cpu, "clock-frequency",
-			      be32_to_cpu(tb->actual_clock_speed) * 1000000);
+	/*
+	 * Do not create "clock-frequency" if the frequency doesn't
+	 * fit in a single cell
+	 */
+	freq = ((uint64_t)be32_to_cpu(tb->actual_clock_speed)) * 1000000ul;
+	if (freq <= 0xfffffffful)
+		dt_add_property_cells(cpu, "clock-frequency", freq);
+	dt_add_property_cells(cpu, "ibm,extended-clock-frequency",
+			      hi32(freq), lo32(freq));
+
 	/* FIXME: Hardcoding is bad. */
 	dt_add_property_cells(cpu, "timebase-frequency", 512000000);
+	dt_add_property_cells(cpu, "ibm,extended-timebase-frequency",
+			      0, 512000000);
 
 	dt_add_property_cells(cpu, "reservation-granule-size",
 			      be32_to_cpu(cache->reservation_size));
