@@ -63,7 +63,7 @@
 #define INIT_TB	0x000000000001ff0
 
 /* Number of iterations for the various timeouts */
-#define TIMEOUT_LOOPS		10000000
+#define TIMEOUT_LOOPS		20000000
 
 static enum chiptod_type {
 	chiptod_unknown,
@@ -149,7 +149,7 @@ static void chiptod_setup_base_tfmr(void)
 	base_tfmr = SPR_TFMR_TB_ECLIPZ;
 
 	/* Get CPU and TOD freqs in Hz */
-	core_freq = dt_prop_get_u32(cpu, "clock-frequency");
+	core_freq = dt_prop_get_u64(cpu, "ibm,extended-clock-frequency");
 	tod_freq = 32000000;
 
 	/* Calculate the "Max Cycles Between Steps" value according
@@ -160,7 +160,8 @@ static void chiptod_setup_base_tfmr(void)
 	 * The max jitter factor is set to 240 based on what pHyp uses.
 	 */
 	mcbs = (core_freq * 240) / (4 * tod_freq) / 100;
-	printf("CHIPTOD: Calculated MCBS is 0x%llx\n", mcbs);
+	printf("CHIPTOD: Calculated MCBS is 0x%llx (Cfreq=%lld Tfreq=%lld)\n",
+	       mcbs, core_freq, tod_freq);
 
 	/* Bake that all into TFMR */
 	base_tfmr = SETFIELD(SPR_TFMR_MAX_CYC_BET_STEPS, base_tfmr, mcbs);
@@ -487,7 +488,8 @@ static void chiptod_sync_master(void *data)
 	*result = true;
 	return;
  error:
-	prerror("CHIPTOD: Master sync failed! TFMR=0x%16lx\n", mfspr(SPR_TFMR));
+	prerror("CHIPTOD: Master sync failed! TFMR=0x%016lx\n",
+		mfspr(SPR_TFMR));
 	*result = false;
 }
 
@@ -545,7 +547,8 @@ static void chiptod_sync_slave(void *data)
 	*result = true;
 	return;
  error:
-	prerror("CHIPTOD: Slave sync failed ! TFMR=0x%16lx\n", mfspr(SPR_TFMR));
+	prerror("CHIPTOD: Slave sync failed ! TFMR=0x%016lx\n",
+		mfspr(SPR_TFMR));
 	*result = false;
 }
 
