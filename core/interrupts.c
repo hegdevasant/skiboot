@@ -178,17 +178,22 @@ void add_opal_interrupts(struct dt_node *opal)
 		dt_add_property(opal, "opal-interrupts", irqs, count * 4);
 }
 
-static u64 this_thread_ibase(void)
+static void *thread_ibase(struct cpu_thread *cpu)
 {
-	struct dt_node *cpu = get_cpu_node(cpu_get_thread0(this_cpu()));
+	struct dt_node *dn = get_cpu_node(cpu_get_thread0(cpu));
 	u64 ibase;
 
-	ibase = dt_prop_get_u64(cpu, DT_PRIVATE "ibase");
+	ibase = dt_prop_get_u64(dn, DT_PRIVATE "ibase");
 	
 	/* Adjust for thread */
-	ibase += 0x1000 * cpu_get_thread_index(this_cpu());
+	ibase += 0x1000 * cpu_get_thread_index(cpu);
 
-	return ibase;
+	return (void *)ibase;
+}
+
+static void *this_thread_ibase(void)
+{
+	return thread_ibase(this_cpu());
 }
 
 /* This is called on a fast reboot to sanitize the ICP. We set our priority
@@ -196,7 +201,7 @@ static u64 this_thread_ibase(void)
  */
 void reset_cpu_icp(void)
 {
-	void *icp = (void *)this_thread_ibase();
+	void *icp = this_thread_ibase();
 
 	/* Clear pending IPIs */
 	out_8(icp + ICP_MFRR, 0xff);
@@ -210,10 +215,33 @@ void reset_cpu_icp(void)
  */
 void icp_send_eoi(uint32_t interrupt)
 {
-	void *icp = (void *)this_thread_ibase();
+	void *icp = this_thread_ibase();
 
 	/* Set priority to max, ignore all incoming interrupts */
 	out_be32(icp + ICP_XIRR, interrupt & 0xffffff);
+}
+
+/* This is called before winkle, we clear pending IPIs and set our priority
+ * to 1 to mask all but the IPI
+ */
+void icp_prep_for_rvwinkle(void)
+{
+	void *icp = this_thread_ibase();
+
+	/* Clear pending IPIs */
+	out_8(icp + ICP_MFRR, 0xff);
+
+	/* Set priority to 1, ignore all incoming interrupts, EOI IPIs */
+	out_be32(icp + ICP_XIRR, 0x01000002);
+}
+
+/* This is called to wakeup somebody from winkle */
+void icp_kick_cpu(struct cpu_thread *cpu)
+{
+	void *icp = thread_ibase(cpu);
+
+	/* Send high priority IPI */
+	out_8(icp + ICP_MFRR, 0);
 }
 
 static struct irq_source *irq_find_source(uint32_t isn)

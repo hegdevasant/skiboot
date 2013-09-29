@@ -231,7 +231,11 @@ extern struct dt_node *add_ics_node(void);
 extern void add_opal_interrupts(struct dt_node *opal);
 extern uint32_t get_ics_phandle(void);
 
+struct cpu_thread;
+
 extern void reset_cpu_icp(void);
 extern void icp_send_eoi(uint32_t interrupt);
+extern void icp_prep_for_rvwinkle(void);
+extern void icp_kick_cpu(struct cpu_thread *cpu);
 
 #endif /* __INTERRUPTS_H */
