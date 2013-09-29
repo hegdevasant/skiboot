@@ -527,10 +527,17 @@ static int64_t opal_query_cpu_status(uint64_t server_no, uint8_t *thread_status)
 		prerror("OPAL: CPU not active in OPAL nor OS !\n");
 		return OPAL_PARAMETER;
 	}
-	if (cpu->state == cpu_state_os)
+	switch(cpu->state) {
+	case cpu_state_os:
 		*thread_status = OPAL_THREAD_STARTED;
-	else
+		break;
+	case cpu_state_active:
+		/* Active in skiboot -> inactive in OS */
 		*thread_status = OPAL_THREAD_INACTIVE;
+		break;
+	default:
+		*thread_status = OPAL_THREAD_UNAVAILABLE;
+	}
 
 	return OPAL_SUCCESS;
 }
