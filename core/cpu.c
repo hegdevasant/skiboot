@@ -142,6 +142,8 @@ void cpu_process_jobs(void)
 
 	lock(&cpu->job_lock);
 	while (true) {
+		bool no_return;
+
 		if (list_empty(&cpu->job_queue))
 			break;
 		smt_medium();
@@ -150,12 +152,16 @@ void cpu_process_jobs(void)
 			break;
 		func = job->func;
 		data = job->data;
+		no_return = job->no_return;
 		unlock(&cpu->job_lock);
-		if (job->no_return)
+		if (no_return)
 			free(job);
 		func(data);
 		lock(&cpu->job_lock);
-		job->complete = true;
+		if (!no_return) {
+			lwsync();
+			job->complete = true;
+		}
 	}
 	unlock(&cpu->job_lock);
 }
