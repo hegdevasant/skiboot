@@ -66,7 +66,7 @@ struct cpu_job *__cpu_queue_job(struct cpu_thread *cpu,
 {
 	struct cpu_job *job;
 
-	if (cpu->state != cpu_state_active) {
+	if (!cpu_is_available(cpu)) {
 		prerror("CPU: Tried to queue job on unavailable CPU 0x%04x\n",
 			cpu->pir);
 		return NULL;
@@ -242,7 +242,7 @@ struct cpu_thread *next_available_cpu(struct cpu_thread *cpu)
 {
 	do {
 		cpu = next_cpu(cpu);
-	} while(cpu && cpu->state != cpu_state_active);
+	} while(cpu && !cpu_is_available(cpu));
 
 	return cpu;
 }
@@ -252,14 +252,14 @@ struct cpu_thread *first_available_cpu(void)
 	return next_available_cpu(NULL);
 }
 
-struct cpu_thread *next_available_core_in_chip(struct cpu_thread *core, u32 chip_id)
+struct cpu_thread *next_available_core_in_chip(struct cpu_thread *core,
+					       u32 chip_id)
 {
 	do {
 		core = next_cpu(core);
-	} while(core && (core->state != cpu_state_active || \
-			 core->chip_id != chip_id || \
+	} while(core && (!cpu_is_available(core) ||
+			 core->chip_id != chip_id ||
 			 core->is_secondary));
-
 	return core;
 }
 
@@ -500,7 +500,7 @@ static int64_t opal_start_cpu_thread(uint64_t server_no, uint64_t start_address)
 	printf("OPAL: Start CPU 0x%04llx (PIR 0x%04x) -> 0x%016llx\n",
 	       server_no, cpu->pir, start_address);
 
-	if (cpu->state != cpu_state_active) {
+	if (!cpu_is_available(cpu)) {
 		prerror("OPAL: CPU not active in OPAL !\n");
 		return OPAL_WRONG_STATE;
 	}
@@ -523,7 +523,7 @@ static int64_t opal_query_cpu_status(uint64_t server_no, uint8_t *thread_status)
 		prerror("OPAL: Query invalid CPU 0x%04llx !\n", server_no);
 		return OPAL_PARAMETER;
 	}
-	if (cpu->state != cpu_state_active && cpu->state != cpu_state_os) {
+	if (!cpu_is_available(cpu) && cpu->state != cpu_state_os) {
 		prerror("OPAL: CPU not active in OPAL nor OS !\n");
 		return OPAL_PARAMETER;
 	}

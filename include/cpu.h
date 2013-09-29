@@ -91,6 +91,12 @@ extern struct cpu_thread *next_cpu(struct cpu_thread *cpu);
  *          fully started, all CPUs are seen as unavailable from
  *          this API standpoint.
  */
+
+static inline bool cpu_is_available(struct cpu_thread *cpu)
+{
+	return cpu->state == cpu_state_active;
+}
+
 extern struct cpu_thread *first_available_cpu(void);
 extern struct cpu_thread *next_available_cpu(struct cpu_thread *cpu);
 
