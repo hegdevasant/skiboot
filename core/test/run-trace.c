@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <stdio.h>
+#include <stdbool.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 
@@ -34,8 +35,10 @@ static void full_barrier(void)
 #define zalloc(size) calloc((size), 1)
 
 struct cpu_thread {
-	struct tracebuf *tracebuf;
+	struct trace_info *trace;
 	int server_no;
+	bool is_secondary;
+	struct cpu_thread *primary;
 };
 static struct cpu_thread *this_cpu(void);
 
@@ -55,10 +58,22 @@ static inline struct cpu_thread *next_cpu(struct cpu_thread *cpu)
 
 #define first_cpu() next_cpu(NULL)
 
+#define for_each_cpu(cpu)	\
+	for (cpu = first_cpu(); cpu; cpu = next_cpu(cpu))
+
 static unsigned long timestamp;
 static unsigned long mftb(void)
 {
 	return timestamp;
+}
+
+static void *local_alloc(struct cpu_thread *cpu __attribute__((unused)),
+			 size_t size, size_t align)
+{
+	void *p;
+	if (posix_memalign(&p, align, size))
+		p = NULL;
+	return p;
 }
 
 #include "../trace.c"
@@ -130,7 +145,7 @@ static void test_parallel(void)
 	unsigned int i, counts[CPUS] = { 0 }, overflows[CPUS] = { 0 };
 	unsigned int repeats[CPUS] = { 0 }, num_overflows[CPUS] = { 0 };
 	bool done[CPUS] = { false };
-	size_t len = sizeof(struct tracebuf) + TBUF_SZ + sizeof(union trace);
+	size_t len = sizeof(struct trace_info) + TBUF_SZ + sizeof(union trace);
 	int last = 0;
 
 	/* Use a shared mmap to test actual parallel buffers. */
@@ -139,9 +154,10 @@ static void test_parallel(void)
 		 MAP_ANONYMOUS|MAP_SHARED, -1, 0);
 
 	for (i = 0; i < CPUS; i++) {
-		fake_cpus[i].tracebuf = p + i * len;
-		fake_cpus[i].tracebuf->mask = TBUF_SZ - 1;
-		fake_cpus[i].tracebuf->max_size = sizeof(union trace);
+		fake_cpus[i].trace = p + i * len;
+		fake_cpus[i].trace->tb.mask = TBUF_SZ - 1;
+		fake_cpus[i].trace->tb.max_size = sizeof(union trace);
+		fake_cpus[i].is_secondary = false;
 	}
 
 	for (i = 0; i < CPUS; i++) {
@@ -156,7 +172,7 @@ static void test_parallel(void)
 		union trace t;
 
 		for (i = 0; i < CPUS; i++) {
-			if (trace_get(&t,fake_cpus[(i + last) % CPUS].tracebuf))
+			if (trace_get(&t, &fake_cpus[(i+last) % CPUS].trace->tb))
 				break;
 		}
 
@@ -200,7 +216,7 @@ static void test_parallel(void)
 	for (i = 0; i < CPUS; i++) {
 		printf("Child %i: %u produced, %u overflows, %llu total\n", i,
 		       counts[i], overflows[i],
-		       (long long)fake_cpus[i].tracebuf->end);
+		       (long long)fake_cpus[i].trace->tb.end);
 		assert(counts[i] + repeats[i] <= PER_CHILD_TRACES);
 	}
 	/* Child 0 never repeats. */
@@ -223,14 +239,16 @@ int main(void)
 	unsigned int i;
 
 	for (i = 0; i < CPUS; i++) {
-		fake_cpus[i].tracebuf = trace_newbuf();
 		fake_cpus[i].server_no = i;
+		fake_cpus[i].is_secondary = (i & 0x1);
+		fake_cpus[i].primary = &fake_cpus[i & ~0x1];
 	}
+	init_trace_buffers();
 	my_fake_cpu = &fake_cpus[0];
 
 	for (i = 0; i < CPUS; i++) {
-		assert(trace_empty(fake_cpus[i].tracebuf));
-		assert(!trace_get(&trace, fake_cpus[i].tracebuf));
+		assert(trace_empty(&fake_cpus[i].trace->tb));
+		assert(!trace_get(&trace, &fake_cpus[i].trace->tb));
 	}
 
 	assert(sizeof(trace.hdr) % 8 == 0);
@@ -238,7 +256,7 @@ int main(void)
 	minimal.hdr.len_div_8 = sizeof(trace.hdr) / 8;
 	minimal.hdr.type = 100;
 	trace_add(&minimal);
-	assert(trace_get(&trace, my_fake_cpu->tracebuf));
+	assert(trace_get(&trace, &my_fake_cpu->trace->tb));
 	assert(trace.hdr.len_div_8 == minimal.hdr.len_div_8);
 	assert(trace.hdr.timestamp == timestamp);
 
@@ -249,19 +267,19 @@ int main(void)
 		trace_add(&minimal);
 	}
 
-	assert(trace_get(&trace, my_fake_cpu->tracebuf));
+	assert(trace_get(&trace, &my_fake_cpu->trace->tb));
 	/* First one must be overflow marker. */
 	assert(trace.hdr.type == TRACE_OVERFLOW);
 	assert(trace.hdr.len_div_8 * 8 == sizeof(trace.overflow));
 	assert(trace.overflow.bytes_missed == minimal.hdr.len_div_8 * 8);
 
 	for (i = 0; i < TBUF_SZ / (minimal.hdr.len_div_8 * 8); i++) {
-		assert(trace_get(&trace, my_fake_cpu->tracebuf));
+		assert(trace_get(&trace, &my_fake_cpu->trace->tb));
 		assert(trace.hdr.len_div_8 == minimal.hdr.len_div_8);
 		assert(trace.hdr.timestamp == i+1);
 		assert(trace.hdr.type == 99 + ((i+1)%2));
 	}
-	assert(!trace_get(&trace, my_fake_cpu->tracebuf));
+	assert(!trace_get(&trace, &my_fake_cpu->trace->tb));
 
 	/* Now put in some weird-length ones, to test overlap.
 	 * Last power of 2, minus 8. */
@@ -272,16 +290,16 @@ int main(void)
 		large.hdr.type = 100 + (i%2);
 		trace_add(&large);
 	}
-	assert(trace_get(&trace, my_fake_cpu->tracebuf));
+	assert(trace_get(&trace, &my_fake_cpu->trace->tb));
 	assert(trace.hdr.type == TRACE_OVERFLOW);
-	assert(trace_get(&trace, my_fake_cpu->tracebuf));
+	assert(trace_get(&trace, &my_fake_cpu->trace->tb));
 	assert(trace.hdr.len_div_8 == large.hdr.len_div_8);
 	i = trace.hdr.timestamp;
-	while (trace_get(&trace, my_fake_cpu->tracebuf))
+	while (trace_get(&trace, &my_fake_cpu->trace->tb))
 		assert(trace.hdr.timestamp == ++i);
 
 	/* Test repeats. */
-	for (i = 0; i < TBUF_SZ; i++) {
+	for (i = 0; i < 65538; i++) {
 		minimal.hdr.type = 100;
 		timestamp = i;
 		trace_add(&minimal);
@@ -292,31 +310,40 @@ int main(void)
 	timestamp = i+1;
 	trace_add(&minimal);
 
-	assert(trace_get(&trace, my_fake_cpu->tracebuf));
+	assert(trace_get(&trace, &my_fake_cpu->trace->tb));
 	assert(trace.hdr.timestamp == 0);
 	assert(trace.hdr.len_div_8 == minimal.hdr.len_div_8);
 	assert(trace.hdr.type == 100);
-	assert(trace_get(&trace, my_fake_cpu->tracebuf));
+	assert(trace_get(&trace, &my_fake_cpu->trace->tb));
 	assert(trace.hdr.type == TRACE_REPEAT);
 	assert(trace.hdr.len_div_8 * 8 == sizeof(trace.repeat));
-	assert(trace.repeat.num == TBUF_SZ-1);
-	assert(trace.repeat.timestamp == TBUF_SZ - 1);
-
-	assert(trace_get(&trace, my_fake_cpu->tracebuf));
-	assert(trace.hdr.timestamp == TBUF_SZ);
+	assert(trace.repeat.num == 65535);
+	assert(trace.repeat.timestamp == 65535);
+	assert(trace_get(&trace, &my_fake_cpu->trace->tb));
+	assert(trace.hdr.timestamp == 65536);
 	assert(trace.hdr.len_div_8 == minimal.hdr.len_div_8);
-	assert(trace.hdr.type == 101);
-	assert(trace_get(&trace, my_fake_cpu->tracebuf));
+	assert(trace.hdr.type == 100);
+	assert(trace_get(&trace, &my_fake_cpu->trace->tb));
 	assert(trace.hdr.type == TRACE_REPEAT);
 	assert(trace.hdr.len_div_8 * 8 == sizeof(trace.repeat));
 	assert(trace.repeat.num == 1);
-	assert(trace.repeat.timestamp == TBUF_SZ + 1);
+	assert(trace.repeat.timestamp == 65537);
+
+	assert(trace_get(&trace, &my_fake_cpu->trace->tb));
+	assert(trace.hdr.timestamp == 65538);
+	assert(trace.hdr.len_div_8 == minimal.hdr.len_div_8);
+	assert(trace.hdr.type == 101);
+	assert(trace_get(&trace, &my_fake_cpu->trace->tb));
+	assert(trace.hdr.type == TRACE_REPEAT);
+	assert(trace.hdr.len_div_8 * 8 == sizeof(trace.repeat));
+	assert(trace.repeat.num == 1);
+	assert(trace.repeat.timestamp == 65539);
 
 	/* Now, test adding repeat while we're reading... */
 	minimal.hdr.type = 100;
 	timestamp = 0;
 	trace_add(&minimal);
-	assert(trace_get(&trace, my_fake_cpu->tracebuf));
+	assert(trace_get(&trace, &my_fake_cpu->trace->tb));
 	assert(trace.hdr.timestamp == 0);
 	assert(trace.hdr.len_div_8 == minimal.hdr.len_div_8);
 	assert(trace.hdr.type == 100);
@@ -324,16 +351,22 @@ int main(void)
 	for (i = 1; i < TBUF_SZ; i++) {
 		timestamp = i;
 		trace_add(&minimal);
-		assert(trace_get(&trace, my_fake_cpu->tracebuf));
-		assert(trace.hdr.type == TRACE_REPEAT);
-		assert(trace.hdr.len_div_8 * 8 == sizeof(trace.repeat));
-		assert(trace.repeat.num == 1);
+		assert(trace_get(&trace, &my_fake_cpu->trace->tb));
+		if (i % 65536 == 0) {
+			assert(trace.hdr.type == 100);
+			assert(trace.hdr.len_div_8 == minimal.hdr.len_div_8);
+		} else {
+			assert(trace.hdr.type == TRACE_REPEAT);
+			assert(trace.hdr.len_div_8 * 8 == sizeof(trace.repeat));
+			assert(trace.repeat.num == 1);
+		}
 		assert(trace.repeat.timestamp == i);
-		assert(!trace_get(&trace, my_fake_cpu->tracebuf));
+		assert(!trace_get(&trace, &my_fake_cpu->trace->tb));
 	}
 
 	for (i = 0; i < CPUS; i++)
-		free(fake_cpus[i].tracebuf);
+		if (!fake_cpus[i].is_secondary)
+			free(fake_cpus[i].trace);
 
 	test_parallel();
 

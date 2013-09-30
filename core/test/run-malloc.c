@@ -11,6 +11,9 @@
 /* Don't include this, it's PPC-specific */
 #define __CPU_H
 static unsigned int cpu_max_pir = 1;
+struct cpu_thread {
+	unsigned int			chip_id;
+};
 
 #include <skiboot.h>
 
