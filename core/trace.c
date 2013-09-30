@@ -138,6 +138,7 @@ void init_trace_buffers(void)
 		
 		t->trace = local_alloc(t, sizeof(*t->trace) + tracebuf_extra(),
 				       __alignof__(*t->trace));
+		memset(t->trace, 0, sizeof(*t->trace) + tracebuf_extra());
 		init_lock(&t->trace->lock);
 		t->trace->tb.mask = TBUF_SZ - 1;
 		t->trace->tb.max_size = MAX_SIZE;
