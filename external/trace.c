@@ -77,6 +77,7 @@ again:
 			assert(tb->end > tb->rpos + t->hdr.len_div_8 * 8);
 			/* Skip to next entry. */
 			tb->rpos += t->hdr.len_div_8 * 8;
+			tb->last_repeat = 0;
 			goto again;
 		}
 	} else {

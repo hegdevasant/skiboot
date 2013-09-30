@@ -65,12 +65,13 @@ static bool handle_repeat(struct tracebuf *tb, const union trace *trace)
 		rpt = (void *)tb->buf + ((tb->last + len) % TBUF_SZ);
 		assert(tb->last + len + rpt->len_div_8*8 == tb->end);
 
-		/* If this repeat entry is full, generate another. */
-		if (rpt->num < 0xFFFF) {
-			rpt->num++;
-			rpt->timestamp = trace->hdr.timestamp;
-			return true;
-		}
+		/* If this repeat entry is full, don't repeat. */
+		if (rpt->num == 0xFFFF)
+			return false;
+
+		rpt->num++;
+		rpt->timestamp = trace->hdr.timestamp;
+		return true;
 	}
 
 	/* Generate repeat entry: it's the smallest possible entry, so we
