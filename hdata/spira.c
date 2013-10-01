@@ -428,8 +428,8 @@ static void add_chiptod_node(unsigned int chip_id, int flags)
 	}
 
 	printf("CHIPTOD: Found on chip 0x%x %s\n", chip_id,
-	       (flags & CHIPTOD_ID_FLAGS_PRIMARY) ? "primary" :
-	       ((flags & CHIPTOD_ID_FLAGS_SECONDARY) ? "secondary" : ""));
+	       (flags & CHIPTOD_ID_FLAGS_PRIMARY) ? "[primary]" :
+	       ((flags & CHIPTOD_ID_FLAGS_SECONDARY) ? "[secondary]" : ""));
 
 	node = dt_new_addr(xscom_node, "chiptod", addr);
 	dt_add_property_cells(node, "reg", addr, len);
@@ -437,9 +437,9 @@ static void add_chiptod_node(unsigned int chip_id, int flags)
 			       compat_str);
 
 	if (flags & CHIPTOD_ID_FLAGS_PRIMARY)
-		dt_add_property(node, "[primary]", NULL, 0);
+		dt_add_property(node, "primary", NULL, 0);
 	if (flags & CHIPTOD_ID_FLAGS_SECONDARY)
-		dt_add_property(node, "[secondary]", NULL, 0);
+		dt_add_property(node, "secondary", NULL, 0);
 }
 
 static bool add_chiptod_old(void)
