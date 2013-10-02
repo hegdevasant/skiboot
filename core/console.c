@@ -19,15 +19,23 @@
 /*
  * Our internal console uses the format of BML new-style in-memory
  * console and supports input for setups without a physical console
- * facility or FSP
+ * facility or FSP.
+ *
+ * (This is v3 of the format, the previous one sucked)
  */
 struct memcons {
-	char *ostart, *ocur, *oend;
-	char *istart, *icur, *iend;
 	uint64_t magic;
 #define MEMCONS_MAGIC	0x6630696567726173
+	uint64_t obuf_phys;
+	uint64_t ibuf_phys;
+	uint32_t obuf_size;
+	uint32_t ibuf_size;
+	uint32_t out_pos;
+#define MEMCONS_OUT_POS_WRAP	0x80000000u
+#define MEMCONS_OUT_POS_MASK	0x00ffffffu
+	uint32_t in_prod;
+	uint32_t in_cons;
 };
-
 
 #define INMEM_CON_IN_LEN	16
 #define INMEM_CON_OUT_LEN	(INMEM_CON_LEN - INMEM_CON_IN_LEN)
@@ -40,13 +48,11 @@ static struct con_ops *con_driver;
 struct lock con_lock = LOCK_UNLOCKED;
 
 struct memcons memcons = {
-	.ostart	= (char *)INMEM_CON_START,
-	.ocur	= (char *)INMEM_CON_START,
-	.oend	= (char *)INMEM_CON_START + INMEM_CON_OUT_LEN,
-	.istart	= (char *)INMEM_CON_START + INMEM_CON_OUT_LEN,
-	.icur	= (char *)INMEM_CON_START + INMEM_CON_OUT_LEN,
-	.iend	= (char *)INMEM_CON_START + INMEM_CON_LEN,
-	.magic	= MEMCONS_MAGIC,
+	.magic		= MEMCONS_MAGIC,
+	.obuf_phys	= INMEM_CON_START,
+	.ibuf_phys	= INMEM_CON_START + INMEM_CON_OUT_LEN,
+	.obuf_size	= INMEM_CON_OUT_LEN,
+	.ibuf_size	= INMEM_CON_IN_LEN,
 };
 
 #ifdef MAMBO_CONSOLE
@@ -123,13 +129,18 @@ bool flush_console(void)
 
 static void inmem_write(char c)
 {
+	uint32_t opos = memcons.out_pos;
+
 	if (!c)
 		return;
 	con_buf[con_in++] = c;
-	if (con_in >= INMEM_CON_OUT_LEN)
+	if (con_in >= INMEM_CON_OUT_LEN) {
 		con_in = 0;
+		opos = MEMCONS_OUT_POS_WRAP;
+	} else
+		opos++;
 	lwsync();
-	memcons.ocur = con_buf + con_in;
+	memcons.out_pos = opos;
 
 	/* If head reaches tail, push tail around & drop chars */
 	if (con_in == con_out)
@@ -139,18 +150,14 @@ static void inmem_write(char c)
 static size_t inmem_read(char *buf, size_t req)
 {
 	size_t read = 0;
-	char *next, *cur = memcons.icur;
-	
-	while (req && *cur) {
-		*(buf++) = *cur;
-		read++;
-		next = cur + 1;
-		if (next == memcons.iend || *next == 0)
-			next = memcons.istart;
-		memcons.icur = next;
+	char *ibuf = (char *)memcons.ibuf_phys;
+
+	while (req && memcons.in_prod != memcons.in_cons) {
+		*(buf++) = ibuf[memcons.in_cons];
 		lwsync();
-		*cur = 0;
-		cur = next;
+		memcons.in_cons = (memcons.in_cons + 1) % INMEM_CON_IN_LEN;
+		req--;
+		read++;
 	}
 	return read;
 }
