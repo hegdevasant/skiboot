@@ -13,6 +13,7 @@
 #include <device.h>
 #include <libfdt.h>
 #include <processor.h>
+#include <skiboot.h>
 
 #define MAX_SIZE sizeof(union trace)
 
@@ -131,6 +132,7 @@ void trace_add(union trace *trace)
 void init_trace_buffers(void)
 {
 	struct cpu_thread *t;
+	struct trace_info *any = &boot_tracebuf.trace_info;
 
 	/* Allocate a trace buffer for each primary cpu. */
 	for_each_cpu(t) {
@@ -139,10 +141,20 @@ void init_trace_buffers(void)
 		
 		t->trace = local_alloc(t, sizeof(*t->trace) + tracebuf_extra(),
 				       __alignof__(*t->trace));
-		memset(t->trace, 0, sizeof(*t->trace) + tracebuf_extra());
-		init_lock(&t->trace->lock);
-		t->trace->tb.mask = TBUF_SZ - 1;
-		t->trace->tb.max_size = MAX_SIZE;
+		if (t->trace) {
+			any = t->trace;
+			memset(t->trace, 0, sizeof(*t->trace)+tracebuf_extra());
+			init_lock(&t->trace->lock);
+			t->trace->tb.mask = TBUF_SZ - 1;
+			t->trace->tb.max_size = MAX_SIZE;
+		} else
+			prerror("Trace: cpu %i allocation failed\n", t->pir);
+	}
+
+	/* In case any allocations failed, share trace buffers. */
+	for_each_cpu(t) {
+		if (!t->is_secondary && !t->trace)
+			t->trace = any;
 	}
 
 	/* And copy those to the secondaries. */
