@@ -2514,6 +2514,11 @@ static void phb3_init_hw(struct phb3 *p)
 	/* Setup AIB credits etc... */
 	phb3_setup_aib(p);
 
+	/* Grab version and fit it in an int */
+	val = in_be64(p->regs + PHB_VERSION);
+	p->rev = ((val >> 16) & 0x00ff0000) | (val & 0xffff);
+	PHBDBG(p, "Core revision 0x%x\n", p->rev);
+
 	/* Init_8 - PCIE System Configuration Register */
 	/* note: default value but BML writes it anyway */
 	out_be64(p->regs + PHB_PCIE_SYSTEM_CONFIG,	   0x441000fc30000000);
@@ -2741,7 +2746,6 @@ static void phb3_create(struct dt_node *np)
 	struct phb3 *p = zalloc(sizeof(struct phb3));
 	const struct dt_property *prop;
 	char *path;
-	uint64_t r;
 
 	assert(p);
 
@@ -2784,13 +2788,9 @@ static void phb3_create(struct dt_node *np)
 	/* Check if we can use the A/B detect pins */
 	p->use_ab_detect = dt_has_node_property(np, "ibm,use-ab-detect", NULL);
 
-	/* Grab version and fit it in an int */
-	r = in_be64(p->regs + PHB_VERSION);
-	p->rev = ((r >> 16) & 0x00ff0000) | (r & 0xffff);
-
 	/* Hello ! */
 	path = dt_get_path(np);
-	printf("PHB3: Found rev 0x%x %s @%p\n", p->rev, path, p->regs);
+	printf("PHB3: Found %s @%p\n", path, p->regs);
 	printf("  MMIO [0x%016llx..0x%016llx]\n",
 	       p->mm_base, p->mm_base + p->mm_size - 1);
 	printf("  M32 [0x%016llx..0x%016llx]\n",
