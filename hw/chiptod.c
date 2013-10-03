@@ -149,7 +149,10 @@ static void chiptod_setup_base_tfmr(void)
 	base_tfmr = SPR_TFMR_TB_ECLIPZ;
 
 	/* Get CPU and TOD freqs in Hz */
-	core_freq = dt_prop_get_u64(cpu, "ibm,extended-clock-frequency");
+	if (dt_has_node_property(cpu,"ibm,extended-clock-frequency", NULL))
+		core_freq = dt_prop_get_u64(cpu,"ibm,extended-clock-frequency");
+	else
+		core_freq = dt_prop_get_u32(cpu, "clock-frequency");
 	tod_freq = 32000000;
 
 	/* Calculate the "Max Cycles Between Steps" value according
