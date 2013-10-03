@@ -712,10 +712,14 @@ static int64_t phb3_pci_msi_eoi(struct phb *phb,
 	 * Handle Q bit. If the Q bit doesn't show up,
 	 * we would have CI load to make that.
 	 */
-	if (!(*q_byte & 0x1))
+	if (!(*q_byte & 0x1)) {
 		in_be64(p->regs + PHB_IVC_UPDATE);
+		sync();
+	}
+
 	if (*q_byte & 0x1) {
 		/* Lock FFI and send interrupt */
+		/* XXX Handle fences ! */
                 while (in_be64(p->regs + PHB_FFI_LOCK));
 		/* Clear Q bit */
 		*q_byte = 0;
