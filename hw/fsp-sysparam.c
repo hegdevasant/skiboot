@@ -96,6 +96,8 @@ int fsp_get_sys_param(uint32_t param_id, void *buffer, uint32_t length,
 	uint64_t baddr, tce_token;
 	int rc;
 
+	if (!fsp_present())
+		return -ENODEV;
 	/*
 	 * XXX FIXME: We currently always allocate the sysparam_req here
 	 * however, we want to avoid runtime allocations as much as
@@ -165,6 +167,9 @@ static struct fsp_client fsp_sysparam_client = {
 
 void fsp_sysparam_init(void)
 {
+	if (!fsp_present())
+		return;
+
 	/* Register change notifications */
 	fsp_register_client(&fsp_sysparam_client, FSP_MCLASS_SERVICE);
 }

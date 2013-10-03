@@ -888,6 +888,8 @@ void fsp_register_client(struct fsp_client *client, u8 msgclass)
 {
 	struct fsp_cmdclass *cmdclass = __fsp_get_cmdclass(msgclass);
 
+	if (!fsp_present())
+		return;
 	list_add_tail(&cmdclass->clientq, &client->link);
 }
 
@@ -895,6 +897,8 @@ void fsp_unregister_client(struct fsp_client *client, u8 msgclass)
 {
 	struct fsp_cmdclass *cmdclass = __fsp_get_cmdclass(msgclass);
 
+	if (!fsp_present())
+		return;
 	list_del_from(&cmdclass->clientq, &client->link);
 }
 
