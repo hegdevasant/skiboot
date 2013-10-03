@@ -66,8 +66,11 @@ boot_sem:
 boot_flag:
 	.long	0
 
-	/* Exception stubs */
-	EXCEPTION(0x100)
+	. = 0x100
+	/* BML entry, load up r3 with device tree location */
+	li	%r3, 0
+	oris	%r3, %r3, 0xa
+	b	fdt_entry /* hack for lab boot */
 
 	/* Entry point set by the FSP */
 	.= 0x180
