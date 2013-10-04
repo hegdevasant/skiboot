@@ -25,4 +25,6 @@ extern void clear_console(void);
 extern void memcons_add_properties(struct dt_node *opal);
 extern void dummy_console_add_nodes(struct dt_node *opal);
 
+extern bool uart_console_poll(void);
+
 #endif /* __CONSOLE_H */

@@ -257,6 +257,19 @@ static int64_t dummy_console_read(int64_t term_number, int64_t *length,
 }
 opal_call(OPAL_CONSOLE_READ, dummy_console_read, 3);
 
+static void dummy_console_poll(void *data __unused)
+{
+	bool uart;
+
+	uart = uart_console_poll();
+
+	if (uart || memcons.in_prod != memcons.in_cons)
+		opal_update_pending_evt(OPAL_EVENT_CONSOLE_INPUT,
+					OPAL_EVENT_CONSOLE_INPUT);
+	else
+		opal_update_pending_evt(OPAL_EVENT_CONSOLE_INPUT, 0);
+}
+
 void dummy_console_add_nodes(struct dt_node *opal)
 {
 	struct dt_node *con, *consoles;
@@ -275,4 +288,6 @@ void dummy_console_add_nodes(struct dt_node *opal)
 
 	dt_add_property_string(dt_chosen, "linux,stdout-path",
 			       "/ibm,opal/consoles/serial@0");
+
+	opal_add_poller(dummy_console_poll, NULL);
 }

@@ -86,18 +86,17 @@ static struct con_ops uart_con_driver = {
 	.write = uart_con_write
 };
 
-#ifdef ENABLE_DUMMY_CONSOLE
-static void uart_console_poll(void *data __unused)
+bool uart_console_poll(void)
 {
-	uint8_t lsr = uart_read(REG_LSR);
+	uint8_t lsr;
 
-	if (lsr & LSR_DR)
-		opal_update_pending_evt(OPAL_EVENT_CONSOLE_INPUT,
-					OPAL_EVENT_CONSOLE_INPUT);
-	else
-		opal_update_pending_evt(OPAL_EVENT_CONSOLE_INPUT, 0);
+	if (!uart_base)
+		return false;
+
+	lsr = uart_read(REG_LSR);
+
+	return !!(lsr & LSR_DR);
 }
-#endif /* ENABLE_DUMMY_CONSOLE */
 
 static void uart_init_hw(unsigned int speed, unsigned int clock)
 {
@@ -160,12 +159,6 @@ void uart_init(void)
 	 * 8250 driver
 	 */
 	dt_add_property_strings(n, "status", "reserved");
-
-	/*
-	 * We also need to register it as a poller in order to set the
-	 * event bits for inbound chars.
-	 */
-	opal_add_poller(uart_console_poll, NULL);
 #else
 	/* Else, we expose it as our chosen console */
 	dt_add_property_strings(n, "status", "ok");
