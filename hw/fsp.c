@@ -1276,3 +1276,32 @@ int fsp_fetch_data(uint8_t flags, uint16_t id, uint32_t sub_id,
 
 	return 0;
 }
+
+/*
+ * Asynchronous fsp fetch data call
+ *
+ * Note:
+ *   buffer = PSI DMA address space
+ */
+int fsp_fetch_data_queue(uint8_t flags, uint16_t id, uint32_t sub_id,
+			 uint32_t offset, void *buffer, size_t *length,
+			 void (*comp)(struct fsp_msg *msg))
+{
+	struct fsp_msg *msg;
+
+	if (!comp)
+		return OPAL_PARAMETER;
+
+	msg = fsp_mkmsg(FSP_CMD_FETCH_SP_DATA, 0x6, flags << 16 | id,
+			sub_id, offset, 0, buffer, length);
+	if (!msg) {
+		prerror("FSP: allocation failed!\n");
+		return OPAL_INTERNAL_ERROR;
+	}
+	if (fsp_queue_msg(msg, comp)) {
+		fsp_freemsg(msg);
+		prerror("FSP: Failed to queue fetch data message\n");
+		return OPAL_INTERNAL_ERROR;
+	}
+	return OPAL_SUCCESS;
+}
