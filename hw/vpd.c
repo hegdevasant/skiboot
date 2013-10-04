@@ -134,7 +134,7 @@ static void *vpd_lid_load(const uint8_t *lx, uint8_t lxrn, size_t *size)
 	if (iplp)
 		side = dt_prop_get_def(iplp, "cec-ipl-side", NULL);
 	if (!side || !strcmp(side, "temp"))
-		lid_no |= 0x8000;
+		lid_no |= ADJUST_T_SIDE_LID_NO;
 
 	printf("VPD: Trying to load VPD LID 0x%08x...\n", lid_no);
 

@@ -309,6 +309,9 @@
 #define FSP_DATASET_SYSIND_CAP	0x09
 #define FSP_DATASET_FSP_RSRCDMP	0x0a
 
+/* Adjustment to get T side LIDs */
+#define ADJUST_T_SIDE_LID_NO	0x8000
+
 /*
  * Class 0xD5
  */
