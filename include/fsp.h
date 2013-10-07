@@ -34,14 +34,21 @@
 
 /* Protocol status error codes used by the protocol */
 #define FSP_STATUS_SUCCESS		0x00	/* Command successful */
+#define FSP_STATUS_MORE_DATA		0x02	/* Success, EOF not reached */
 #define FSP_STATUS_DATA_INLINE		0x11	/* Data inline in mbox */
 #define FSP_STATUS_INVALID_SUBCMD	0x20
 #define FSP_STATUS_INVALID_MOD		0x21
 #define FSP_STATUS_INVALID_DATA		0x22
+#define FSP_STATUS_INVALID_DPOSTATE	0x23
+#define FSP_STATUS_DMA_ERROR		0x24
 #define FSP_STATUS_INVALID_CMD		0x2c
 #define FSP_STATUS_SEQ_ERROR		0x2d
 #define FSP_STATUS_BAD_STATE		0x2e
 #define FSP_STATUS_NOT_SUPPORTED	0x2f
+#define FSP_STATUS_FILE_TOO_LARGE	0x43
+#define FSP_STATUS_FLASH_INPROGRESS	0x61
+#define FSP_STATUS_FLASH_NOPROGRESS	0x62
+#define FSP_STATUS_FLASH_INVALID_SIDE	0x63
 #define FSP_STATUS_GENERIC_ERROR	0xfe
 #define FSP_STATUS_EOF_ERROR		0x02
 #define FSP_STATUS_DMA_ERROR		0x24
@@ -275,6 +282,7 @@
 #define FSP_CMD_POWERDOWN_QUICK	0x1ce4d01 /* FSP->HV: Quick power down */
 #define FSP_CMD_POWERDOWN_PCIRS	0x1ce4d02 /* FSP->HV: PCI cfg reset power dwn */
 #define FSP_CMD_REBOOT		0x1ce4e00 /* FSP->HV: Standard IPL */
+#define FSP_CMD_DEEP_REBOOT	0x1ce4e04 /* HV->FSP: Deep IPL */
 #define FSP_CMD_PANELSTATUS	0x0ce5c00 /* FSP->HV */
 #define FSP_CMD_PANELSTATUS_EX1	0x0ce5c02 /* FSP->HV */
 #define FSP_CMD_PANELSTATUS_EX2	0x0ce5c03 /* FSP->HV */
@@ -291,6 +299,24 @@
 #define FSP_CMD_ERRLOG_NOTIFICATION	0x0d25a00 /* FSP->HV */
 #define FSP_RSP_ERRLOG_NOTIFICATION	0x0d2da00 /* HV->FSP */
 #define FSP_RSP_ELOG_NOTIFICATION_ERROR	0x1d2dafe /* HV->FSP */
+
+/*
+ * Class 0xD3
+ */
+#define FSP_CMD_FLASH_START	0x01d30101 /* HV->FSP: Code update start */
+#define FSP_CMD_FLASH_COMPLETE	0x01d30201 /* HV->FSP: Code update complete */
+#define FSP_CMD_FLASH_ABORT	0x01d302ff /* HV->FSP: Code update complete */
+#define FSP_CMD_FLASH_WRITE	0x01d30300 /* HV->FSP: Write LID */
+#define FSP_CMD_FLASH_DEL	0x01d30500 /* HV->FSP: Delete LID */
+#define FSP_CMD_FLASH_NORMAL	0x01d30401 /* HV->FSP: Commit (T -> P) */
+#define FSP_CMD_FLASH_REMOVE	0x01d30402 /* HV->FSP: Reject (P -> T) */
+#define FSP_CMD_FLASH_SWAP	0x01d30403 /* HV->FSP: Swap */
+#define FSP_CMD_FLASH_OUTC	0x01d30601 /* FSP->HV: Out of band commit */
+#define FSP_CMD_FLASH_OUTR	0x01d30602 /* FSP->HV: Out of band reject */
+#define FSP_CMD_FLASH_OUTS	0x01d30603 /* FSP->HV: Out of band swap */
+#define FSP_CMD_FLASH_OUT_RSP	0x00d38600 /* HV->FSP: Out of band Resp */
+#define FSP_CMD_FLASH_CACHE	0x01d30700 /* FSP->HV: Update LID cache */
+#define FSP_CMD_FLASH_CACHE_RSP	0x01d38700 /* HV->FSP: Update LID cache Resp */
 
 /*
  * Class 0xD4
@@ -539,6 +565,9 @@ extern void fsp_tce_unmap(u32 offset, u32 size);
 /* Data fetch helper */
 extern int fsp_fetch_data(uint8_t flags, uint16_t id, uint32_t sub_id,
 			  uint32_t offset, void *buffer, size_t *length);
+extern int fsp_fetch_data_queue(uint8_t flags, uint16_t id, uint32_t sub_id,
+				uint32_t offset, void *buffer, size_t *length,
+				void (*comp)(struct fsp_msg *msg));
 
 /* FSP console stuff */
 extern void fsp_console_preinit(void);
@@ -558,6 +587,15 @@ extern void fsp_rtc_init(void);
 
 /* ELOG */
 extern void fsp_elog_init(void);
+
+/* Code update */
+extern void fsp_code_update_init(void);
+extern void fsp_code_update_wait_vpd(void);
+
+/* This can be set by the fsp_opal_update_flash so that it can
+ * get called just reboot we reboot shutdown the machine.
+ */
+extern int (*fsp_flash_term_hook)(void);
 
 /* Surveillance */
 extern void fsp_init_surveillance(void);

@@ -6,6 +6,9 @@
  * these are the only ones we care about right now
  */
 #define SYS_PARAM_SURV			0xf0000001
+#define SYS_PARAM_HMC_MANAGED		0xf0000003
+#define SYS_PARAM_FLASH_POLICY		0xf0000012
+#define SYS_PARAM_FW_LICENSE		0xf000001d
 #define SYS_PARAM_NEED_HMC		0xf0000016
 
 

@@ -1130,6 +1130,10 @@ static int64_t fsp_opal_cec_power_down(uint64_t request)
 	if (request !=0 && request != 1)
 		return OPAL_PARAMETER;
 
+	/* Flash new firmware */
+	if (fsp_flash_term_hook)
+		fsp_flash_term_hook();
+
 	if (fsp_queue_msg(fsp_mkmsg(FSP_CMD_POWERDOWN_NORM, 1, request),
 			  fsp_freemsg))
 		return OPAL_INTERNAL_ERROR;
@@ -1139,13 +1143,20 @@ static int64_t fsp_opal_cec_power_down(uint64_t request)
 
 static int64_t fsp_opal_cec_reboot(void)
 {
+	uint32_t cmd = FSP_CMD_REBOOT;
+
 #ifdef ENABLE_FAST_RESET
 	/* Try a fast reset first */
 	fast_reset();
 #endif
 
+	/* Flash new firmware */
+	if (fsp_flash_term_hook &&
+	    fsp_flash_term_hook() == OPAL_SUCCESS)
+		cmd = FSP_CMD_DEEP_REBOOT;
+
 	/* If that failed, talk to the FSP */
-	if (fsp_queue_msg(fsp_mkmsg(FSP_CMD_REBOOT, 0), fsp_freemsg))
+	if (fsp_queue_msg(fsp_mkmsg(cmd, 0), fsp_freemsg))
 		return OPAL_INTERNAL_ERROR;
 
 	return OPAL_SUCCESS;

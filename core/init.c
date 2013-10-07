@@ -288,11 +288,15 @@ void load_and_boot_kernel(bool is_reboot)
 
 	op_display(OP_LOG, OP_MOD_INIT, 0x0006);
 
-	/* We wait for the nvram read to complete here so we can
-	 * grab stuff from there such as the kernel arguments
-	 */
-	if (!is_reboot)
+	if (!is_reboot) {
+		/* We wait for the nvram read to complete here so we can
+		 * grab stuff from there such as the kernel arguments
+		 */
 		fsp_nvram_wait_open();
+
+		/* Wait for FW VPD data read to complete */
+		fsp_code_update_wait_vpd();
+	}
 	fsp_console_select_stdout();
 
 	op_display(OP_LOG, OP_MOD_INIT, 0x0007);
@@ -560,6 +564,9 @@ void main_cpu_entry(const void *fdt, u32 master_cpu)
 
 	/* Read our initial RTC value */
 	fsp_rtc_init();
+
+	/* Initialize code update access */
+	fsp_code_update_init();
 
 	op_display(OP_LOG, OP_MOD_INIT, 0x0003);
 

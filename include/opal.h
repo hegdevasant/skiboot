@@ -99,7 +99,10 @@
 #define OPAL_ELOG_ACK				73
 #define OPAL_ELOG_RESEND			74
 #define OPAL_ELOG_SIZE				75
-#define OPAL_LAST				75
+#define OPAL_FLASH_VALIDATE			76
+#define OPAL_FLASH_MANAGE			77
+#define OPAL_FLASH_UPDATE			78
+#define OPAL_LAST				78
 
 #ifndef __ASSEMBLY__
 
@@ -587,6 +590,30 @@ typedef struct oppanel_line {
 	const char * 	line;
 	uint64_t 	line_len;
 } oppanel_line_t;
+
+/*
+ * SG entries used for code update
+ *
+ * WARNING: The current implementation requires each entry
+ * to represent a block that is 4k aligned *and* each block
+ * size except the last one in the list to be as well.
+ */
+struct opal_sg_entry {
+	void *data;
+	long length;
+};
+
+/*
+ * Candiate image SG list.
+ *
+ * length = VER | length
+ */
+struct opal_sg_list {
+	unsigned long length;
+	struct opal_sg_list *next;
+	struct opal_sg_entry entry[];
+};
+
 
 /****** Internal **********/
 

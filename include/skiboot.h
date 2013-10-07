@@ -86,6 +86,10 @@ static inline bool is_pow2(unsigned long val)
 #define lo32(x)	((x) & 0xffffffff)
 #define hi32(x)	(((x) >> 32) & 0xffffffff)
 
+/* WARNING: _a *MUST* be a power of two */
+#define ALIGN_UP(_v, _a)	(((_v) + (_a) - 1) & ~((_a) - 1))
+#define ALIGN_DOWN(_v, _a)	((_v) & ~((_a) - 1))
+
 /* Clean the stray high bit which the FSP inserts: we only have 52 bits real */
 static inline u64 cleanup_addr(u64 addr)
 {
