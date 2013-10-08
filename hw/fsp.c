@@ -947,18 +947,16 @@ static int fsp_init_mbox(struct fsp *fsp)
 	/* Clear all errors */
 	fsp_wreg(fsp, FSP_HDES_REG, FSP_DBERRSTAT_CLR1 | FSP_DBERRSTAT_CLR2);
 
+	/* Initialize data area as the doco says */
+	for (i = 0; i < 0x40; i += 4)
+		fsp_wreg(fsp, FSP_MBX1_HDATA_AREA + i, 0);
+
 	/* Clear whatever crap may remain in HDCR */
 	fsp_wreg(fsp, FSP_MBX1_HCTL_REG, FSP_MBX_CTL_XDN | FSP_MBX_CTL_HPEND |
-		 FSP_MBX_CTL_HCSP_MASK | FSP_MBX_CTL_DCSP_MASK);
-	fsp_wreg(fsp, FSP_MBX2_HCTL_REG, FSP_MBX_CTL_XDN | FSP_MBX_CTL_HPEND |
 		 FSP_MBX_CTL_HCSP_MASK | FSP_MBX_CTL_DCSP_MASK);
 
 	/* Clear all pending interrupts */
 	fsp_wreg(fsp, FSP_HDIR_REG, FSP_DBIRQ_ALL);
-
-	/* Initialize data area as the doco says */
-	for (i = 0; i < 0x40; i += 4)
-		fsp_wreg(fsp, FSP_MBX1_HDATA_AREA + i, 0);
 
 	/* Enable all mbox1 interrupts */
 	fsp_wreg(fsp, FSP_HDIM_SET_REG, FSP_DBIRQ_MBOX1);
