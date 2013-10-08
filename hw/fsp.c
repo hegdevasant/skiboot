@@ -657,7 +657,7 @@ static void __fsp_drop_incoming(struct fsp *fsp)
 }
 
 /* WARNING: This will drop the FSP lock */
-static void fsp_handle_incoming(struct fsp *fsp)
+static bool fsp_handle_incoming(struct fsp *fsp)
 {
 	struct fsp_msg *msg;
 	u32 h0, w0, w1;
@@ -686,7 +686,7 @@ static void fsp_handle_incoming(struct fsp *fsp)
 		if (!cmdclass->busy || list_empty(&cmdclass->msgq)) {	
 			prerror("FSP #%d: Got orphan response !\n", fsp->index);
 			__fsp_drop_incoming(fsp);
-			return;
+			return false;
 		}
 		req = list_top(&cmdclass->msgq, struct fsp_msg, link);
 
@@ -697,17 +697,19 @@ static void fsp_handle_incoming(struct fsp *fsp)
 			__fsp_drop_incoming(fsp);
 			prerror("FSP #%d: Response doesn't match pending msg\n",
 				fsp->index);
-			return;
+			return false;
 		}
 
-		/* Allocate response if needed */
+		/* Allocate response if needed XXX We need to complete
+		 * the original message with some kind of error here ?
+		 */
 		if (!req->resp) {
 			req->resp = __fsp_allocmsg();
 			if (!req->resp) {
 				__fsp_drop_incoming(fsp);
 				prerror("FSP #%d: Failed to allocate response\n",
 					fsp->index);
-				return;
+				return false;
 			}
 		}
 
@@ -715,7 +717,7 @@ static void fsp_handle_incoming(struct fsp *fsp)
 		req->resp->state = fsp_msg_response;
 		__fsp_fill_incoming(fsp, req->resp, dlen, w0, w1);
 		fsp_complete_msg(req);
-		return;
+		return true;
 	}
 
 	/* Allocate an incoming message */
@@ -724,7 +726,7 @@ static void fsp_handle_incoming(struct fsp *fsp)
 		__fsp_drop_incoming(fsp);
 		prerror("FSP #%d: Failed to allocate incoming msg\n",
 			fsp->index);
-		return;
+		return false;
 	}
 	msg->state = fsp_msg_incoming;
 	__fsp_fill_incoming(fsp, msg, dlen, w0, w1);
@@ -733,6 +735,8 @@ static void fsp_handle_incoming(struct fsp *fsp)
 	unlock(&fsp_lock);
 	fsp_handle_command(msg);
 	lock(&fsp_lock);
+
+	return false;
 }
 
 static void fsp_check_queues(void)
@@ -826,8 +830,14 @@ static void __fsp_poll(bool interrupt)
 	}
 
 	/* Is there an incoming message ? This will break the lock as well */
-	if (ctl & FSP_MBX_CTL_HPEND)
-		fsp_handle_incoming(fsp);
+	if (ctl & FSP_MBX_CTL_HPEND) {
+		/*
+		 * If this actually completes a message we need to recheck
+		 * the queues for something to send
+		 */
+		if (fsp_handle_incoming(fsp))
+			fsp_check_queues();
+	}
 
 	/* Note: Lock may have been broken above, thus ctl might be invalid
 	 * now, don't use it any further.
