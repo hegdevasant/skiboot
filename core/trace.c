@@ -148,7 +148,7 @@ void init_trace_buffers(void)
 			t->trace->tb.mask = TBUF_SZ - 1;
 			t->trace->tb.max_size = MAX_SIZE;
 		} else
-			prerror("Trace: cpu %i allocation failed\n", t->pir);
+			prerror("TRACE: cpu 0x%x allocation failed\n", t->pir);
 	}
 
 	/* In case any allocations failed, share trace buffers. */
