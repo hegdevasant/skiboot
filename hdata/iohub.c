@@ -149,12 +149,13 @@ static struct dt_node *io_add_phb3(const struct cechub_io_hub *hub,
 static struct dt_node *io_add_murano(const struct cechub_io_hub *hub)
 {
 	struct dt_node *xscom;
-	unsigned int i;
+	unsigned int i, chip_id;
 
-	xscom = find_xscom_for_chip(hub->proc_chip_id);
+	chip_id = pcid_to_chip_id(hub->proc_chip_id);
+
+	xscom = find_xscom_for_chip(chip_id);
 	if (!xscom) {
-		prerror("MURANO: Can't find XSCOM for chip %d\n",
-			hub->proc_chip_id);
+		prerror("MURANO: Can't find XSCOM for chip %d\n", chip_id);
 		return NULL;
 	}
 
