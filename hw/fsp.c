@@ -1078,10 +1078,10 @@ static void fsp_create_fsp(struct dt_node *fsp_node)
 				dt_prop_get_u32(fsp_node, "reg-offset"));
 	}
 	if (fsp->active_iopath >= 0 && !active_fsp) {
-		active_fsp = fsp;
-		fsp_init_mbox(fsp);
 		fiop = &fsp->iopath[fsp->active_iopath];
-		/* Enable interrupts in the PSI HB */
+		active_fsp = fsp;
+		psi_init_for_fsp(fiop->psi);
+		fsp_init_mbox(fsp);
 		psi_enable_fsp_interrupt(fiop->psi);
 	}
 

@@ -293,19 +293,55 @@ static void psi_tce_enable(struct psi *psi, bool enable)
 	out_be64(addr, val);
 }
 
+/*
+ * Configure the PSI interface for communicating with
+ * an FSP, such as enabling the TCEs, FSP commands,
+ * etc...
+ */
+void psi_init_for_fsp(struct psi *psi)
+{
+
+	/* Disable and setup TCE base address */
+	psi_tce_enable(psi, false);
+	out_be64(psi->regs + PSIHB_TAR, PSI_TCE_TABLE_BASE |
+		 PSIHB_TAR_16K_ENTRIES);
+
+	/* Enable various other configuration register bits based
+	 * on what pHyp does. We keep interrupts disabled until
+	 * after the mailbox has been properly configured. We assume
+	 * basic stuff such as PSI link enable is already there.
+	 *
+	 *  - FSP CMD Enable
+	 *  - FSP MMIO Enable
+	 *  - TCE Enable
+	 *  - Error response enable
+	 *
+	 * Clear all other error bits
+	 *
+	 * XXX: Only on the active link for now
+	 */
+	if (psi->active) {
+		uint64_t reg = in_be64(psi->regs + PSIHB_CR);
+		reg |= PSIHB_CR_FSP_CMD_ENABLE;
+		reg |= PSIHB_CR_FSP_MMIO_ENABLE;
+		reg |= PSIHB_CR_FSP_ERR_RSP_ENABLE;
+		reg &= ~0x00000000ffffffffull;
+		out_be64(psi->regs + PSIHB_CR, reg);
+		psi_tce_enable(psi, true);
+	}
+}
+
 static int psi_init_phb(struct psi *psi)
 {
 	u64 reg;
 
-	/* Disable and configure the  TCE table,
-	 * it will be enabled below
+	/*
+	 * Disable the TCE table, it will be enabled later if
+	 * an FSP is present
 	 */
-	psi_tce_enable(psi, false);
 
-	out_be64(psi->regs + PSIHB_TAR, PSI_TCE_TABLE_BASE |
-		 PSIHB_TAR_16K_ENTRIES);
-
-	/* Disable interrupt emission in the control register,
+	/*
+	 * Disable interrupt emission in the control register,
 	 * it will be re-enabled later, after the mailbox one
 	 * will have been enabled.
 	 */
@@ -383,30 +419,6 @@ static int psi_init_phb(struct psi *psi)
 	 */
 	reg = 0x0000010000100000ull;
 	out_be64(psi->regs + PSIHB_SEMR, reg);
-
-	/* Enable various other configuration register bits based
-	 * on what pHyp does. We keep interrupts disabled until
-	 * after the mailbox has been properly configured. We assume
-	 * basic stuff such as PSI link enable is already there.
-	 *
-	 *  - FSP CMD Enable
-	 *  - FSP MMIO Enable
-	 *  - TCE Enable
-	 *  - Error response enable
-	 *
-	 * Clear all other error bits
-	 *
-	 * XXX: Only on the active link for now
-	 */
-	if (psi->active) {
-		reg = in_be64(psi->regs + PSIHB_CR);
-		reg |= PSIHB_CR_FSP_CMD_ENABLE;
-		reg |= PSIHB_CR_FSP_MMIO_ENABLE;
-		reg |= PSIHB_CR_FSP_ERR_RSP_ENABLE;
-		reg &= ~0x00000000ffffffffull;
-		out_be64(psi->regs + PSIHB_CR, reg);
-		psi_tce_enable(psi, true);
-	}
 
 	/* Dump the GXHB registers */
 	printf("  PSIHB_BBAR   : %llx\n",

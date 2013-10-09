@@ -149,6 +149,7 @@ struct psi {
 extern struct psi *first_psi;
 extern void psi_init(void);
 extern struct psi *psi_find_link(uint32_t chip_id);
+extern void psi_init_for_fsp(struct psi *psi);
 
 /* Interrupts */
 extern void psi_irq_reset(void);
