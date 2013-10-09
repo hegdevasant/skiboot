@@ -644,23 +644,13 @@ out:
 	return rc;
 }
 
-/*
- * Output buffer format:
- *
- * MI<sp>current-T-image<sp>current-P-image<0x0A>
- * MI<sp>new-T-image<sp>new-P-image<0x0A>
- * ML<sp>current-T-image<sp>current-P-image<0x0A>
- * ML<sp>new-T-image<sp>new-P-image<0x0A>
- *
- */
-static int validate_image_result(void *buffer, uint32_t result)
+static int validate_out_buf_mi_data(void *buffer, int offset, uint32_t result)
 {
 	struct update_image_header *header = (void *)validate_buf;
-	int offset = 0;
 
 	/* Current T & P side MI data */
-	strncpy(buffer, "MI ", 3);
-	offset = 3;
+	strncpy(buffer + offset, "MI ", 3);
+	offset += 3;
 	strncpy(buffer + offset, fw_vpd[1].MI_keyword, MI_KEYWORD_SIZE);
 	offset += MI_KEYWORD_SIZE;
 	strncpy(buffer + offset, " ", 1);
@@ -688,7 +678,45 @@ static int validate_image_result(void *buffer, uint32_t result)
 	strncpy(buffer + offset, "\n", 1);
 	offset += 1;
 
-	/* FIXME: Add ML data */
+	return offset;
+}
+
+static int validate_out_buf_ml_data(void *buffer, int offset, uint32_t result)
+{
+	struct update_image_header *header = (void *)validate_buf;
+	/* Candidate image ML data */
+	char *ext_fw_id = (void *)header->data;
+
+	/* Current T & P side ML data */
+	strncpy(buffer + offset, "ML ", 3);
+	offset += 3;
+	strncpy(buffer + offset, fw_vpd[1].ext_fw_id, ML_KEYWORD_SIZE);
+	offset += ML_KEYWORD_SIZE;
+	strncpy(buffer + offset, " ", 1);
+	offset += 1;
+	strncpy(buffer + offset, fw_vpd[0].ext_fw_id, ML_KEYWORD_SIZE);
+	offset += ML_KEYWORD_SIZE;
+	strncpy(buffer + offset, "\n", 1);
+	offset += 1;
+
+	/* New T & P side ML data */
+	strncpy(buffer + offset, "ML ", 3);
+	offset += 3;
+	strncpy(buffer + offset, ext_fw_id, ML_KEYWORD_SIZE);
+	offset += ML_KEYWORD_SIZE;
+	strncpy(buffer + offset, " ", 1);
+	offset += 1;
+	if (result == VALIDATE_TMP_COMMIT_DL ||
+	    result == VALIDATE_TMP_COMMIT)
+		strncpy(buffer + offset,
+			fw_vpd[1].ext_fw_id, ML_KEYWORD_SIZE);
+	else
+		strncpy(buffer + offset,
+			fw_vpd[0].ext_fw_id, ML_KEYWORD_SIZE);
+	offset += ML_KEYWORD_SIZE;
+	strncpy(buffer + offset, "\n", 1);
+	offset += 1;
+
 	return offset;
 }
 
@@ -758,16 +786,28 @@ static int64_t fsp_opal_validate_flash(uint64_t buffer,
 				       uint32_t *size, uint32_t *result)
 {
 	int64_t rc = 0;
+	int offset;
 
 	lock(&flash_lock);
 
 	rc = validate_candidate_image(buffer, *size, result);
-	/* Fill output buffer */
+	/* Fill output buffer
+	 *
+	 * Format:
+	 *   MI<sp>current-T-image<sp>current-P-image<0x0A>
+	 *   MI<sp>new-T-image<sp>new-P-image<0x0A>
+	 *   ML<sp>current-T-image<sp>current-P-image<0x0A>
+	 *   ML<sp>new-T-image<sp>new-P-image<0x0A>
+	 */
 	if (!rc && (*result != VALIDATE_FLASH_AUTH &&
 		   *result != VALIDATE_INVALID_IMG)) {
 		/* Clear output buffer */
 		memset((void *)buffer, 0, VALIDATE_BUF_SIZE);
-		*size = validate_image_result((void *)buffer, *result);
+
+		offset = validate_out_buf_mi_data((void *)buffer, 0, *result);
+		offset += validate_out_buf_ml_data((void *)buffer,
+						   offset, *result);
+		*size = offset;
 	}
 
 	unlock(&flash_lock);
