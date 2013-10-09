@@ -410,7 +410,6 @@ static int code_update_write_lid(uint32_t lid_id, uint32_t size)
 		fsp_freemsg(msg);
 		return OPAL_INTERNAL_ERROR;
 	}
-	/* FIXME: Validate Resp LID no. ? */
 	rc = (msg->resp->word1 >> 8) & 0xff;
 	fsp_freemsg(msg);
 	return rc;
