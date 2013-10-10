@@ -43,6 +43,47 @@ static inline void *xscom_addr(uint32_t gcid, uint32_t pcb_addr)
 	return (void *)addr;
 }
 
+static uint64_t xscom_wait_done(void)
+{
+	uint64_t hmer;
+
+	do
+		hmer = mfspr(SPR_HMER);
+	while(!(hmer & SPR_HMER_XSCOM_DONE));
+
+	return hmer;
+}
+
+static void xscom_reset(uint32_t gcid)
+{
+	u64 hmer;
+
+	/* Clear errors in HMER */
+	mtspr(SPR_HMER, HMER_CLR_MASK);
+
+	/* First we need to write 0 to a register on our chip */
+	out_be64(xscom_addr(this_cpu()->chip_id, 0x202000f), 0);
+	hmer = xscom_wait_done();
+	if (hmer & SPR_HMER_XSCOM_FAIL)
+		goto fail;
+
+	/* Then we need to clear those two other registers on the target */
+	out_be64(xscom_addr(gcid, 0x2020007), 0);
+	hmer = xscom_wait_done();
+	if (hmer & SPR_HMER_XSCOM_FAIL)
+		goto fail;
+	out_be64(xscom_addr(gcid, 0x2020009), 0);
+	hmer = xscom_wait_done();
+	if (hmer & SPR_HMER_XSCOM_FAIL)
+		goto fail;
+	return;
+ fail:
+	/* Fatal error resetting XSCOM */
+	prerror("XSCOM: Fatal error resetting engine after failed access !\n");
+
+	/* XXX Generate error log ? attn ? panic ? */
+}
+
 bool xscom_handle_error(uint64_t hmer, uint32_t gcid, uint32_t pcb_addr,
 			bool is_write)
 {
@@ -60,6 +101,9 @@ bool xscom_handle_error(uint64_t hmer, uint32_t gcid, uint32_t pcb_addr,
 	/* XXX: Create error log entry ? */
 	prerror("XSCOM: %s error gcid=0x%x pcb_addr=0x%x stat=0x%x\n",
 		is_write ? "write" : "read", gcid, pcb_addr, stat);
+
+	/* We need to reset the XSCOM or we'll hang on the next access */
+	xscom_reset(gcid);
 
 	/* Non recovered ... just fail */
 	return false;
@@ -80,17 +124,6 @@ void xscom_handle_ind_error(uint64_t data, uint32_t gcid, uint64_t pcb_addr,
 		prerror("XSCOM: %s indirect error, gcid=0x%x pcb_addr=0x%llx"
 			" stat=0x%x\n",
 			is_write ? "write" : "read", gcid, pcb_addr, stat);
-}
-
-static uint64_t xscom_wait_done(void)
-{
-	uint64_t hmer;
-
-	do
-		hmer = mfspr(SPR_HMER);
-	while(!(hmer & SPR_HMER_XSCOM_DONE));
-
-	return hmer;
 }
 
 bool xscom_gcid_ok(uint32_t gcid)
