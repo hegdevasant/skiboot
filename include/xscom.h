@@ -18,12 +18,12 @@
  */
 
 /* Targeted SCOM access */
-extern int xscom_read(uint32_t gcid, uint32_t pcb_addr, uint64_t *val);
-extern int xscom_write(uint32_t gcid, uint32_t pcb_addr, uint64_t val);
+extern int xscom_read(uint32_t gcid, uint64_t pcb_addr, uint64_t *val);
+extern int xscom_write(uint32_t gcid, uint64_t pcb_addr, uint64_t val);
 
 /* This chip SCOM access */
-extern int xscom_readme(uint32_t pcb_addr, uint64_t *val);
-extern int xscom_writeme(uint32_t pcb_addr, uint64_t val);
+extern int xscom_readme(uint64_t pcb_addr, uint64_t *val);
+extern int xscom_writeme(uint64_t pcb_addr, uint64_t val);
 extern void xscom_init(void);
 
 /*

@@ -83,6 +83,7 @@ struct proc_chip {
 
 	/* Used by hw/xscom.c */
 	uint64_t	xscom_base;
+	struct lock	xscom_lock;
 
 	/* Used by hw/lpc.c */
 	uint32_t	lpc_xbase;
