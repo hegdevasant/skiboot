@@ -58,18 +58,18 @@ static bool try_load_elf64_le(struct elf_hdr *header, size_t ksize)
 	 * to work for the Linux Kernel because it's a fairly dumb ELF
 	 * but it will not work for any ELF binary.
 	 */
-	ph = (struct elf64_phdr *)(load_base + bswap_64(kh->e_phoff));
-	for (i = 0; i < bswap_16(kh->e_phnum); i++, ph++) {
-		if (bswap_32(ph->p_type) != ELF_PTYPE_LOAD)
+	ph = (struct elf64_phdr *)(load_base + le64_to_cpu(kh->e_phoff));
+	for (i = 0; i < le16_to_cpu(kh->e_phnum); i++, ph++) {
+		if (le32_to_cpu(ph->p_type) != ELF_PTYPE_LOAD)
 			continue;
-		if (bswap_64(ph->p_vaddr) > bswap_64(kh->e_entry) ||
-		    (bswap_64(ph->p_vaddr) + bswap_64(ph->p_memsz)) <
-		    bswap_64(kh->e_entry))
+		if (le64_to_cpu(ph->p_vaddr) > le64_to_cpu(kh->e_entry) ||
+		    (le64_to_cpu(ph->p_vaddr) + le64_to_cpu(ph->p_memsz)) <
+		    le64_to_cpu(kh->e_entry))
 			continue;
 
 		/* Get our entry */
-		kernel_entry = bswap_64(kh->e_entry) -
-			bswap_64(ph->p_vaddr) + bswap_64(ph->p_offset);
+		kernel_entry = le64_to_cpu(kh->e_entry) -
+			le64_to_cpu(ph->p_vaddr) + le64_to_cpu(ph->p_offset);
 		break;
 	}
 
@@ -96,7 +96,7 @@ static bool try_load_elf64(struct elf_hdr *header, size_t ksize)
 	/* Check it's a ppc64 LE ELF */
 	if (kh->ei_ident == ELF_IDENT		&&
 	    kh->ei_data == ELF_DATA_LSB		&&
-	    kh->e_machine == bswap_16(ELF_MACH_PPC64)) {
+	    kh->e_machine == le16_to_cpu(ELF_MACH_PPC64)) {
 		return try_load_elf64_le(header, ksize);
 	}
 
@@ -141,12 +141,71 @@ static bool try_load_elf64(struct elf_hdr *header, size_t ksize)
 	return true;
 }
 
+static bool try_load_elf32_le(struct elf_hdr *header, size_t ksize)
+{
+	struct elf32_hdr *kh;
+	struct elf32_phdr *ph;
+	unsigned int i;
+	uint64_t load_base;
+
+	printf("INIT: 32-bit LE kernel discovered\n");
+
+	/* Move kernel to higher up since it's likely to be a zImage
+	 * wrapper which doesn't like too much being down low
+	 */
+	memmove((void *)KERNEL_STRADALE_BASE, header, ksize);
+	kh = (struct elf32_hdr *)KERNEL_STRADALE_BASE;
+	load_base = KERNEL_STRADALE_BASE;
+
+	/* Look for a loadable program header that has our entry in it
+	 *
+	 * Note that we execute the kernel in-place, we don't actually
+	 * obey the load informations in the headers. This is expected
+	 * to work for the Linux Kernel because it's a fairly dumb ELF
+	 * but it will not work for any ELF binary.
+	 */
+	ph = (struct elf32_phdr *)(load_base + le32_to_cpu(kh->e_phoff));
+	for (i = 0; i < le16_to_cpu(kh->e_phnum); i++, ph++) {
+		if (le32_to_cpu(ph->p_type) != ELF_PTYPE_LOAD)
+			continue;
+		if (le32_to_cpu(ph->p_vaddr) > le32_to_cpu(kh->e_entry) ||
+		    (le32_to_cpu(ph->p_vaddr) + le32_to_cpu(ph->p_memsz)) <
+		    le32_to_cpu(kh->e_entry))
+			continue;
+
+		/* Get our entry */
+		kernel_entry = le32_to_cpu(kh->e_entry) -
+			le32_to_cpu(ph->p_vaddr) + le32_to_cpu(ph->p_offset);
+		break;
+	}
+
+	if (!kernel_entry) {
+		prerror("INIT: Failed to find kernel entry !\n");
+		return false;
+	}
+
+	kernel_entry += load_base;
+	kernel_top = load_base + ksize;
+	kernel_32bit = true;
+
+	printf("INIT: 32-bit kernel entry at 0x%llx\n", kernel_entry);
+
+	return true;
+}
+
 static bool try_load_elf32(struct elf_hdr *header, size_t ksize)
 {
 	struct elf32_hdr *kh;
 	struct elf32_phdr *ph;
 	unsigned int i;
 	uint64_t load_base;
+
+	/* Check it's a ppc32 LE ELF */
+	if (header->ei_ident == ELF_IDENT		&&
+	    header->ei_data == ELF_DATA_LSB		&&
+	    header->e_machine == le16_to_cpu(ELF_MACH_PPC32)) {
+		return try_load_elf32_le(header, ksize);
+	}
 
 	/* Check it's a ppc32 ELF */
 	if (header->ei_ident != ELF_IDENT		||
@@ -159,9 +218,14 @@ static bool try_load_elf32(struct elf_hdr *header, size_t ksize)
 	/* Move kernel to higher up since it's likely to be a zImage
 	 * wrapper which doesn't like too much being down low
 	 */
-	memmove((void *)KERNEL_STRADALE_BASE, header, ksize);
-	kh = (struct elf32_hdr *)KERNEL_STRADALE_BASE;
-	load_base = KERNEL_STRADALE_BASE;
+	if ((uint64_t)header < KERNEL_STRADALE_BASE) {
+		memmove((void *)KERNEL_STRADALE_BASE, header, ksize);
+		kh = (struct elf32_hdr *)KERNEL_STRADALE_BASE;
+		load_base = KERNEL_STRADALE_BASE;
+	} else {
+		kh = (struct elf32_hdr *)header;
+		load_base = (uint64_t)header;
+	}
 
 	/* Look for a loadable program header that has our entry in it
 	 *
