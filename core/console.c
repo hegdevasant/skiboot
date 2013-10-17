@@ -43,6 +43,7 @@ struct memcons {
 static char *con_buf = (char *)INMEM_CON_START;
 static size_t con_in;
 static size_t con_out;
+static bool con_wrapped;
 static struct con_ops *con_driver;
 
 struct lock con_lock = LOCK_UNLOCKED;
@@ -129,16 +130,26 @@ bool flush_console(void)
 
 static void inmem_write(char c)
 {
-	uint32_t opos = memcons.out_pos;
+	uint32_t opos;
 
 	if (!c)
 		return;
 	con_buf[con_in++] = c;
 	if (con_in >= INMEM_CON_OUT_LEN) {
 		con_in = 0;
-		opos = MEMCONS_OUT_POS_WRAP;
-	} else
-		opos++;
+		con_wrapped = true;
+	}
+
+	/*
+	 * We must always re-generate memcons.out_pos because
+	 * under some circumstances, the console script will
+	 * use a broken putmemproc that does RMW on the full
+	 * 8 bytes containing out_pos and in_prod, thus corrupting
+	 * out_pos
+	 */
+	opos = con_in;
+	if (con_wrapped)
+		opos |= MEMCONS_OUT_POS_WRAP;
 	lwsync();
 	memcons.out_pos = opos;
 
