@@ -102,7 +102,8 @@
 #define OPAL_FLASH_VALIDATE			76
 #define OPAL_FLASH_MANAGE			77
 #define OPAL_FLASH_UPDATE			78
-#define OPAL_LAST				78
+#define OPAL_RESYNC_TIMEBASE			79
+#define OPAL_LAST				79
 
 #ifndef __ASSEMBLY__
 

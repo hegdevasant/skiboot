@@ -13,4 +13,6 @@
 
 extern void chiptod_init(u32 master_cpu);
 
+extern bool chiptod_wakeup_resync(void);
+
 #endif /* __CHIPTOD_H */

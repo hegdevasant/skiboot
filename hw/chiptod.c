@@ -79,66 +79,12 @@ static int32_t chiptod_secondary = -1;
  */
 static uint64_t base_tfmr;
 
-static bool __chiptod_init(u32 master_cpu)
-{
-	struct dt_node *np;
-
-	dt_for_each_compatible(dt_root, np, "ibm,power-chiptod") {
-		uint32_t chip;
-
-		/* Old DT has chip-id in chiptod node, newer only in the
-		 * parent xscom bridge
-		 */
-		chip = dt_get_chip_id(np);
-
-		if (dt_has_node_property(np, "primary", NULL)) {
-		    chiptod_primary = chip;
-		    if (dt_node_is_compatible(np,"ibm,power7-chiptod"))
-			    chiptod_type = chiptod_p7;
-		    if (dt_node_is_compatible(np,"ibm,power8-chiptod"))
-			    chiptod_type = chiptod_p8;
-		}
-
-		if (dt_has_node_property(np, "secondary", NULL))
-		    chiptod_secondary = chip;
-
-	}
-
-	/*
-	 * If ChipTOD isn't found in the device-tree, we fallback
-	 * based on the master CPU passed by OPAL boot since the
-	 * FSP strips off the ChipTOD info from the HDAT when booting
-	 * in OPAL mode :-(
-	 */
-	if (chiptod_primary < 0) {
-		struct cpu_thread *t = find_cpu_by_pir(master_cpu);
-		printf("CHIPTOD: Cannot find a primary TOD in device-tree\n");
-		printf("CHIPTOD: Falling back to Master CPU: %d\n", master_cpu);
-		if (!t) {
-			prerror("CHIPTOD: NOT FOUND !\n");
-			return false;
-		}
-		chiptod_primary = t->chip_id;
-		switch(proc_gen) {
-		case proc_gen_p7:
-			chiptod_type = chiptod_p7;
-			return true;
-		case proc_gen_p8:
-			chiptod_type = chiptod_p8;
-			return true;
-		default:
-			break;
-		}	
-		prerror("CHIPTOD: Unknown fallback CPU type !\n");
-		return false;
-	}
-	if (chiptod_type == chiptod_unknown) {
-		prerror("CHIPTOD: Unknown TOD type !\n");
-		return false;
-	}
-
-	return true;
-}
+/*
+ * For now, we use a global lock for runtime chiptod operations,
+ * eventually make this a per-core lock for wakeup rsync and
+ * take all of them for RAS cases.
+ */
+static struct lock chiptod_lock = LOCK_UNLOCKED;
 
 static void chiptod_setup_base_tfmr(void)
 {
@@ -555,10 +501,114 @@ static void chiptod_sync_slave(void *data)
 	*result = false;
 }
 
+bool chiptod_wakeup_resync(void)
+{
+	lock(&chiptod_lock);
+
+	/* Apply base tfmr */
+	mtspr(SPR_TFMR, base_tfmr);
+
+	/* From recipe provided by pHyp folks, reset various errors
+	 * before attempting the sync
+	 */
+	chiptod_reset_tb_errors();
+
+	/* Cleanup thread tfmr bits */
+	chiptod_cleanup_thread_tfmr();
+
+	/* Switch timebase to "Not Set" state */
+	if (!chiptod_mod_tb())
+		goto error;
+
+	/* Move chiptod value to core TB */
+	if (!chiptod_to_tb())
+		goto error;
+
+	unlock(&chiptod_lock);
+
+	return true;
+ error:
+	prerror("CHIPTOD: Resync failed ! TFMR=0x%16lx\n", mfspr(SPR_TFMR));
+	unlock(&chiptod_lock);
+	return false;
+}
+
+static int64_t opal_resync_timebase(void)
+{
+       if (!chiptod_wakeup_resync()) {
+               printf("OPAL: Resync timebase failed on CPU 0x%04x\n",
+		      this_cpu()->pir);
+               return OPAL_HARDWARE;
+       }
+       return OPAL_SUCCESS;
+}
+opal_call(OPAL_RESYNC_TIMEBASE, opal_resync_timebase, 0);
+
 static void chiptod_print_tb(void *data __unused)
 {
 	printf("CHIPTOD: PIR 0x%04x TB=%lx\n",
 	       this_cpu()->pir, mfspr(SPR_TBRL));
+}
+
+static bool chiptod_probe(u32 master_cpu)
+{
+	struct dt_node *np;
+
+	dt_for_each_compatible(dt_root, np, "ibm,power-chiptod") {
+		uint32_t chip;
+
+		/* Old DT has chip-id in chiptod node, newer only in the
+		 * parent xscom bridge
+		 */
+		chip = dt_get_chip_id(np);
+
+		if (dt_has_node_property(np, "primary", NULL)) {
+		    chiptod_primary = chip;
+		    if (dt_node_is_compatible(np,"ibm,power7-chiptod"))
+			    chiptod_type = chiptod_p7;
+		    if (dt_node_is_compatible(np,"ibm,power8-chiptod"))
+			    chiptod_type = chiptod_p8;
+		}
+
+		if (dt_has_node_property(np, "secondary", NULL))
+		    chiptod_secondary = chip;
+
+	}
+
+	/*
+	 * If ChipTOD isn't found in the device-tree, we fallback
+	 * based on the master CPU passed by OPAL boot since the
+	 * FSP strips off the ChipTOD info from the HDAT when booting
+	 * in OPAL mode :-(
+	 */
+	if (chiptod_primary < 0) {
+		struct cpu_thread *t = find_cpu_by_pir(master_cpu);
+		printf("CHIPTOD: Cannot find a primary TOD in device-tree\n");
+		printf("CHIPTOD: Falling back to Master CPU: %d\n", master_cpu);
+		if (!t) {
+			prerror("CHIPTOD: NOT FOUND !\n");
+			return false;
+		}
+		chiptod_primary = t->chip_id;
+		switch(proc_gen) {
+		case proc_gen_p7:
+			chiptod_type = chiptod_p7;
+			return true;
+		case proc_gen_p8:
+			chiptod_type = chiptod_p8;
+			return true;
+		default:
+			break;
+		}	
+		prerror("CHIPTOD: Unknown fallback CPU type !\n");
+		return false;
+	}
+	if (chiptod_type == chiptod_unknown) {
+		prerror("CHIPTOD: Unknown TOD type !\n");
+		return false;
+	}
+
+	return true;
 }
 
 void chiptod_init(u32 master_cpu)
@@ -568,8 +618,8 @@ void chiptod_init(u32 master_cpu)
 
 	op_display(OP_LOG, OP_MOD_CHIPTOD, 0);
 
-	if (!__chiptod_init(master_cpu)) {
-		prerror("CHIPTOD: Failed ChipTOD init !\n");
+	if (!chiptod_probe(master_cpu)) {
+		prerror("CHIPTOD: Failed ChipTOD detection !\n");
 		op_display(OP_FATAL, OP_MOD_CHIPTOD, 0);
 		abort();
 	}
