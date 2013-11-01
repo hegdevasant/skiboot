@@ -94,6 +94,7 @@
 #define OPAL_LPC_READ				67
 #define OPAL_LPC_WRITE				68
 #define OPAL_RETURN_CPU				69
+#define OPAL_REINIT_CPUS			70
 #define OPAL_ELOG_READ				71
 #define OPAL_ELOG_WRITE				72
 #define OPAL_ELOG_ACK				73
@@ -585,6 +586,11 @@ struct OpalIoPhb3ErrorData {
 	uint64_t dma1ErrorLog1;		/* E48 */
 	uint64_t pestA[OPAL_PHB3_NUM_PEST_REGS];
 	uint64_t pestB[OPAL_PHB3_NUM_PEST_REGS];
+};
+
+enum {
+	OPAL_REINIT_CPUS_HILE_BE	= (1 << 0),
+	OPAL_REINIT_CPUS_HILE_LE	= (1 << 1),
 };
 
 typedef struct oppanel_line {

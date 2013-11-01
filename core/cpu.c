@@ -34,6 +34,7 @@ static struct cpu_stack *cpu_stacks = (struct cpu_stack *)CPU_STACKS_BASE;
 unsigned int cpu_thread_count;
 unsigned int cpu_max_pir;
 struct cpu_thread *boot_cpu;
+static struct lock reinit_lock = LOCK_UNLOCKED;
 
 unsigned long cpu_secondary_start __force_data = 0;
 
@@ -500,12 +501,15 @@ static int64_t opal_start_cpu_thread(uint64_t server_no, uint64_t start_address)
 	printf("OPAL: Start CPU 0x%04llx (PIR 0x%04x) -> 0x%016llx\n",
 	       server_no, cpu->pir, start_address);
 
+	lock(&reinit_lock);
 	if (!cpu_is_available(cpu)) {
+		unlock(&reinit_lock);
 		prerror("OPAL: CPU not active in OPAL !\n");
 		return OPAL_WRONG_STATE;
 	}
 	job = __cpu_queue_job(cpu, opal_start_thread_job, (void *)start_address,
 			      true);
+	unlock(&reinit_lock);
 	if (!job) {
 		prerror("OPAL: Failed to create CPU start job !\n");
 		return OPAL_INTERNAL_ERROR;
@@ -552,3 +556,37 @@ static int64_t opal_return_cpu(void)
 	return OPAL_HARDWARE; /* Should not happen */
 }
 opal_call(OPAL_RETURN_CPU, opal_return_cpu, 0);
+
+static int64_t opal_reinit_cpus(uint64_t flags)
+{
+	struct cpu_thread *cpu;
+	int64_t rc = OPAL_SUCCESS;
+
+	lock(&reinit_lock);
+
+	prerror("OPAL: Trying a CPU re-init with flags: 0x%llx\n", flags);
+
+	for (cpu = first_cpu(); cpu; cpu = next_cpu(cpu)) {
+		if (cpu == this_cpu())
+			continue;
+		if (cpu->state == cpu_state_os) {
+			prerror("OPAL: CPU 0x%x not in OPAL !\n", cpu->pir);
+			rc = OPAL_WRONG_STATE;
+			goto bail;
+		}
+	}
+	/*
+	 * Now we need to mark ourselves "active" or we'll be skipped
+	 * by the various "for_each_active_..." calls done by slw_reinit()
+	 */
+	this_cpu()->state = cpu_state_active;
+	rc = slw_reinit(flags);
+
+	/* And undo the above */
+	this_cpu()->state = cpu_state_os;
+
+bail:
+	unlock(&reinit_lock);
+	return rc;
+}
+opal_call(OPAL_REINIT_CPUS, opal_reinit_cpus, 1);

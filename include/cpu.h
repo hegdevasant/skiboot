@@ -26,6 +26,7 @@ enum cpu_thread_state {
 	cpu_state_active,		/* Secondary called in */
 	cpu_state_os,			/* Under OS control */
 	cpu_state_disabled,		/* Disabled by us due to error */
+	cpu_state_rvwinkle,		/* Doing an rvwinkle cycle */
 };
 
 struct cpu_job;
@@ -40,6 +41,7 @@ struct cpu_thread {
 	struct dt_node			*node;
 	struct opal_machine_check_event	mc_event;
 	struct trace_info		*trace;
+	uint64_t			save_r1;
 
 	struct lock			job_lock;
 	struct list_head		job_queue;
@@ -94,7 +96,8 @@ extern struct cpu_thread *next_cpu(struct cpu_thread *cpu);
 
 static inline bool cpu_is_available(struct cpu_thread *cpu)
 {
-	return cpu->state == cpu_state_active;
+	return cpu->state == cpu_state_active ||
+		cpu->state == cpu_state_rvwinkle;
 }
 
 extern struct cpu_thread *first_available_cpu(void);

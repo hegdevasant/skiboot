@@ -63,6 +63,22 @@
 #define SPR_TSCR	0x399
 #define SPR_PIR		0x3ff	/* RO: Processor Identification */
 
+/* Bits in LPCR */
+
+/* Powersave Exit Cause Enable is different for P7 and P8 */
+#define SPR_LPCR_P7_PECE	PPC_BITMASK(49,51)
+#define SPR_LPCR_P7_PECE0	PPC_BIT(49)   /* Wake on external interrupts */
+#define SPR_LPCR_P7_PECE1	PPC_BIT(50)   /* Wake on decrementer */
+#define SPR_LPCR_P7_PECE2	PPC_BIT(51)   /* Wake on MCs, HMIs, etc... */
+
+#define SPR_LPCR_P8_PECE	PPC_BITMASK(47,51)
+#define SPR_LPCR_P8_PECE0	PPC_BIT(47)   /* Wake on priv doorbell */
+#define SPR_LPCR_P8_PECE1	PPC_BIT(48)   /* Wake on hv doorbell */
+#define SPR_LPCR_P8_PECE2	PPC_BIT(49)   /* Wake on external interrupts */
+#define SPR_LPCR_P8_PECE3	PPC_BIT(50)   /* Wake on decrementer */
+#define SPR_LPCR_P8_PECE4	PPC_BIT(51)   /* Wake on MCs, HMIs, etc... */
+
+
 /* Bits in TFMR - control bits */
 #define SPR_TFMR_MAX_CYC_BET_STEPS_MASK	PPC_BITMASK(0,7)
 #define SPR_TFMR_MAX_CYC_BET_STEPS_LSH	PPC_BITLSHIFT(7)

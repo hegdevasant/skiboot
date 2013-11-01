@@ -43,7 +43,8 @@ static bool read_pba_bar(struct proc_chip *chip, unsigned int bar_no,
 
 static void homer_init_chip(struct proc_chip *chip)
 {
-	uint64_t base, size;
+	uint64_t hbase = 0, hsize;
+	uint64_t sbase, ssize, obase, osize;
 
 	/*
 	 * PBA BARs assigned by HB:
@@ -57,20 +58,36 @@ static void homer_init_chip(struct proc_chip *chip)
 	 * on earlier HBs, BAR0 isn't set so we need BAR 2 instead in that
 	 * case to cover SLW (OCC not running).
 	 */
-	if (read_pba_bar(chip, 0, &base, &size)) {
+	if (read_pba_bar(chip, 0, &hbase, &hsize)) {
 		printf("  HOMER Image at 0x%llx size %lldMB\n",
-		       base, size / 0x100000);
-		mem_reserve("ibm,homer-image", base, size);
-	} else if (read_pba_bar(chip, 2, &base, &size)) {
-		printf("  SLW Image at 0x%llx size %lldMB\n",
-		       base, size / 0x100000);
-		mem_reserve("ibm,slw-image", base, size);
+		       hbase, hsize / 0x100000);
+		mem_reserve("ibm,homer-image", hbase, hsize);
 	}
 
-	if (read_pba_bar(chip, 3, &base, &size)) {
+	/*
+	 * We always read the SLW BAR since we need to grab info about the
+	 * SLW image in the struct proc_chip for use by the slw.c code
+	 */
+	if (read_pba_bar(chip, 2, &sbase, &ssize)) {
+		printf("  SLW Image at 0x%llx size %lldMB\n",
+		       sbase, ssize / 0x100000);
+
+		/*
+		 * Only reserve it if we have no homer image or if it
+		 * doesn't fit in it (only check the base).
+		 */
+		if (sbase < hbase || sbase > (hbase + hsize))
+			mem_reserve("ibm,slw-image", sbase, ssize);
+
+		chip->slw_base = sbase;
+		chip->slw_bar_size = ssize;
+		chip->slw_image_size = ssize; /* will be adjusted later */
+	}
+
+	if (read_pba_bar(chip, 3, &obase, &osize)) {
 		printf("  OCC Common Area at 0x%llx size %lldMB\n",
-		       base, size / 0x100000);
-		mem_reserve("ibm,occ-common-area", base, size);
+		       obase, osize / 0x100000);
+		mem_reserve("ibm,occ-common-area", obase, osize);
 	}
 }
 

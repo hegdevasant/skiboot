@@ -612,11 +612,11 @@ void main_cpu_entry(const void *fdt, u32 master_cpu)
 	/* Initialize nvram access */
 	fsp_nvram_init();
 
-	/* Init SLW related stuff */
-	slw_init();
-
 	/* Call in secondary CPUs */
 	cpu_bringup();
+
+	/* Init SLW related stuff */
+	slw_init();
 
 	op_display(OP_LOG, OP_MOD_INIT, 0x0002);
 

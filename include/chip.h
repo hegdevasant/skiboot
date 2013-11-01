@@ -88,6 +88,11 @@ struct proc_chip {
 	/* Used by hw/lpc.c */
 	uint32_t	lpc_xbase;
 	struct lock	lpc_lock;
+
+	/* Used by hw/slw.c */
+	uint64_t	slw_base;
+	uint64_t	slw_bar_size;
+	uint64_t	slw_image_size;
 };
 
 extern uint32_t pir_to_chip_id(uint32_t pir);

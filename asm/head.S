@@ -12,6 +12,11 @@
 
 #define EPAPR_MAGIC	0x65504150
 
+/* Power management instructions */
+#define PPC_INST_NAP		.long 0x4c000364
+#define PPC_INST_SLEEP		.long 0x4c0003a4
+#define PPC_INST_RVWINKLE	.long 0x4c0003e4
+
 #define EXCEPTION(nr)		\
 	.= nr;			\
 	mtsprg0	%r3;		\
@@ -31,6 +36,9 @@
 
 #define GET_CPU()						\
 	clrrdi	%r13,%r1,STACK_SHIFT
+
+#define SAVE_GPR(reg,sp)	std %r##reg,STACK_GPR##reg(sp)
+#define REST_GPR(reg,sp)	ld %r##reg,STACK_GPR##reg(sp)
 
 	.section ".head","ax"
 
@@ -388,6 +396,143 @@ cleanup_tlb:
 	addi	%r4,%r4,0x1000
 	bdnz	1b
 	ptesync
+
+#define FIXUP_ENDIAN                                              \
+       tdi   0,0,0x48;   /* Reverse endian of b . + 8          */ \
+       b     $+36;       /* Skip trampoline if endian is good  */ \
+       .long 0x05009f42; /* bcl 20,31,$+4                      */ \
+       .long 0xa602487d; /* mflr r10                           */ \
+       .long 0x1c004a39; /* addi r10,r10,28                    */ \
+       .long 0xa600607d; /* mfmsr r11                          */ \
+       .long 0x01006b69; /* xori r11,r11,1                     */ \
+       .long 0xa6035a7d; /* mtsrr0 r10                         */ \
+       .long 0xa6037b7d; /* mtsrr1 r11                         */ \
+       .long 0x2400004c  /* rfid                               */
+
+.global enter_rvwinkle
+enter_rvwinkle:
+	/* Before entering rvwinkle, we create a stack frame
+	 * and save our non-volatile registers.
+	 *
+	 * We also save these SPRs:
+	 *
+	 *  - HSPRG0	in GPR0 slot
+	 *  - HSPRG1	in GPR1 slot
+	 *
+	 *  - xxx TODO: HIDs
+	 *  - TODO: Mask MSR:ME during the process
+	 */
+	mflr	%r0
+	std	%r0,16(%r1)
+	stdu	%r1,-STACK_FRAMESIZE(%r1)
+	SAVE_GPR(2,%r1)
+	SAVE_GPR(14,%r1)
+	SAVE_GPR(15,%r1)
+	SAVE_GPR(16,%r1)
+	SAVE_GPR(17,%r1)
+	SAVE_GPR(18,%r1)
+	SAVE_GPR(19,%r1)
+	SAVE_GPR(20,%r1)
+	SAVE_GPR(21,%r1)
+	SAVE_GPR(22,%r1)
+	SAVE_GPR(23,%r1)
+	SAVE_GPR(24,%r1)
+	SAVE_GPR(25,%r1)
+	SAVE_GPR(26,%r1)
+	SAVE_GPR(27,%r1)
+	SAVE_GPR(28,%r1)
+	SAVE_GPR(29,%r1)
+	SAVE_GPR(30,%r1)
+	SAVE_GPR(31,%r1)
+	mfcr	%r3
+	mfxer	%r4
+	mfspr	%r5,SPR_HSPRG0
+	mfspr	%r6,SPR_HSPRG1
+	stw	%r3,STACK_CR(%r1)
+	stw	%r4,STACK_XER(%r1)
+	std	%r5,STACK_GPR0(%r1)
+	std	%r6,STACK_GPR1(%r1)
+
+	/* Save stack pointer in struct cpu_thread */
+	std	%r1,CPUTHREAD_SAVE_R1(%r13)
+
+	/* rvwinkle sequence */
+	ptesync
+0:	ld	%r0,CPUTHREAD_SAVE_R1(%r13)
+	cmpd	cr0,%r0,%r0
+	bne	0b
+	PPC_INST_RVWINKLE
+	b	.
+
+/* This is a little piece of code that is copied down to
+ * 0x100 when doing a "rvwinkle reinit"
+ */
+.global rvwinkle_patch_start
+rvwinkle_patch_start:
+	FIXUP_ENDIAN
+	smt_medium
+	LOAD_IMM64(%r30, SKIBOOT_BASE)
+	LOAD_IMM32(%r3, rvwinkle_restore - __head)
+	add	%r3,%r30,%r3
+	mtctr	%r3
+	bctr
+.global rvwinkle_patch_end
+rvwinkle_patch_end:
+
+rvwinkle_restore:
+	/* Get PIR */
+	mfspr	%r31,SPR_PIR
+
+	/* Initialize per-core SPRs
+	 *
+	 * XXX We do it on each thread ... oh well, improve that later
+	 */
+	bl init_shared_sprs
+
+	/* Initialize thread SPRs */
+	bl init_replicated_sprs
+
+	/* Get that CPU stack base and use it to restore r13 */
+	GET_STACK(%r1,%r31)
+	GET_CPU()
+
+	/* Restore original stack pointer */
+	ld	%r1,CPUTHREAD_SAVE_R1(%r13)
+
+	/* Restore more stuff */
+	lwz	%r3,STACK_CR(%r1)
+	lwz	%r4,STACK_XER(%r1)
+	ld	%r5,STACK_GPR0(%r1)
+	ld	%r6,STACK_GPR1(%r1)
+	mtcr	%r3
+	mtxer	%r4
+	mtspr	SPR_HSPRG0,%r5
+	mtspr	SPR_HSPRG1,%r6
+	REST_GPR(2,%r1)
+	REST_GPR(14,%r1)
+	REST_GPR(15,%r1)
+	REST_GPR(16,%r1)
+	REST_GPR(17,%r1)
+	REST_GPR(18,%r1)
+	REST_GPR(19,%r1)
+	REST_GPR(20,%r1)
+	REST_GPR(21,%r1)
+	REST_GPR(22,%r1)
+	REST_GPR(23,%r1)
+	REST_GPR(24,%r1)
+	REST_GPR(25,%r1)
+	REST_GPR(26,%r1)
+	REST_GPR(27,%r1)
+	REST_GPR(28,%r1)
+	REST_GPR(29,%r1)
+	REST_GPR(30,%r1)
+	REST_GPR(31,%r1)
+
+	/* Get LR back, pop stack and return */
+	addi	%r1,%r1,STACK_FRAMESIZE
+	ld	%r0,16(%r1)
+	mtlr	%r0
+	blr
 
 /* Functions to initialize replicated and shared SPRs to sane
  * values. This is called at boot and on soft-reset

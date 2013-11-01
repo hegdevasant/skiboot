@@ -131,5 +131,10 @@ extern void occ_init(void);
 
 /* Flatten device-tree */
 extern void *create_dtb(const struct dt_node *root);
+
+/* SLW reinit function for switching core settings */
+extern int64_t slw_reinit(uint64_t flags);
+
+
 #endif /* __SKIBOOT_H */
 

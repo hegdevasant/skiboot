@@ -23,6 +23,8 @@ int main(void)
 	OFFSET(SPIRA_ACTUAL_SIZE, spira, reserved);
 
 	OFFSET(CPUTHREAD_PIR, cpu_thread, pir);
+	OFFSET(CPUTHREAD_SAVE_R1, cpu_thread, save_r1);
+	OFFSET(CPUTHREAD_STATE, cpu_thread, state);
 
 	OFFSET(STACK_TYPE,	stack_frame, type);
 	OFFSET(STACK_LOCALS,	stack_frame, locals);
