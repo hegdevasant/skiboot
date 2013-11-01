@@ -8,6 +8,11 @@
 CROSS ?= powerpc64-linux-
 
 #
+# Set to enable SLW bits
+#
+PORE ?= 0
+
+#
 # Where is the source directory, must be a full path (no ~)
 # Example: SRC= /home/me/skiboot
 #

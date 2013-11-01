@@ -32,6 +32,9 @@ DBG=-g
 
 CPPFLAGS := -I$(SRC)/include -MMD -include $(SRC)/include/config.h
 CPPFLAGS += -I$(SRC)/libfdt -I$(SRC)/libc/include -I$(SRC)
+ifeq ($(PORE),1)
+CPPFLAGS += -I$(SRC)/libpore -D__HAVE_LIBPORE__
+endif
 CPPFLAGS += -D__SKIBOOT__ -nostdinc
 CPPFLAGS += -isystem $(shell $(CC) -print-file-name=include)
 CPPFLAGS += -DBITS_PER_LONG=64 -m64 -DHAVE_BIG_ENDIAN
@@ -76,13 +79,20 @@ include $(SRC)/asm/Makefile.inc
 include $(SRC)/core/Makefile.inc
 include $(SRC)/hw/Makefile.inc
 include $(SRC)/libfdt/Makefile.inc
+ifeq ($(PORE),1)
+include $(SRC)/libpore/Makefile.inc
+endif
 include $(SRC)/libc/Makefile.inc
 include $(SRC)/ccan/Makefile.inc
 include $(SRC)/$(DEVSRC)/Makefile.inc
 
 all: $(SUBDIRS) $(TARGET).lid $(TARGET).map
 
-OBJS := $(ASM) $(CORE) $(HW) $(LIBFDT) $(LIBC) $(CCAN) $(DEVSRC_OBJ) gitid.o
+OBJS := $(ASM) $(CORE) $(HW) $(LIBFDT)
+ifeq ($(PORE),1)
+OBJS += $(LIBPORE)
+endif
+OBJS += $(LIBC) $(CCAN) $(DEVSRC_OBJ) gitid.o
 
 $(TARGET).lid: $(TARGET).elf
 	$(OBJCOPY) -O binary -S $^ $@

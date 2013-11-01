@@ -28,6 +28,10 @@ endif
 %.o : %.c
 	$(call Q,CC, $(CC) $(CPPFLAGS) $(CFLAGS) -c $< -o $@, $@)
 
+# Force the use of the C compiler, not C++ for the .C files in libpore
+%.o : %.C
+	$(call Q,CC, $(CC) $(CPPFLAGS) $(CFLAGS) -x c -c $< -o $@, $@)
+
 %.s : %.c
 	$(call Q,CC, $(CC) $(CPPFLAGS) $(CFLAGS) -S -c $< -o $@, $@)
 
