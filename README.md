@@ -2,8 +2,6 @@
 
 Firmware for OpenPower systems.
 
-Mailing list: skiboot@lists.ozlabs.org
-
 Info/subscribe: https://lists.ozlabs.org/listinfo/skiboot
 
 Archives: https://lists.ozlabs.org/pipermail/skiboot/
