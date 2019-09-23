@@ -2,8 +2,6 @@
 
 Firmware for OpenPower systems.
 
-Source: https://github.com/open-power/skiboot
-
 Mailing list: skiboot@lists.ozlabs.org
 
 Info/subscribe: https://lists.ozlabs.org/listinfo/skiboot
