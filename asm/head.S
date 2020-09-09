@@ -109,7 +109,6 @@ hdat_entry:
 	li	%r4,0x200
 	b	_exception
 1:
-	LOAD_IMM64(%r30, SKIBOOT_BASE)
 	cmpdi	%r3,0x1
 	bne	2f		/* state loss */
 	LOAD_IMM32(%r3, reset_resume - __head)
@@ -117,7 +116,8 @@ hdat_entry:
 2:
 	LOAD_IMM32(%r3, reset_wakeup - __head)
 3:
-	add	%r3,%r30,%r3
+	LOAD_IMM64(%r5, SKIBOOT_BASE)
+	add	%r3,%r5,%r3
 	mtctr	%r3
 	li	%r3,0x200
 	bctr
@@ -558,7 +558,6 @@ reset_patch_start:
 	li	%r4,0x100
 	b	_exception + (reset_patch_start - sreset_vector)
 1:
-	LOAD_IMM64(%r30, SKIBOOT_BASE)
 	cmpdi	%r3,0x1
 	bne	2f		/* state loss */
 	LOAD_IMM32(%r3, reset_resume - __head)
@@ -566,7 +565,8 @@ reset_patch_start:
 2:
 	LOAD_IMM32(%r3, reset_wakeup - __head)
 3:
-	add	%r3,%r30,%r3
+	LOAD_IMM64(%r5, SKIBOOT_BASE)
+	add	%r3,%r5,%r3
 	mtctr	%r3
 	li	%r3,0x100
 	bctr
