@@ -871,7 +871,7 @@ uint64_t hservice_firmware_request(uint64_t req_len, void *req,
 		uint64_t proc = be64_to_cpu(fw_msg->nvdimm_protection_state.i_procId);
 		uint64_t prot = be64_to_cpu(fw_msg->nvdimm_protection_state.i_state);
 
-		pr_log(LOG_ERR, "XXXX: got nvdimm status update %lx %lx!",
+		pr_log(LOG_ERR, "NVDIMM: got nvdimm status update %lx %lx!",
 			proc, prot);
 
 		nvdimm_set_chip_status(ctx, proc, prot);
@@ -879,7 +879,7 @@ uint64_t hservice_firmware_request(uint64_t req_len, void *req,
 		hexdump((void *)req, req_len);
 
 		/* gotta swallow these */
-		pr_log(LOG_ERR, "XXXX: fin!");
+		pr_log(LOG_ERR, "NVDIMM: fin!");
 
 		return 0;
 	}
