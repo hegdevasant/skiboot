@@ -1,6 +1,6 @@
 Name:		opal-prd
 Epoch:		3
-Version:	ess.v4
+Version:	ess.v4.1
 Release:	1%{?dist}
 Summary:	OPAL Processor Recovery Diagnostics Daemon
 
@@ -15,6 +15,7 @@ BuildRequires:	gcc
 BuildRequires:	openssl-devel
 
 Requires(post):	systemd
+Requires(post):	systemd-udev
 Requires(preun): systemd
 Requires(postun): systemd
 
@@ -76,6 +77,10 @@ mkdir -p %{buildroot}%{_sysconfdir}/{rsyslog.d,logrotate.d}
 install -m 644 external/opal-prd/opal-prd-rsyslog %{buildroot}/%{_sysconfdir}/rsyslog.d/opal-prd.conf
 install -m 644 external/opal-prd/opal-prd-logrotate %{buildroot}/%{_sysconfdir}/logrotate.d/opal-prd
 
+# Auto-load kernel module after boot/reboot
+mkdir -p %{buildroot}/%{_prefix}/lib/modules-load.d
+echo 'opal-prd' > %{buildroot}/%{_prefix}/lib/modules-load.d/%{name}.conf
+
 %post
 %systemd_post opal-prd.service
 
@@ -90,6 +95,7 @@ install -m 644 external/opal-prd/opal-prd-logrotate %{buildroot}/%{_sysconfdir}/
 %license LICENCE
 %config(noreplace) %{_sysconfdir}/logrotate.d/opal-prd
 %config(noreplace) %{_sysconfdir}/rsyslog.d/opal-prd.conf
+%config(noreplace) %{_prefix}/lib/modules-load.d/%{name}.conf
 %{_sbindir}/opal-prd
 %{_unitdir}/opal-prd.service
 %{_mandir}/man8/*
@@ -111,6 +117,11 @@ install -m 644 external/opal-prd/opal-prd-logrotate %{buildroot}/%{_sysconfdir}/
 
 
 %changelog
+* Thu Mar 11 2021 Vasant Hegde <hegdevasant@linux.vnet.ibm.com> - ess.v4.1
+- Create conf file to load opal-prd module at boot
+- Load opal-prd service after systemd-modules-load service
+- Fix `opal-prd` crash due to buffer overflow
+
 * Fri Jan 08 2021 Vasant Hegde <hegdevasant@linux.vnet.ibm.com> - ess.v4
 - opal-prd: Have a worker process handle page offlining
 - Update to ess.v4 version
