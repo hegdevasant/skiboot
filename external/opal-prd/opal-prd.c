@@ -2460,7 +2460,7 @@ static uint64_t nvdimm_set_chip_status(struct opal_prd_ctx *ctx, uint32_t c, uin
 
 static int run_attn_loop(struct opal_prd_ctx *ctx)
 {
-	struct pollfd pollfds[3];
+	struct pollfd pollfds[4];
 	struct opal_prd_msg msg;
 	int rc, fd;
 
