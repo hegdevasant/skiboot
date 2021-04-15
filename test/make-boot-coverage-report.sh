@@ -6,9 +6,11 @@ SKIBOOT_GCOV_ADDR=$(perl -e "printf '0x%x', 0x30000000 + 0x$(grep gcov_info_list
 
 LCOV_INFO_FILES=""
 
+CROSS=$(echo ${CROSS} | sed -e 's/ccache //')
+
 function process_dump {
     ./extract-gcov $1 $SKIBOOT_GCOV_ADDR
-    lcov -q -b . -d . -c -o $2 --gcov-tool ${CROSS}gcov
+    lcov -q -b . -d . -c -o $2 --gcov-tool "${CROSS}gcov"
     LCOV_INFO_FILES="$LCOV_INFO_FILES -a $2"
     find .|grep '\.gcda$'|xargs rm -f
 }
@@ -25,11 +27,15 @@ for i in $BOOT_TESTS; do
     fi
 done
 
+for f in $EXT_GCOV_DUMPS; do
+       process_dump $f skiboot-$(basename $f).info
+done
+
 if [ -z "$LCOV_INFO_FILES" ]; then
     echo "ERROR: no lcov files found"
     exit 1;
 fi
 
-lcov -q -b . -d . --gcov-tool ${CROSS}gcov -o skiboot-boot.info $LCOV_INFO_FILES
+lcov -q -b . -d . --gcov-tool "${CROSS}gcov" -o skiboot-boot.info $LCOV_INFO_FILES
 
 genhtml -o boot-coverage-report skiboot-boot.info
