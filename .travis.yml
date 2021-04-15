@@ -2,7 +2,6 @@ language: c
 
 os:
  - linux
- - linux-ppc64le
 
 # NB: This is just the distro used for the container host
 dist: bionic
@@ -12,28 +11,7 @@ cache: ccache
 
 env:
     jobs:
-      - RUN_ON_CONTAINER=ubuntu-18.04
-      - RUN_ON_CONTAINER=ubuntu-20.04
-      - RUN_ON_CONTAINER=ubuntu-latest
-      - RUN_ON_CONTAINER=centos7
-      - RUN_ON_CONTAINER=fedora33
-      - RUN_ON_CONTAINER=fedora-rawhide
-      - RUN_ON_CONTAINER=debian-unstable
       - RUN_ON_CONTAINER=docs
-
-jobs:
-  allow_failures:
-    - env: RUN_ON_CONTAINER=fedora-rawhide
-    - env: RUN_ON_CONTAINER=debian-unstable
-    - env: RUN_ON_CONTAINER=ubuntu-latest
-    - env: RUN_ON_CONTAINER=clang
-  exclude:
-    - os: linux-ppc64le
-      env: RUN_ON_CONTAINER=centos7
-    - os: linux-ppc64le
-      env: RUN_ON_CONTAINER=docs
-    - os: linux-ppc64le
-      env: RUN_ON_CONTAINER=clang
 
 install:
     - docker build --pull -t ${RUN_ON_CONTAINER} -f opal-ci/Dockerfile-${RUN_ON_CONTAINER} .
